@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model OTP {
+  id             String   @id @default(uuid())
+  userId         Int
+  code           String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  deliveryTarget String? // optional field for debugging/logging
+
+  user User @relation("UserOTPs", fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  email       String?          @unique
+  phoneNumber String?          @unique
+  password    String?
+  role        Role             @default(USER)
+  profile     Profile?
+  chats       ChatParticipant[]
+  messages    Message[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  otps OTP[] @relation("UserOTPs")
+}
+
+model Profile {
+  id        Int     @id @default(autoincrement())
+  firstname String?
+  lastname  String?
+  address   String?
+  user      User    @relation(fields: [userId], references: [id])
+  userId    Int     @unique
+}
+
+model Chat {
+  id            Int            @id @default(autoincrement())
+  participants  ChatParticipant[]
+  messages      Message[]
+  createdAt     DateTime          @default(now())
+}
+
+model ChatParticipant {
+  id       Int   @id @default(autoincrement())
+  user     User     @relation(fields: [userId], references: [id])
+  userId   Int
+  chat     Chat     @relation(fields: [chatId], references: [id])
+  chatId   Int
+
+  @@unique([userId, chatId]) // Prevent duplicate participation
+}
+
+model Message {
+  id        Int   @id @default(autoincrement())
+  content   String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  chatId    Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  Int
+  createdAt DateTime @default(now())
+}

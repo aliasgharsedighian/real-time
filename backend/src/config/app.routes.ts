@@ -1,0 +1,24 @@
+// Root
+const root = 'realtime';
+
+// Api Versions
+const v1 = 'api/v1';
+
+export const routesV1 = {
+  version: v1,
+  auth: {
+    signin: `auth/signin`,
+    signup: `auth/signup`,
+    userInfo: `auth/user-info`,
+    requestOtp: `auth/request-otp`,
+    verifyOtp: `auth/verify-otp`,
+    refreshToken: `auth/refresh-token`,
+  },
+  googleAuth: {
+    googleAuth: `${root}/google`,
+    googleRedirectUrl: `${root}/google/redirect`,
+  },
+  polling: {
+    message: `${root}/polling`,
+  },
+};
