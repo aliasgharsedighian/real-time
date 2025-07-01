@@ -20,5 +20,7 @@ export const routesV1 = {
   },
   polling: {
     message: `${root}/polling`,
+    createChat: `${root}/polling/create-chat`,
+    getChatContentById: `${root}/polling/:id`,
   },
 };
