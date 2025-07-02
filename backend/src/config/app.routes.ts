@@ -14,6 +14,10 @@ export const routesV1 = {
     verifyOtp: `auth/verify-otp`,
     refreshToken: `auth/refresh-token`,
   },
+  user: {
+    updateProfile: `auth/update-profile`,
+    updateUser: `auth/update-user/:id`,
+  },
   googleAuth: {
     googleAuth: `${root}/google`,
     googleRedirectUrl: `${root}/google/redirect`,

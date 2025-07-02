@@ -1,7 +1,8 @@
 import { Routes, Route, Link } from "react-router-dom";
-import Polling from "./pages/polling";
 import Home from "./pages/home/Home";
 import LoginPage from "./pages/login";
+import PollingChatId from "./pages/polling/chatId";
+import { Polling } from "./pages/polling";
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/polling" element={<Polling />} />
+        <Route path="/polling/:chatId" element={<PollingChatId />} />
         <Route path="/login" element={<LoginPage />} />
       </Routes>
     </div>

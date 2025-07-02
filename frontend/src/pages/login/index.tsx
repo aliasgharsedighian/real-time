@@ -27,10 +27,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="flex items-center justify-center">
       <form
         onSubmit={handleLogin}
-        className="bg-white p-8 rounded shadow-md w-full max-w-sm"
+        className="bg-white p-8 rounded w-full max-w-sm"
       >
         <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
         <div className="mb-4">
@@ -53,7 +53,9 @@ export default function LoginPage() {
             required
           />
         </div>
+        {error && <div>Error occured when trying to connect!</div>}
         <button
+          disabled={isPending}
           type="submit"
           className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
         >

@@ -6,8 +6,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { PollingModule } from './modules/polling/polling.module';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
+import { UserModule } from './modules/user/user.module';
 
-const modules = [AuthModule, PollingModule];
+const modules = [AuthModule, PollingModule, UserModule];
 
 const prismaModule = [PrismaModule];
 
