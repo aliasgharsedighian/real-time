@@ -1,5 +1,5 @@
-import PulseCircle from "../../../components/ui/custom/PulseCircle";
-import { useChatStore } from "../../../store/useChatStore";
+import PulseCircle from "../../../../components/ui/custom/PulseCircle";
+import { useChatStore } from "../../../../store/useChatStore";
 
 const ChatHeader = () => {
   const chatError = useChatStore((state) => state.chatError);

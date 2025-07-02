@@ -1,7 +1,7 @@
 import { Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/home/Home";
 import LoginPage from "./pages/login";
-import PollingChatId from "./pages/polling/chatId";
+import { PollingChatId } from "./pages/polling/chatId";
 import { Polling } from "./pages/polling";
 
 function App() {

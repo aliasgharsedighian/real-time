@@ -1,6 +1,6 @@
-import Button from "../../../components/ui/Button";
-import Spinner from "../../../components/ui/Spinner";
-import { useChatStore } from "../../../store/useChatStore";
+import Button from "../../../../components/ui/custom/Button";
+import Spinner from "../../../../components/ui/custom/Spinner";
+import { useChatStore } from "../../../../store/useChatStore";
 
 interface Props {
   sendMessage: any;

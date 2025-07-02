@@ -42,8 +42,9 @@ export class PrsimaPollingRepository {
   }
 
   async getChatContentsById(chatId: number) {
-    const skip = 0;
-    const take = 20;
+    const page = 1;
+    const limit = 20;
+    const skip = (+page - 1) * +limit;
     const chat = await this.prisma.message.findMany({
       where: {
         chatId: chatId,
@@ -52,7 +53,7 @@ export class PrsimaPollingRepository {
         createdAt: 'desc',
       },
       skip,
-      take,
+      take: limit,
       include: {
         sender: {
           select: {

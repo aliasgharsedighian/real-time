@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { useAllChats } from "../../hooks/useChats";
 import ChatHeader from "./components/ChatHeader";
+import { useAuthStore } from "../../store/useAuthStore";
 
 export const Polling = () => {
+  const user = useAuthStore((state) => state.user);
   const {
     data: chats,
     isLoading,

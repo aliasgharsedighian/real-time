@@ -1,8 +1,17 @@
 // src/LoginPage.jsx
 import { useState } from "react";
 import { useLogin } from "../../hooks/useAuth";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../store/useAuthStore";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../lib/api";
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const { setToken, setUser } = useAuthStore.getState();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -16,13 +25,30 @@ export default function LoginPage() {
         {
           onSuccess: (response) => {
             const res = response.data;
-            console.log(res);
-            localStorage.setItem("token", res.data.accessToken);
+            setToken(res.data.accessToken);
+            getUserInfo(res.data.accessToken);
           },
         }
       );
     } catch (error) {
       console.error("Login failed", error);
+    }
+  };
+
+  const getUserInfo = async (token: string) => {
+    try {
+      const response = await api.get("auth/user-info", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const user = response.data.data;
+      // Save user in Zustand
+      setUser(user);
+      navigate("/polling");
+    } catch (error) {
+      console.error("Failed to fetch user info:", error);
+      throw error;
     }
   };
 
@@ -35,7 +61,7 @@ export default function LoginPage() {
         <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
         <div className="mb-4">
           <label className="block text-gray-700">Email</label>
-          <input
+          <Input
             type="email"
             className="w-full p-2 border border-gray-300 rounded"
             value={email}
@@ -45,7 +71,7 @@ export default function LoginPage() {
         </div>
         <div className="mb-6">
           <label className="block text-gray-700">Password</label>
-          <input
+          <Input
             type="password"
             className="w-full p-2 border border-gray-300 rounded"
             value={password}
@@ -54,13 +80,13 @@ export default function LoginPage() {
           />
         </div>
         {error && <div>Error occured when trying to connect!</div>}
-        <button
+        <Button
           disabled={isPending}
           type="submit"
           className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
         >
           Login
-        </button>
+        </Button>
       </form>
     </div>
   );
