@@ -14,7 +14,20 @@ export class FindUserService {
         data: user,
       };
     } catch (error) {
-      throw new Error(`Service Error: ${error.message}`);
+      throw new Error(`Service Error execute: ${error.message}`);
+    }
+  }
+
+  async serachUserByEmail(searchTerm: string) {
+    try {
+      const contacts = await this.userRepo.findByEmail(searchTerm);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'user found successfully',
+        data: contacts,
+      };
+    } catch (error) {
+      throw new Error(`Service Error serachUserByEmail: ${error.message}`);
     }
   }
 }

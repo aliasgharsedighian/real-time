@@ -14,6 +14,9 @@ export const routesV1 = {
     verifyOtp: `auth/verify-otp`,
     refreshToken: `auth/refresh-token`,
   },
+  search: {
+    searchContact: `${root}/search-user`,
+  },
   user: {
     updateProfile: `auth/update-profile`,
     updateUser: `auth/update-user/:id`,

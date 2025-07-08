@@ -34,9 +34,19 @@ export class PrismaUserRepository {
   }
 
   async findByEmail(email: string) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findMany({
       where: {
-        email,
+        OR: [
+          {
+            email: {
+              contains: email,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
       select: {
         id: true,
@@ -56,6 +66,7 @@ export class PrismaUserRepository {
         },
       },
     });
+
     return user;
   }
 

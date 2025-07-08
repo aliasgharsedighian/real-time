@@ -40,7 +40,7 @@ export class GetMessagesService {
         throw new ForbiddenException('You are not a participant in this chat.');
       }
 
-      const chat = await this.pollingRepo.getChatContentsById(chatId);
+      const chat = await this.pollingRepo.getChatContentsById(chatId, userId);
       return {
         statusCode: HttpStatus.OK,
         message: 'chat get successfully',

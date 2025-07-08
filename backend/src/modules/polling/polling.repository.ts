@@ -17,6 +17,11 @@ export class PrsimaPollingRepository {
         },
         include: {
           participants: {
+            where: {
+              userId: {
+                not: userId,
+              },
+            },
             include: {
               user: {
                 select: {
@@ -41,7 +46,7 @@ export class PrsimaPollingRepository {
     }
   }
 
-  async getChatContentsById(chatId: number) {
+  async getChatContentsById(chatId: number, userId: number) {
     const page = 1;
     const limit = 20;
     const skip = (+page - 1) * +limit;
@@ -65,7 +70,34 @@ export class PrsimaPollingRepository {
       },
     });
 
-    return chat;
+    const users = await this.prisma.chat.findUnique({
+      where: {
+        id: chatId,
+      },
+      include: {
+        participants: {
+          where: {
+            userId: {
+              not: userId,
+            },
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                profile: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      users: users?.participants,
+      chats: chat.reverse(),
+    };
   }
 
   async createChat(

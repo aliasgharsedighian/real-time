@@ -5,7 +5,6 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/useAuthStore";
-import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 
 export default function LoginPage() {

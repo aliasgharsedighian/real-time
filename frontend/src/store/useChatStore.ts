@@ -36,14 +36,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   input: "",
   setInput: (text) => set({ input: text }),
 
-  messages: [
-    {
-      id: 1,
-      text: "سلام! چطور می‌تونم کمکت کنم؟",
-      role: "admin",
-      timestamp: Date.now().toString(),
-    },
-  ],
+  messages: [],
   setMessages: (messages) => set({ messages }),
   addMessage: (msg) =>
     set((state) => {

@@ -27,13 +27,6 @@ export const PollingChatId = () => {
 
   const sendMessage = () => {
     if (!input.trim()) return;
-
-    addMessage({
-      id: crypto.randomUUID(),
-      text: input,
-      role: "user",
-      timestamp: Date.now().toString(),
-    });
     setInput("");
     sendMessageToApi(
       { content: input, chatId: chatId ? +chatId : 0 },
@@ -43,22 +36,11 @@ export const PollingChatId = () => {
           console.log(newMessage);
           // setMessages([...messages, newMessage]);
           if (newMessage) {
-            addMessage({
-              id: crypto.randomUUID(),
-              text: "خیلی راحت! فقط ایمیل و رمز عبورتو وارد کن.",
-              role: "admin",
-              timestamp: Date.now().toString(),
-            });
+            addMessage(response.data.data);
           }
           setChatError(null);
         },
         onError: () => {
-          addMessage({
-            id: crypto.randomUUID(),
-            text: error?.message || "مشکل در برقراری ارتباط!",
-            role: "admin",
-            timestamp: Date.now().toString(),
-          });
           setChatError(error?.message || "خطایی رخ داده است");
           console.log("Message send failed:", error);
         },
@@ -70,14 +52,13 @@ export const PollingChatId = () => {
     <div>
       {/* Chat Box */}
 
-      <div className="w-screen h-[94dvh] bg-white flex flex-col justify-between overflow-hidden">
+      <div className="w-screen h-[100dvh] bg-white flex flex-col justify-between overflow-hidden">
         {/* Header */}
-        <ChatHeader />
+        <ChatHeader chatId={chatId} />
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           <ChatsContainer
-            chats={chats}
             user={user}
             isLoading={isLoading}
             isError={isError}
