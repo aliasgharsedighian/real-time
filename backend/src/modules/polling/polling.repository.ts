@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
 
 @Injectable()
@@ -106,44 +106,92 @@ export class PrsimaPollingRepository {
     firstMessageContent: string,
   ) {
     try {
-      // Remove any accidental duplicate user IDs
       const uniqueParticipantIds = Array.from(new Set(participantUserIds));
 
-      const createdChat = this.prisma.chat.create({
-        data: {
-          participants: {
-            create: uniqueParticipantIds.map((id) => ({
-              user: { connect: { id } },
-            })),
-          },
-          messages: firstMessageContent
-            ? {
-                create: {
-                  content: firstMessageContent,
-                  sender: { connect: { id: creatorUserId } },
-                },
-              }
-            : undefined,
-        },
-        include: {
-          participants: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                  profile: true,
-                },
+      if (uniqueParticipantIds.length === 2) {
+        const [userA, userB] = uniqueParticipantIds;
+
+        // Find chat that is not a group and includes both users
+        const existingChat = await this.prisma.chat.findFirst({
+          where: {
+            isGroup: false,
+            participants: {
+              some: { userId: userA },
+            },
+            AND: {
+              participants: {
+                some: { userId: userB },
               },
             },
           },
-          messages: {
-            orderBy: { createdAt: 'asc' },
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    profile: true,
+                  },
+                },
+              },
+            },
+            messages: {
+              orderBy: { createdAt: 'asc' },
+            },
           },
-        },
-      });
+        });
 
-      return createdChat;
+        if (existingChat) {
+          return {
+            statusCode: HttpStatus.OK,
+            message: 'Chat already exists',
+            data: existingChat,
+          };
+        }
+
+        // Create new one-on-one chat
+        const newChat = await this.prisma.chat.create({
+          data: {
+            isGroup: false,
+            participants: {
+              create: uniqueParticipantIds.map((id) => ({
+                user: { connect: { id } },
+              })),
+            },
+            messages: firstMessageContent
+              ? {
+                  create: {
+                    content: firstMessageContent,
+                    sender: { connect: { id: creatorUserId } },
+                  },
+                }
+              : undefined,
+          },
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    profile: true,
+                  },
+                },
+              },
+            },
+            messages: {
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        });
+
+        return {
+          statusCode: HttpStatus.CREATED,
+          message: 'Chat created successfully',
+          data: newChat,
+        };
+      }
     } catch (error) {
       throw error;
     }

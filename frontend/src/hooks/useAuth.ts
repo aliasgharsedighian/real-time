@@ -2,12 +2,23 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/useAuthStore";
 
-interface LoginPayload {
+interface SigninPayload {
   email: string;
   password: string;
 }
 
-export const useLogin = () =>
+interface SignupPayload {
+  email: string;
+  password: string;
+  role?: string;
+}
+
+export const useSignin = () =>
   useMutation({
-    mutationFn: (data: LoginPayload) => api.post("auth/signin", data),
+    mutationFn: (data: SigninPayload) => api.post("auth/signin", data),
+  });
+
+export const useSignup = () =>
+  useMutation({
+    mutationFn: (data: SignupPayload) => api.post("auth/signup", data),
   });

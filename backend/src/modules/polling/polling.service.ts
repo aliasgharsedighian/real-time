@@ -110,11 +110,7 @@ export class GetMessagesService {
         firstMessageContent,
       );
 
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: 'create group successfully',
-        data: chatCreated,
-      };
+      return chatCreated;
     } catch (error) {
       throw new Error(`Service Error "createChat": ${error.message}`);
     }

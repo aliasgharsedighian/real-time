@@ -57,6 +57,7 @@ model Profile {
 
 model Chat {
   id            Int            @id @default(autoincrement())
+  isGroup      Boolean           @default(false)
   participants  ChatParticipant[]
   messages      Message[]
   createdAt     DateTime          @default(now())
