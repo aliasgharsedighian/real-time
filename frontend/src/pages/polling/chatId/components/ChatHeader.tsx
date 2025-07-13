@@ -10,12 +10,7 @@ const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
   const chatError = useChatStore((state) => state.chatError);
   const navigate = useNavigate();
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error: fetchMessagesError,
-  } = useGetChatById(chatId);
+  const { data } = useGetChatById(chatId);
 
   const goBack = () => {
     navigate(-1); // This navigates to the previous page in history

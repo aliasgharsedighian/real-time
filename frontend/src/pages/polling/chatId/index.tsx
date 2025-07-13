@@ -17,7 +17,6 @@ export const PollingChatId = () => {
   const setChatError = useChatStore((state) => state.setChatError);
 
   const {
-    data: chats,
     isLoading,
     isError,
     error: fetchMessagesError,

@@ -38,17 +38,11 @@ const ChatHeader = () => {
     sendValueToApi(e.target.value);
   };
 
-  const {
-    mutate: searchContact,
-    isPending: searchContactPending,
-    error: searchContactError,
-  } = useSearchContact(token);
+  const { mutate: searchContact, error: searchContactError } =
+    useSearchContact(token);
 
-  const {
-    mutate: createChat,
-    isPending: createChatPending,
-    error: createChatError,
-  } = useCreateChat(token);
+  const { mutate: createChat, isPending: createChatPending } =
+    useCreateChat(token);
 
   const sendValueToApi = useDebouncedCallback(async (text) => {
     if (text !== "") {
