@@ -32,6 +32,25 @@ export class PrsimaPollingRepository {
               },
             },
           },
+          _count: {
+            select: {
+              messages: {
+                where: {
+                  chatId: 1,
+                  NOT: [
+                    // { senderId: userId },
+                    {
+                      readStatuses: {
+                        some: {
+                          userId,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1, // latest message
@@ -93,8 +112,37 @@ export class PrsimaPollingRepository {
         },
       },
     });
+    const unreadMessages = await this.prisma.message.findMany({
+      where: {
+        chatId,
+        NOT: [
+          // { senderId: userId },
+          {
+            readStatuses: {
+              some: {
+                userId,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // Mark as read when someone views the chat
+
+    await this.prisma.messageReadStatus.createMany({
+      data: unreadMessages.map((msg) => ({
+        userId,
+        messageId: msg.id,
+      })),
+      skipDuplicates: true,
+    });
 
     return {
+      unreadCount: unreadMessages.length,
       users: users?.participants,
       chats: chat.reverse(),
     };

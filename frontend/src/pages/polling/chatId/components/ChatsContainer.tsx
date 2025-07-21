@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useChatStore } from "../../../../store/useChatStore";
 import { formatDateBasedOnToday } from "../../../../utils/dateUtils";
+import ChatContainerLoading from "./ChatContainerLoading";
 
 interface PageProps {
   isLoading: boolean;
@@ -9,7 +10,7 @@ interface PageProps {
   user: any;
 }
 
-function ChatsContainer({ user, isLoading, isError, error }: PageProps) {
+function ChatsContainer({ user, isLoading }: PageProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const messages = useChatStore((state) => state.messages);
@@ -22,12 +23,7 @@ function ChatsContainer({ user, isLoading, isError, error }: PageProps) {
     }, 100);
   }, [messages]);
 
-  if (isLoading || messages.length === 0) return <div>loading...</div>;
-  if (isError || messages.length === 0) {
-    return (
-      <p style={{ color: "red" }}>{error.message || "Something went wrong!"}</p>
-    );
-  }
+  if (isLoading || messages.length === 0) return <ChatContainerLoading />;
 
   if (messages.length !== 0) {
     return (

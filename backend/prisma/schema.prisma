@@ -40,6 +40,7 @@ model User {
   profile     Profile?
   chats       ChatParticipant[]
   messages    Message[]
+  messageReadStatuses MessageReadStatus[] 
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -81,4 +82,19 @@ model Message {
   sender    User     @relation(fields: [senderId], references: [id])
   senderId  Int
   createdAt DateTime @default(now())
+  readStatuses MessageReadStatus[]
+}
+
+model MessageReadStatus {
+  id        Int      @id @default(autoincrement())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId]) // prevent duplicate read status
+
+  @@index([userId, messageId])
+  @@index([messageId])
 }

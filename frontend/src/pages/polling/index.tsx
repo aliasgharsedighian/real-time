@@ -3,9 +3,10 @@ import { useAllChats } from "../../hooks/useChats";
 import ChatHeader from "./components/ChatHeader";
 import { capitalizeFirstLetter } from "../../utils/stringUtils";
 import { formatDateBasedOnToday } from "../../utils/dateUtils";
+import ChatContainerLoading from "./chatId/components/ChatContainerLoading";
 
 export const Polling = () => {
-  const { data: chats } = useAllChats();
+  const { data: chats, isLoading } = useAllChats();
 
   return (
     <div>
@@ -18,38 +19,53 @@ export const Polling = () => {
         {/* Chats */}
         <div className="flex-1 overflow-y-auto">
           <div className="flex-1 overflow-y-auto">
-            {chats?.data?.map((chat: any) => (
-              <Link key={chat.id} to={`/polling/${chat.id}`}>
-                <div className="border-b py-3 px-2">
-                  <span className="font-bold">
-                    {chat.participants.length === 1 ? (
-                      <>
-                        {capitalizeFirstLetter(
-                          chat.participants[0].user.profile.firstname
-                        ) +
-                          " " +
-                          capitalizeFirstLetter(
-                            chat.participants[0].user.profile.lastname
-                          )}
-                      </>
-                    ) : (
-                      "Group"
-                    )}
-                  </span>
-                  {chat?.messages?.map((message: any) => (
-                    <div
-                      key={message.id}
-                      className="flex justify-between w-full"
-                    >
-                      <p className="line-clamp-1">{message.content}</p>
-                      <span className="text-sm">
-                        {formatDateBasedOnToday(message.createdAt)}
+            {isLoading ? (
+              <div className="w-full h-[80vh]">
+                <ChatContainerLoading />
+              </div>
+            ) : (
+              chats?.data?.map((chat: any) => (
+                <Link key={chat.id} to={`/polling/${chat.id}`}>
+                  <div className="border-b py-3 px-2">
+                    <div className="w-full flex justify-between">
+                      <span className="font-bold">
+                        {chat.participants.length === 1 ? (
+                          <>
+                            {chat.participants[0].user.profile.firstname
+                              ? capitalizeFirstLetter(
+                                  chat.participants[0].user.profile.firstname
+                                ) +
+                                " " +
+                                capitalizeFirstLetter(
+                                  chat.participants[0].user.profile.lastname
+                                )
+                              : chat.participants[0].user.email}
+                          </>
+                        ) : (
+                          "Group"
+                        )}
                       </span>
+                      {chat?._count.messages ? (
+                        <div className="bg-blue-500 text-white w-5 h-5 flex items-center justify-center rounded-full text-sm">
+                          {chat?._count.messages}
+                        </div>
+                      ) : null}
                     </div>
-                  ))}
-                </div>
-              </Link>
-            ))}
+                    {chat?.messages?.map((message: any) => (
+                      <div
+                        key={message.id}
+                        className="flex justify-between w-full"
+                      >
+                        <p className="line-clamp-1">{message.content}</p>
+                        <span className="text-sm">
+                          {formatDateBasedOnToday(message.createdAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </div>
       </div>

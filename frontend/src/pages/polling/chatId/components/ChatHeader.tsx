@@ -43,9 +43,11 @@ const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
         <span>
           {data?.users.map((user: any) => (
             <React.Fragment key={user.id}>
-              {capitalizeFirstLetter(user.user.profile.firstname) +
-                " " +
-                capitalizeFirstLetter(user.user.profile.lastname)}
+              {user.user.profile.firstname
+                ? capitalizeFirstLetter(user.user.profile.firstname) +
+                  " " +
+                  capitalizeFirstLetter(user.user.profile.lastname)
+                : user.user.email}
             </React.Fragment>
           ))}
         </span>

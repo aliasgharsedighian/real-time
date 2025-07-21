@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import PulseCircle from "../../../components/ui/custom/PulseCircle";
 import { useChatStore } from "../../../store/useChatStore";
@@ -23,9 +23,11 @@ import { useSearchContact } from "../../../hooks/useSearchContact";
 import { useAuthStore } from "../../../store/useAuthStore";
 import { capitalizeFirstLetter } from "../../../utils/stringUtils";
 import { useCreateChat } from "../../../hooks/useCreateChat";
+import BarDrawerHeader from "../../../components/BarDrawerHeader";
 
 const ChatHeader = () => {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const token = useAuthStore((state) => state.token);
   const chatError = useChatStore((state) => state.chatError);
 
@@ -101,7 +103,12 @@ const ChatHeader = () => {
   function handleCreateChatSubmit() {
     if (contactSelect.length !== 0) {
       createChat(
-        { firstMessage: `pouyan create this chat`, participant: contactSelect },
+        {
+          firstMessage: `${
+            user?.profile.firstname ? user.profile.firstname : user?.email
+          } create this chat`,
+          participant: contactSelect,
+        },
         {
           onSuccess: (response) => {
             const result = response.data;
@@ -114,9 +121,9 @@ const ChatHeader = () => {
   }
 
   return (
-    <div className="flex items-center justify-between bg-[#2b7fff]">
+    <div className="flex items-center justify-between bg-[#2b7fff] h-[66px]">
       <div className="text-white p-3 flex gap-4 items-center">
-        <Link to="/">
+        {/* <Link to="/">
           {" "}
           <Button className="!p-1" variant={"ghost"}>
             <svg
@@ -134,7 +141,8 @@ const ChatHeader = () => {
               />
             </svg>
           </Button>
-        </Link>
+        </Link> */}
+        <BarDrawerHeader />
         <div
           style={{
             display: "flex",
@@ -169,7 +177,7 @@ const ChatHeader = () => {
             viewBox="0 0 24 24"
             strokeWidth={1.5}
             stroke="currentColor"
-            className="size-6"
+            className="size-6 text-white"
           >
             <path
               strokeLinecap="round"

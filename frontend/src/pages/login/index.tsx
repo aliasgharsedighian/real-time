@@ -52,6 +52,7 @@ const signinFormSchema = z.object({
 export default function LoginPage() {
   const navigate = useNavigate();
   const { setToken, setUser } = useAuthStore.getState();
+  const { login } = useAuthStore();
 
   const [tab, setTab] = useState("Signin");
 
@@ -87,6 +88,7 @@ export default function LoginPage() {
         {
           onSuccess: (response) => {
             const res = response.data;
+
             setToken(res.data.token.accessToken);
             setTimeout(() => {
               getUserInfo(res.data.token.accessToken);
@@ -132,6 +134,7 @@ export default function LoginPage() {
       const user = response.data.data;
       // Save user in Zustand
       setUser(user);
+      login(token, user);
       navigate("/polling");
     } catch (error) {
       console.error("Failed to fetch user info:", error);

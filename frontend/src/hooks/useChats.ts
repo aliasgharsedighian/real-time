@@ -14,5 +14,8 @@ export function useAllChats() {
       });
       return res.data;
     },
+    refetchInterval: 3000,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 }
