@@ -16,11 +16,13 @@ import {
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useState } from "react";
+import Button from "./ui/custom/Button";
 
 function BarDrawerHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const user = useAuthStore((state) => state.user);
+  const { setToken, setUser } = useAuthStore.getState();
   const { isLoggedIn } = useAuthStore();
   return (
     <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -74,8 +76,18 @@ function BarDrawerHeader() {
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-        <DrawerFooter>
-          <DrawerDescription>
+
+        <DrawerFooter className="px-0">
+          <Button
+            onClick={() => {
+              setToken(null);
+              setUser(null);
+            }}
+            variant="ghost"
+          >
+            <p className="px-4 py-1.5 text-red-600">Logout</p>
+          </Button>
+          <DrawerDescription className="border-t px-4 pt-2">
             This is test Private chat
             <br />
             Enjoy it!
