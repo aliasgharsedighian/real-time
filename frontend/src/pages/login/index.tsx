@@ -32,6 +32,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { toast } from "sonner";
 
 const signUpformSchema = z
   .object({
@@ -88,16 +89,20 @@ export default function LoginPage() {
         {
           onSuccess: (response) => {
             const res = response.data;
-
-            setToken(res.data.token.accessToken);
-            setTimeout(() => {
-              getUserInfo(res.data.token.accessToken);
-            }, 1000);
+            if (res.statusCode === 201) {
+              setToken(res.data.token.accessToken);
+              setTimeout(() => {
+                getUserInfo(res.data.token.accessToken);
+              }, 1000);
+            } else {
+              toast.error("something went wrong");
+            }
           },
         }
       );
     } catch (error) {
       console.error("Login failed", error);
+      toast.error("error");
     }
   };
 
@@ -112,15 +117,20 @@ export default function LoginPage() {
         {
           onSuccess: (response) => {
             const res = response.data;
-            setToken(res.data.accessToken);
-            setTimeout(() => {
-              getUserInfo(res.data.accessToken);
-            }, 1000);
+            if (res.statusCode === 200) {
+              setToken(res.data.accessToken);
+              setTimeout(() => {
+                getUserInfo(res.data.accessToken);
+              }, 1000);
+            } else {
+              toast.error("something went wrong");
+            }
           },
         }
       );
     } catch (error) {
       console.error("Login failed", error);
+      toast.error("error");
     }
   };
 
@@ -135,6 +145,7 @@ export default function LoginPage() {
       // Save user in Zustand
       setUser(user);
       login(token, user);
+      toast.success("login successfully");
       navigate("/polling");
     } catch (error) {
       console.error("Failed to fetch user info:", error);
