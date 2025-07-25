@@ -7,7 +7,7 @@ import ProtectedLayout from "./components/ProtectedRoute";
 
 function App() {
   return (
-    <div className="w-full m-auto flex flex-col gap-6 items-center justify-center">
+    <div className="w-full h-full max-h-full mx-auto my-0 flex flex-col gap-6 items-center justify-center">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         {/* All protected routes go here */}

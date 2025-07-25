@@ -28,8 +28,14 @@ export class FindUserHttpController {
 
   @HttpCode(HttpStatus.OK)
   @Post(routesV1.search.searchContact)
-  async findUserByEmail(@Body() body: FindUserByEmailRequestDto) {
-    const result = await this.userService.serachUserByEmail(body.search);
+  async findUserByEmail(
+    @Body() body: FindUserByEmailRequestDto,
+    @GetUser() user: User,
+  ) {
+    const result = await this.userService.serachUserByEmail(
+      body.search,
+      user.id,
+    );
 
     return result;
   }

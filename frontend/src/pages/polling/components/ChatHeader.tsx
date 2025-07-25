@@ -121,7 +121,7 @@ const ChatHeader = () => {
   }
 
   return (
-    <div className="flex items-center justify-between bg-[#2b7fff] h-[66px]">
+    <header className="flex items-center justify-between bg-[#2b7fff] h-[66px] sticky top-0 w-full z-10">
       <div className="text-white p-3 flex gap-4 items-center">
         {/* <Link to="/">
           {" "}
@@ -268,7 +268,7 @@ const ChatHeader = () => {
           </div>
         </PopoverContent>
       </Popover>
-    </div>
+    </header>
   );
 };
 

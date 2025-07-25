@@ -86,6 +86,13 @@ export class PrsimaPollingRepository {
             profile: true,
           },
         },
+        readStatuses: {
+          where: {
+            userId: {
+              not: userId,
+            },
+          },
+        },
       },
     });
 
@@ -240,6 +247,13 @@ export class PrsimaPollingRepository {
           data: newChat,
         };
       }
+      if (uniqueParticipantIds.length > 2) {
+        return {
+          statusCode: HttpStatus.CREATED,
+          message: 'Chat created successfully',
+          data: 'newChat',
+        };
+      }
     } catch (error) {
       throw error;
     }
@@ -259,6 +273,13 @@ export class PrsimaPollingRepository {
               id: true,
               email: true,
               profile: true,
+            },
+          },
+          readStatuses: {
+            where: {
+              userId: {
+                not: senderUserId,
+              },
             },
           },
         },

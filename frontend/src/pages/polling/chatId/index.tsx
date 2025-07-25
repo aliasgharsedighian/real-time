@@ -6,6 +6,7 @@ import ChatHeader from "./components/ChatHeader";
 import { useGetChatById } from "../../../hooks/useGetChatById";
 import { useSendMessage } from "../../../hooks/useSendMessage";
 import { useChatStore } from "../../../store/useChatStore";
+import { toast } from "sonner";
 
 export const PollingChatId = () => {
   const { chatId } = useParams();
@@ -41,6 +42,7 @@ export const PollingChatId = () => {
         },
         onError: () => {
           setChatError(error?.message || "خطایی رخ داده است");
+          toast.error("Message send failed");
           console.log("Message send failed:", error);
         },
       }

@@ -18,9 +18,9 @@ export class FindUserService {
     }
   }
 
-  async serachUserByEmail(searchTerm: string) {
+  async serachUserByEmail(searchTerm: string, userId: number) {
     try {
-      const contacts = await this.userRepo.findByEmail(searchTerm);
+      const contacts = await this.userRepo.findByEmail(searchTerm, userId);
       return {
         statusCode: HttpStatus.OK,
         message: 'user found successfully',

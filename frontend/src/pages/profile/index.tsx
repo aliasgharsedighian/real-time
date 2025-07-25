@@ -21,6 +21,7 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { useUpdateProfile } from "../../hooks/useAuth";
 import { useAuthStore } from "../../store/useAuthStore";
+import { toast } from "sonner";
 
 const updateFormSchema = z.object({
   firstname: z.string().optional(),
@@ -53,6 +54,7 @@ function ProfilePage() {
           onSuccess: (response) => {
             const res = response.data;
             updateProfile({ profile: res.data });
+            toast.success(res.message);
           },
         }
       );
@@ -60,7 +62,7 @@ function ProfilePage() {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full mt-3">
       <Card className="mx-6">
         <CardHeader>
           <CardTitle>Profile</CardTitle>

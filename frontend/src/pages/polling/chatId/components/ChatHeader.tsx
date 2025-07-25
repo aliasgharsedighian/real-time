@@ -17,7 +17,7 @@ const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
   };
 
   return (
-    <div className="bg-[#2b7fff] text-white p-3 flex gap-4 items-center">
+    <div className="bg-[#2b7fff] h-[66px] text-white p-3 flex gap-4 items-center sticky top-0 w-full z-10">
       <Button className="!p-1" variant={"ghost"} onClick={goBack}>
         <svg
           xmlns="http://www.w3.org/2000/svg"

@@ -140,6 +140,11 @@
   }
 }
 
+#root {
+  height: 100%;
+  background-color: var(--background);
+}
+
 .chat-loader {
   width: 50px;
   height: 50px;

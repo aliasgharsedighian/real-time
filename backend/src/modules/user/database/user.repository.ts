@@ -33,15 +33,24 @@ export class PrismaUserRepository {
     return user;
   }
 
-  async findByEmail(email: string) {
+  async findByEmail(email: string, currentUserId: number) {
     const user = await this.prisma.user.findMany({
       where: {
-        OR: [
+        AND: [
           {
-            email: {
-              contains: email,
-              mode: 'insensitive',
+            id: {
+              not: currentUserId,
             },
+          },
+          {
+            OR: [
+              {
+                email: {
+                  contains: email,
+                  mode: 'insensitive',
+                },
+              },
+            ],
           },
         ],
       },
@@ -55,7 +64,6 @@ export class PrismaUserRepository {
         role: true,
         createdAt: true,
         updatedAt: true,
-        // exclude: password
         profile: {
           select: {
             id: true,

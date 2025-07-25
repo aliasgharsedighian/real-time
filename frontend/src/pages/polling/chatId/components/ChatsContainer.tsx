@@ -16,6 +16,10 @@ function ChatsContainer({ user, isLoading }: PageProps) {
   const messages = useChatStore((state) => state.messages);
 
   useEffect(() => {
+    console.log(messages);
+  }, [messages]);
+
+  useEffect(() => {
     // Scroll to bottom on every message update
 
     setTimeout(() => {
@@ -118,13 +122,14 @@ function ChatsContainer({ user, isLoading }: PageProps) {
                   <span style={{ fontSize: "11px" }}>
                     {formatDateBasedOnToday(msg.createdAt)}
                   </span>
-                  <span
+                  <div
+                    className="flex items-end relative"
                     style={{
                       backgroundColor: currentUser ? "#2b7fff" : "#f1f1f1",
                       color: currentUser ? "white" : "#333",
                       padding: "10px 14px",
-                      borderTopLeftRadius: currentUser ? "12px" : "0px",
-                      borderTopRightRadius: currentUser ? "0px" : "12px",
+                      borderTopLeftRadius: currentUser ? "0px" : "12px",
+                      borderTopRightRadius: currentUser ? "12px" : "0px",
                       borderBottomRightRadius: "10px",
                       borderBottomLeftRadius: "10px",
                       wordBreak: "break-word",
@@ -134,8 +139,80 @@ function ChatsContainer({ user, isLoading }: PageProps) {
                       lineHeight: "1.4",
                     }}
                   >
-                    {msg.content}
-                  </span>
+                    <span className="pr-2">{msg.content}</span>
+                    {currentUser ? (
+                      msg.readStatuses ? (
+                        msg?.readStatuses?.length === 0 ? (
+                          <div className="absolute right-1 bottom-2">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                              className="size-3"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m4.5 12.75 6 6 9-13.5"
+                              />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="absolute right-1 bottom-2">
+                            <div className="relative flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.5}
+                                stroke="currentColor"
+                                className="size-3 absolute right-0"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="m4.5 12.75 6 6 9-13.5"
+                                />
+                              </svg>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.5}
+                                stroke="currentColor"
+                                className="size-3 absolute right-1"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="m4.5 12.75 6 6 9-13.5"
+                                />
+                              </svg>
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <div className="absolute right-1 bottom-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                            className="size-6"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                            />
+                          </svg>
+                        </div>
+                      )
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
