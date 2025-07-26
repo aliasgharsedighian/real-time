@@ -7,6 +7,7 @@ import { useGetChatById } from "../../../hooks/useGetChatById";
 import { useSendMessage } from "../../../hooks/useSendMessage";
 import { useChatStore } from "../../../store/useChatStore";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 export const PollingChatId = () => {
   const { chatId } = useParams();
@@ -17,11 +18,20 @@ export const PollingChatId = () => {
   const setInput = useChatStore((state) => state.setInput);
   const setChatError = useChatStore((state) => state.setChatError);
 
+  const [hasMoreMessage, setHasMoreMessage] = useState(true);
+
   const {
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
     isLoading,
     isError,
     error: fetchMessagesError,
-  } = useGetChatById(chatId);
+  } = useGetChatById(chatId, setHasMoreMessage);
+
+  useEffect(() => {
+    console.log(isFetchingNextPage);
+  });
 
   const { mutate: sendMessageToApi, isPending, error } = useSendMessage(token);
 
@@ -33,7 +43,7 @@ export const PollingChatId = () => {
       {
         onSuccess: (response) => {
           const newMessage = response.data;
-          console.log(newMessage);
+
           // setMessages([...messages, newMessage]);
           if (newMessage) {
             addMessage(response.data.data);
@@ -55,7 +65,7 @@ export const PollingChatId = () => {
 
       <div className="w-screen h-[100dvh] bg-white flex flex-col justify-between overflow-hidden">
         {/* Header */}
-        <ChatHeader chatId={chatId} />
+        <ChatHeader chatId={chatId} setHasMoreMessage={setHasMoreMessage} />
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
@@ -64,6 +74,9 @@ export const PollingChatId = () => {
             isLoading={isLoading}
             isError={isError}
             error={fetchMessagesError}
+            fetchNextPage={fetchNextPage}
+            hasNextPage={hasNextPage}
+            hasMoreMessage={hasMoreMessage}
           />
         </div>
 

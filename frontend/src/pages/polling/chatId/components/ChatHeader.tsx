@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Button } from "../../../../components/ui/button";
 import PulseCircle from "../../../../components/ui/custom/PulseCircle";
 import { useGetChatById } from "../../../../hooks/useGetChatById";
@@ -6,14 +6,24 @@ import { useChatStore } from "../../../../store/useChatStore";
 import { useNavigate } from "react-router-dom";
 import { capitalizeFirstLetter } from "../../../../utils/stringUtils";
 
-const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
+const ChatHeader = ({
+  chatId,
+  setHasMoreMessage,
+}: {
+  chatId: string | undefined;
+  setHasMoreMessage: any;
+}) => {
   const chatError = useChatStore((state) => state.chatError);
   const navigate = useNavigate();
 
-  const { data } = useGetChatById(chatId);
+  const { data } = useGetChatById(chatId, setHasMoreMessage);
+
+  useEffect(() => {
+    console.log();
+  });
 
   const goBack = () => {
-    navigate(-1); // This navigates to the previous page in history
+    navigate("/polling"); // This navigates to the previous page in history
   };
 
   return (
@@ -41,7 +51,7 @@ const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
         }}
       >
         <span>
-          {data?.users.map((user: any) => (
+          {data?.pages[0].users.map((user: any) => (
             <React.Fragment key={user.id}>
               {user.user.profile.firstname
                 ? capitalizeFirstLetter(user.user.profile.firstname) +
