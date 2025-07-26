@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
+import { PaginatedQueryRequestDto } from './polling.request.dto';
 
 @Injectable()
 export class PrsimaPollingRepository {
@@ -65,9 +66,13 @@ export class PrsimaPollingRepository {
     }
   }
 
-  async getChatContentsById(chatId: number, userId: number) {
-    const page = 1;
-    const limit = 20;
+  async getChatContentsById(
+    chatId: number,
+    userId: number,
+    queryparams: PaginatedQueryRequestDto,
+  ) {
+    const page = queryparams?.page || 1;
+    const limit = queryparams?.limit || 20;
     const skip = (+page - 1) * +limit;
     const chat = await this.prisma.message.findMany({
       where: {

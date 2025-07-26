@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { routesV1 } from 'src/config/app.routes';
 import { GetMessagesService } from './polling.service';
 import { JwtGuard } from 'src/libs/guard';
@@ -7,6 +15,7 @@ import { User } from '@prisma/client';
 import {
   CreateChatRequestDto,
   GetChatByIdParamsDto,
+  PaginatedQueryRequestDto,
   SendMessageRequestDto,
 } from './polling.request.dto';
 
@@ -25,10 +34,12 @@ export class PollingController {
   async getMessageById(
     @Param() params: GetChatByIdParamsDto,
     @GetUser() user: User,
+    @Query() queryParams: PaginatedQueryRequestDto,
   ) {
     const result = await this.messageService.getChatContentsById(
       user.id,
       params.id,
+      queryParams,
     );
     return result;
   }

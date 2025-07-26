@@ -4,7 +4,10 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class SendMessageRequestDto {
@@ -41,4 +44,20 @@ export class GetChatByIdParamsDto {
   @Type(() => Number)
   @IsInt()
   id: number;
+}
+
+export class PaginatedQueryRequestDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(99999)
+  @Type(() => Number)
+  readonly limit?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(99999)
+  @Type(() => Number)
+  readonly page?: number;
 }

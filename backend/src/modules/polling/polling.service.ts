@@ -1,6 +1,7 @@
 import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   CreateChatRequestDto,
+  PaginatedQueryRequestDto,
   SendMessageRequestDto,
 } from './polling.request.dto';
 import { PrsimaPollingRepository } from './polling.repository';
@@ -26,7 +27,11 @@ export class GetMessagesService {
     }
   }
 
-  async getChatContentsById(userId: number, chatId: number) {
+  async getChatContentsById(
+    userId: number,
+    chatId: number,
+    queryParams: PaginatedQueryRequestDto,
+  ) {
     try {
       // Verify user is a participant
       const isParticipant = await this.prisma.chatParticipant.findFirst({
@@ -40,7 +45,11 @@ export class GetMessagesService {
         throw new ForbiddenException('You are not a participant in this chat.');
       }
 
-      const chat = await this.pollingRepo.getChatContentsById(chatId, userId);
+      const chat = await this.pollingRepo.getChatContentsById(
+        chatId,
+        userId,
+        queryParams,
+      );
       return {
         statusCode: HttpStatus.OK,
         message: 'chat get successfully',
