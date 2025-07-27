@@ -6,17 +6,11 @@ import { useChatStore } from "../../../../store/useChatStore";
 import { useNavigate } from "react-router-dom";
 import { capitalizeFirstLetter } from "../../../../utils/stringUtils";
 
-const ChatHeader = ({
-  chatId,
-  setHasMoreMessage,
-}: {
-  chatId: string | undefined;
-  setHasMoreMessage: any;
-}) => {
+const ChatHeader = ({ chatId }: { chatId: string | undefined }) => {
   const chatError = useChatStore((state) => state.chatError);
   const navigate = useNavigate();
 
-  const { data } = useGetChatById(chatId, setHasMoreMessage);
+  const { data } = useGetChatById(chatId);
 
   useEffect(() => {
     console.log();

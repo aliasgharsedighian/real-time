@@ -60,6 +60,22 @@ export class GetMessagesService {
     }
   }
 
+  async GetUnreadChatMessage(chatId: number, userId: number) {
+    try {
+      const unreadMessages = await this.pollingRepo.getChatIdUnreadMessage(
+        chatId,
+        userId,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'unread chat message get successfully',
+        data: unreadMessages,
+      };
+    } catch (error) {
+      throw new Error(`Service Error "GetUnreadChatMessage": ${error.message}`);
+    }
+  }
+
   async sendMessage(senderUserId: number, dto: SendMessageRequestDto) {
     const chatId = dto.chatId;
     const content = dto.content;

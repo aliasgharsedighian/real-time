@@ -1,24 +1,51 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useAuthStore } from "../../../store/useAuthStore";
 import ChatsContainer from "./components/ChatsContainer";
 import ChatInputArea from "./components/ChatInputArea";
 import ChatHeader from "./components/ChatHeader";
-import { useGetChatById } from "../../../hooks/useGetChatById";
+import {
+  useGetChatById,
+  usePollUnreadMessages,
+} from "../../../hooks/useGetChatById";
 import { useSendMessage } from "../../../hooks/useSendMessage";
 import { useChatStore } from "../../../store/useChatStore";
-import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export const PollingChatId = () => {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
   const { chatId } = useParams();
   const user = useAuthStore((state) => state.user);
   const token = useAuthStore((state) => state.token);
-  const addMessage = useChatStore((state) => state.addMessage);
+
   const input = useChatStore((state) => state.input);
   const setInput = useChatStore((state) => state.setInput);
-  const setChatError = useChatStore((state) => state.setChatError);
 
-  const [hasMoreMessage, setHasMoreMessage] = useState(true);
+  const setChatError = useChatStore((state) => state.setChatError);
+  const addMessage = useChatStore((state) => state.addMessage);
+  const clearMessages = useChatStore((s) => s.clearMessages);
+
+  useEffect(() => {
+    return () => {
+      clearMessages(); // ✅ Clear messages on unmount
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      clearMessages();
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearMessages(); // cleanup when location changes away from chat page
+    };
+  }, [location.pathname]);
 
   const {
     fetchNextPage,
@@ -27,13 +54,11 @@ export const PollingChatId = () => {
     isLoading,
     isError,
     error: fetchMessagesError,
-  } = useGetChatById(chatId, setHasMoreMessage);
+  } = useGetChatById(chatId);
 
-  useEffect(() => {
-    console.log(isFetchingNextPage);
-  });
+  usePollUnreadMessages(chatId);
 
-  const { mutate: sendMessageToApi, isPending, error } = useSendMessage(token);
+  const { mutate: sendMessageToApi, isPending } = useSendMessage(token);
 
   const sendMessage = () => {
     if (!input.trim()) return;
@@ -47,13 +72,11 @@ export const PollingChatId = () => {
           // setMessages([...messages, newMessage]);
           if (newMessage) {
             addMessage(response.data.data);
+            setTimeout(() => {
+              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
           }
           setChatError(null);
-        },
-        onError: () => {
-          setChatError(error?.message || "خطایی رخ داده است");
-          toast.error("Message send failed");
-          console.log("Message send failed:", error);
         },
       }
     );
@@ -65,7 +88,7 @@ export const PollingChatId = () => {
 
       <div className="w-screen h-[100dvh] bg-white flex flex-col justify-between overflow-hidden">
         {/* Header */}
-        <ChatHeader chatId={chatId} setHasMoreMessage={setHasMoreMessage} />
+        <ChatHeader chatId={chatId} />
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
@@ -76,7 +99,8 @@ export const PollingChatId = () => {
             error={fetchMessagesError}
             fetchNextPage={fetchNextPage}
             hasNextPage={hasNextPage}
-            hasMoreMessage={hasMoreMessage}
+            isFetchingNextPage={isFetchingNextPage}
+            bottomRef={bottomRef}
           />
         </div>
 

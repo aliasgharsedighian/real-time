@@ -44,6 +44,18 @@ export class PollingController {
     return result;
   }
 
+  @Get(routesV1.polling.getChatIdUnreadMessage)
+  async GetUnreadChatMessage(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+  ) {
+    const result = await this.messageService.GetUnreadChatMessage(
+      params.id,
+      user.id,
+    );
+    return result;
+  }
+
   @Post(routesV1.polling.message)
   async sendMessage(
     @Body() body: SendMessageRequestDto,

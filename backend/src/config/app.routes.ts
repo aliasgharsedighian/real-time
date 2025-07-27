@@ -29,5 +29,6 @@ export const routesV1 = {
     message: `${root}/polling`,
     createChat: `${root}/polling/create-chat`,
     getChatContentById: `${root}/polling/:id`,
+    getChatIdUnreadMessage: `${root}/polling/unread/:id`,
   },
 };

@@ -160,6 +160,44 @@ export class PrsimaPollingRepository {
     };
   }
 
+  async getChatIdUnreadMessage(chatId: number, userId: number) {
+    try {
+      const unreadMessages = await this.prisma.message.findMany({
+        where: {
+          chatId: chatId,
+          senderId: {
+            not: userId,
+          },
+          readStatuses: {
+            none: {
+              userId: userId,
+            },
+          },
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+        },
+      });
+      // Mark as read when someone views the chat
+
+      await this.prisma.messageReadStatus.createMany({
+        data: unreadMessages.map((msg) => ({
+          userId,
+          messageId: msg.id,
+        })),
+        skipDuplicates: true,
+      });
+      return unreadMessages;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async createChat(
     creatorUserId: number,
     participantUserIds: number[],

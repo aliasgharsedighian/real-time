@@ -10,7 +10,7 @@ interface ChatStore {
   setInput: (text: string) => void;
 
   messages: Message[];
-  setMessages: (messages: Message[]) => void;
+  setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
 
   addMessage: (message: Message) => void;
   clearMessages: () => void;
@@ -28,16 +28,28 @@ export const useChatStore = create<ChatStore>((set) => ({
   unreadCount: 0,
   isChatOpen: false,
   setChatOpen: (open) =>
-    set((state) => ({
-      isChatOpen: open,
-      unreadCount: open ? 0 : state.unreadCount,
-    })),
+    set((state) => {
+      const newState: Partial<ChatStore> = {
+        isChatOpen: open,
+        unreadCount: open ? 0 : state.unreadCount,
+      };
+      if (!open) {
+        newState.messages = []; // ✅ Clear messages when closing
+      }
+      return newState;
+    }),
 
   input: "",
   setInput: (text) => set({ input: text }),
 
   messages: [],
-  setMessages: (messages) => set({ messages }),
+  setMessages: (messagesOrUpdater) =>
+    set((state) => ({
+      messages:
+        typeof messagesOrUpdater === "function"
+          ? messagesOrUpdater(state.messages)
+          : messagesOrUpdater,
+    })),
   addMessage: (msg) =>
     set((state) => {
       const newState: Partial<ChatStore> = {
@@ -63,6 +75,7 @@ export const useChatStore = create<ChatStore>((set) => ({
       return {
         isChatOpen: isNowOpen,
         unreadCount: isNowOpen ? 0 : state.unreadCount,
+        messages: isNowOpen ? state.messages : [], // ✅ clear when closing
       };
     }),
 }));
