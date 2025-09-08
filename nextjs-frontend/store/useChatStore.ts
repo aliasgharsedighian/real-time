@@ -1,0 +1,81 @@
+import { Message } from "@/typing";
+import { create } from "zustand";
+
+interface ChatStore {
+  isChatOpen: boolean;
+  setChatOpen: (open: boolean) => void;
+  toggleChat: () => void;
+
+  input: string;
+  setInput: (text: string) => void;
+
+  messages: Message[];
+  setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
+
+  addMessage: (message: Message) => void;
+  clearMessages: () => void;
+
+  chatError: string | null;
+  setChatError: (error: string | null) => void;
+
+  unreadCount: number;
+  setUnreadCount: (count: number) => void;
+  incrementUnread: () => void;
+  resetUnread: () => void;
+}
+
+export const useChatStore = create<ChatStore>((set) => ({
+  unreadCount: 0,
+  isChatOpen: false,
+  setChatOpen: (open) =>
+    set((state) => {
+      const newState: Partial<ChatStore> = {
+        isChatOpen: open,
+        unreadCount: open ? 0 : state.unreadCount,
+      };
+      if (!open) {
+        newState.messages = []; // ✅ Clear messages when closing
+      }
+      return newState;
+    }),
+
+  input: "",
+  setInput: (text) => set({ input: text }),
+
+  messages: [],
+  setMessages: (messagesOrUpdater) =>
+    set((state) => ({
+      messages:
+        typeof messagesOrUpdater === "function"
+          ? messagesOrUpdater(state.messages)
+          : messagesOrUpdater,
+    })),
+  addMessage: (msg) =>
+    set((state) => {
+      const newState: Partial<ChatStore> = {
+        messages: [...state.messages, msg],
+      };
+      if (!state.isChatOpen) {
+        newState.unreadCount = state.unreadCount + 1;
+      }
+      return newState;
+    }),
+  clearMessages: () => set({ messages: [] }),
+
+  chatError: null,
+  setChatError: (error) => set({ chatError: error }),
+
+  setUnreadCount: (count) => set({ unreadCount: count }),
+  incrementUnread: () =>
+    set((state) => ({ unreadCount: state.unreadCount + 1 })),
+  resetUnread: () => set({ unreadCount: 0 }),
+  toggleChat: () =>
+    set((state) => {
+      const isNowOpen = !state.isChatOpen;
+      return {
+        isChatOpen: isNowOpen,
+        unreadCount: isNowOpen ? 0 : state.unreadCount,
+        messages: isNowOpen ? state.messages : [], // ✅ clear when closing
+      };
+    }),
+}));
