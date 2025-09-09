@@ -22,7 +22,7 @@ function layout({ children }: { children: React.ReactNode }) {
       >
         <AppSidebar />
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+          <header className="flex h-16 shrink-0 items-center gap-2 px-4 border-b">
             <SidebarTrigger className="-ml-1" />
             <Separator
               orientation="vertical"
@@ -34,7 +34,7 @@ function layout({ children }: { children: React.ReactNode }) {
               </h1>
             </Link>
           </header>
-          <div className="flex flex-1 flex-col gap-4 p-4 pt-0">{children}</div>
+          <div className="flex flex-1 flex-col gap-4">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </div>

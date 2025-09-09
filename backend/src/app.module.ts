@@ -7,6 +7,9 @@ import { PollingModule } from './modules/polling/polling.module';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
 import { UserModule } from './modules/user/user.module';
+import { ChatGateway } from './gateway/chat/gateway';
+import { ChatService } from './gateway/chat/chat.service';
+import { PrismaClient } from '@prisma/client';
 
 const modules = [AuthModule, PollingModule, UserModule];
 
@@ -27,6 +30,9 @@ const prismaModule = [PrismaModule];
   ],
   controllers: [],
   providers: [
+    ChatGateway,
+    ChatService,
+    PrismaClient,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

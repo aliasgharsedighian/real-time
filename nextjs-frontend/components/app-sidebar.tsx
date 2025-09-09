@@ -60,7 +60,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             {ChannelsList.length !== 0 ? (
               ChannelsList?.map((chat: any) => (
-                <Link key={chat.id} href={`/dashboard/polling/${chat.id}`}>
+                <Link key={chat.id} href={`/dashboard/websocket/${chat.id}`}>
                   <div className="border-b py-3 px-2">
                     <div className="w-full flex justify-between">
                       <span className="font-bold">
