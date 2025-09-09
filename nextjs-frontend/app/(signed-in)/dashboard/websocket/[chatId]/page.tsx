@@ -130,7 +130,7 @@ export default function ChatRoomPage() {
     <div className="w-full h-[calc(100dvh-64px)] bg-white flex flex-col justify-between overflow-hidden">
       <div
         ref={chatContainerRef}
-        className="flex flex-col flex-1 p-0 overflow-y-auto"
+        className="flex flex-col flex-1 p-0 pt-2 overflow-y-auto"
       >
         <div className="flex-1 overflow-y-auto">
           {messages.reverse().map((msg: any, index: number) => {
@@ -139,7 +139,7 @@ export default function ChatRoomPage() {
             return (
               <div
                 key={index}
-                className={`pr-2 flex mb-3 ${
+                className={`px-2 flex mb-3 ${
                   !currentUser ? "justify-end" : "justify-start"
                 }`}
               >
@@ -264,12 +264,12 @@ export default function ChatRoomPage() {
                               viewBox="0 0 24 24"
                               strokeWidth={1.5}
                               stroke="currentColor"
-                              className="size-6"
+                              className="size-3"
                             >
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                                d="m4.5 12.75 6 6 9-13.5"
                               />
                             </svg>
                           </div>

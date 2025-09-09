@@ -20,7 +20,7 @@ function Dashboard() {
           <h2 className="text-2xl font-semibold text-muted-foreground mb-4">
             No chat selected
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-center text-muted-foreground">
             Select a chat from the sidebar or start a new conversation
           </p>
         </div>
