@@ -38,12 +38,8 @@ export class SignInUserService {
     if (user.email) {
       const token = await this.tokenService.signToken(user.id, user.email);
       return {
-        statusCode: 200,
-        message: 'user login successfully',
-        data: {
-          accessToken: token.accessToken,
-          refreshToken: token.refreshToken,
-        },
+        accessToken: token.accessToken,
+        refreshToken: token.refreshToken,
       };
     }
   }

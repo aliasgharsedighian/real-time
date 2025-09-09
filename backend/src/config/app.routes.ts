@@ -13,6 +13,7 @@ export const routesV1 = {
     requestOtp: `auth/request-otp`,
     verifyOtp: `auth/verify-otp`,
     refreshToken: `auth/refresh-token`,
+    logout: `auth/logout`,
   },
   search: {
     searchContact: `${root}/search-user`,

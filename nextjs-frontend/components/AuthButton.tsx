@@ -152,7 +152,7 @@ function AuthButton({ type }: { type: string }) {
       setUser(user);
       login(token, user);
       toast.success("login successfully");
-      push("/polling");
+      // push("/polling");
     } catch (error) {
       console.error("Failed to fetch user info:", error);
       throw error;

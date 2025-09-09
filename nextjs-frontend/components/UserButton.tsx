@@ -9,13 +9,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
+import { logoutUser } from "@/hooks/useAuth";
 
 export default function UserButton() {
+  const token = useAuthStore((state) => state.token);
   const { setToken, setUser } = useAuthStore.getState();
   const user = useAuthStore((state) => state.user);
-  const handleLogout = () => {
-    setToken(null);
-    setUser(null);
+
+  const { mutateAsync: logout, isPending: logoutPending } = logoutUser(token);
+
+  const handleLogout = async () => {
+    try {
+      await logout(undefined, {
+        onSuccess: (response) => {
+          const res = response.data;
+          if (res.statusCode === 200) {
+            setToken(null);
+            setUser(null);
+          }
+        },
+      });
+    } catch (error) {}
   };
 
   return (

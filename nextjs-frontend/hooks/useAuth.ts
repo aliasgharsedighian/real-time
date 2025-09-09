@@ -27,6 +27,17 @@ export const useSignup = () =>
     mutationFn: (data: SignupPayload) => api.post("auth/signup", data),
   });
 
+export const logoutUser = (token: string | null) =>
+  useMutation({
+    mutationFn: async () => {
+      return api.post("auth/logout", null, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+  });
+
 export const useUpdateProfile = (token: string | null) =>
   useMutation({
     mutationFn: (data: UpdateProfile) =>

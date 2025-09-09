@@ -13,10 +13,13 @@ import { VerifyOTPUseCase } from './application/verify-otp.usecase';
 import { NotifierService } from './application/notifier.service';
 import { OTPRepository } from './database/otp.repository';
 import { AuthRefreshController } from './refresh-token.http.controller';
+import { LogoutUserHttpController } from './queries/logout-user/logout-user.http.controller';
+import { LogoutUserService } from './queries/logout-user/logout-user.service';
 
 const httpControllers = [
   CreateUserHttpController,
   SignInUserHttpController,
+  LogoutUserHttpController,
   OtpController,
   AuthRefreshController,
 ];
@@ -36,6 +39,7 @@ const OtpProviders = [
     AuthTokenService,
     CreateUserService,
     SignInUserService,
+    LogoutUserService,
     JwtStrategy,
     ...OtpProviders,
   ],
