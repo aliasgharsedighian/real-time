@@ -26,7 +26,6 @@ async function fetchInitialMessages(chatId: number, token: string) {
 
   const data = await res.json();
 
-  console.log(data);
   return data.data.chats ?? [];
 }
 
@@ -37,8 +36,11 @@ export default function ChatRoomPage() {
   const chatId = Number(params.chatId);
   const user = useAuthStore((state) => state.user);
   const [input, setInput] = useState("");
+  const [typingUsers, setTypingUsers] = useState<string[]>([]); // track users typing
 
   const queryClient = useQueryClient();
+  const socket = getSocket();
+  let typingTimeout: NodeJS.Timeout;
 
   // Replace this with your actual token (e.g., from session)
   const token = useAuthStore((state) => state.token) || "";
@@ -59,7 +61,36 @@ export default function ChatRoomPage() {
   useEffect(() => {
     if (!token || !chatId) return;
 
-    const socket = getSocket();
+    // Listen for typing:start
+    socket.on(
+      "typing:start",
+      (payload: { chatId: number; userId: number; username: string }) => {
+        if (
+          payload.chatId === chatId &&
+          payload.username !== user?.profile.firstname
+        ) {
+          setTypingUsers((prev) => [...new Set([...prev, payload.username])]);
+        }
+      }
+    );
+
+    // Listen for typing:stop
+
+    setTimeout(() => {
+      socket.on(
+        "typing:stop",
+        (payload: { chatId: number; userId: number; username: string }) => {
+          if (
+            payload.chatId === chatId &&
+            payload.username !== user?.profile.firstname
+          ) {
+            setTypingUsers((prev) =>
+              prev.filter((u) => u !== payload.username)
+            );
+          }
+        }
+      );
+    }, 2000);
 
     // Join chat room
     socket.emit("chat:join", { chatId, userId: user?.id });
@@ -70,16 +101,24 @@ export default function ChatRoomPage() {
         ["chat", chatId, "messages"],
         (old: any = []) => [...old, msg]
       );
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 1000);
     };
 
     socket.on("message:new", handleNewMessage);
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 500);
 
     return () => {
       socket.off("message:new", handleNewMessage);
+      socket.off("typing:start");
+      socket.off("typing:stop");
       // Optionally leave room
       // socket.emit("chat:leave", { chatId, userId: CURRENT_USER_ID });
     };
-  }, [chatId, token, queryClient]);
+  }, [chatId, token, queryClient, user?.id]);
 
   useEffect(() => {
     if (isSuccess) {
@@ -98,16 +137,45 @@ export default function ChatRoomPage() {
     setInput("");
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+    }, 1000);
   };
 
   const markAllRead = () => {
-    const socket = getSocket();
     socket.emit("message:read", {
       chatId,
       userId: user?.id,
       messageIds: messages.map((m: any) => m.id),
     });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // prevent newline
+      if (input.trim()) {
+        sendMessage();
+      }
+    }
+  };
+
+  const handleSetTypingChange = (e: any) => {
+    setInput(e.target.value);
+
+    // Notify typing:start
+    socket.emit("typing:start", {
+      chatId,
+      userId: user?.id,
+      username: user?.profile.firstname,
+    });
+
+    // Clear old timeout and set new one
+    if (typingTimeout) clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      socket.emit("typing:stop", {
+        chatId,
+        userId: user?.id,
+        username: user?.profile.firstname,
+      });
+    }, 4500); // stops typing after 1.5s of inactivity
   };
 
   if (isLoading)
@@ -130,8 +198,17 @@ export default function ChatRoomPage() {
     <div className="w-full h-[calc(100dvh-64px)] bg-white flex flex-col justify-between overflow-hidden">
       <div
         ref={chatContainerRef}
-        className="flex flex-col flex-1 p-0 pt-2 overflow-y-auto"
+        className="relative flex flex-col flex-1 p-0 pt-2 overflow-y-auto"
       >
+        {typingUsers.length > 0 && (
+          <div className="bg-white absolute top-0 w-full z-10">
+            <p className="text-center text-sm text-gray-500">
+              {typingUsers.length === 1
+                ? `${typingUsers[0]} is typing...`
+                : `${typingUsers.length} people are typing...`}
+            </p>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto">
           {messages.reverse().map((msg: any, index: number) => {
             const currentUser = msg.senderId === user?.id;
@@ -322,7 +399,8 @@ export default function ChatRoomPage() {
             fontFamily: "IRANSans, sans-serif",
           }}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => handleSetTypingChange(e)}
+          onKeyDown={handleKeyDown}
           placeholder="Write your message ..."
         />
         <div

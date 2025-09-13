@@ -20,8 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import UserButton from "./UserButton";
 import { useAuthStore } from "@/store/useAuthStore";
-import { Loader, Loader2, MessageCircle } from "lucide-react";
-import { useAllChats } from "@/hooks/useChats";
+import { Loader2, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { capitalizeFirstLetter } from "./utils/stringUtils";
 import { formatDateBasedOnToday } from "./utils/dateUtils";
@@ -32,17 +31,38 @@ import { useSearchContact } from "@/hooks/useSearchContact";
 import { useCreateChat } from "@/hooks/useCreateChat";
 import { useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
+import { getSocket } from "@/lib/socket";
 
 // This is sample data.
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { push } = useRouter();
+  const [loading, setLoading] = React.useState(true);
+  const [chats, setChats] = React.useState<any[]>([]);
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
 
-  const { data: chats, isLoading: allChatsLoading } = useAllChats();
+  React.useEffect(() => {
+    setLoading(true);
+    const socket = getSocket();
 
-  const ChannelsList = chats?.data || [];
+    // Request chat list
+    if (user?.id) {
+      socket.emit("chat:list", { userId: user?.id });
+
+      // Listen for chat list response
+      socket.on("chat:list", (data) => {
+        setChats(data);
+        setLoading(false);
+      });
+    }
+    // Cleanup listener
+    return () => {
+      socket.off("chat:list");
+    };
+  }, [user?.id]);
+
+  const ChannelsList = chats || [];
 
   const [searchInput, setSearchInput] = React.useState("");
   const [contactSelect, setContactSelect] = React.useState<number[]>([]);
@@ -235,7 +255,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </Button>
             {/* Channels List */}
 
-            {!allChatsLoading ? (
+            {!loading ? (
               ChannelsList.length !== 0 ? (
                 ChannelsList?.map((chat: any) => (
                   <Link key={chat.id} href={`/dashboard/websocket/${chat.id}`}>

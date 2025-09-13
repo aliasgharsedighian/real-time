@@ -24,6 +24,24 @@ export class ChatGateway implements OnGatewayConnection {
     // client.data.userId = decodedUserId;
   }
 
+  @SubscribeMessage('chat:list')
+  async onGetAllChats(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { userId: number },
+  ) {
+    try {
+      const chats = await this.chatService.getAllUserChats(payload.userId);
+      client.emit('chat:list', chats); // send back only to the requester
+      return chats;
+    } catch (err) {
+      client.emit('error', {
+        message: 'Failed to fetch chats',
+        details: err.message,
+      });
+      throw err;
+    }
+  }
+
   // Client requests to join a chat room
   @SubscribeMessage('chat:join')
   async onJoin(
@@ -87,6 +105,7 @@ export class ChatGateway implements OnGatewayConnection {
     const readStatuses = await this.chatService.markMessagesRead(
       payload.userId,
       payload.messageIds,
+      payload.chatId,
     );
 
     const room = `chat:${payload.chatId}`;
@@ -101,7 +120,8 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('typing:start')
   async onTypingStart(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { chatId: number; userId: number },
+    @MessageBody()
+    payload: { chatId: number; userId: number; username: string },
   ) {
     const room = `chat:${payload.chatId}`;
     client.to(room).emit('typing:start', payload);
@@ -110,7 +130,8 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('typing:stop')
   async onTypingStop(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { chatId: number; userId: number },
+    @MessageBody()
+    payload: { chatId: number; userId: number; username: string },
   ) {
     const room = `chat:${payload.chatId}`;
     client.to(room).emit('typing:stop', payload);
