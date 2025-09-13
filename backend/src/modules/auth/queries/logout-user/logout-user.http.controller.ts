@@ -25,7 +25,7 @@ export class LogoutUserHttpController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.logOutAuth.execute(user.id);
-    res.clearCookie('refresh_token');
+    res.clearCookie('token');
     return result;
   }
 }

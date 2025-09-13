@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextURL } from "next/dist/server/web/next-url";
 
 export function middleware(req: NextRequest) {
-  const token = req.cookies.get("refresh_token")?.value || "";
+  const token = req.cookies.get("token")?.value || "";
   const { pathname, origin } = req.nextUrl;
 
   // console.log(Boolean(token));

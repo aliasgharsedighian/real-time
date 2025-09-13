@@ -22,9 +22,9 @@ export class SignInUserHttpController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const response = await this.signinAuth.execute(body);
-    res.cookie('refresh_token', response.refreshToken, {
+    res.cookie('token', response.accessToken, {
       httpOnly: true,
-      secure: true, // set true in production with HTTPS
+      // secure: true, // set true in production with HTTPS
       sameSite: 'strict',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     });
