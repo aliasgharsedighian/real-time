@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "./components/providers/providers";
 import "./globals.css";
+import { ReduxProvider } from "@/store/redux/provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,23 +30,25 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Shadcn Toaster */}
-        <Toaster
-          position="top-center"
-          toastOptions={{
-            className: "text-black",
-            // unstyled: true,
-            classNames: {
-              loading:
-                "bg-[#F8F8F8] border-[var(--light-border)] [&_svg]:text-[var(--light-border)]",
-              error:
-                "bg-[var(--light-red)] border-[var(--main-red)] [&_svg]:text-[var(--main-red)]",
-              success:
-                "bg-[var(--very-light-green)] border-[var(--base-green)] [&_svg]:text-[var(--base-green)]",
-            },
-          }}
-        />
-        <Providers> {children}</Providers>
+        <ReduxProvider>
+          {/* Shadcn Toaster */}
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              className: "text-black",
+              // unstyled: true,
+              classNames: {
+                loading:
+                  "bg-[#F8F8F8] border-[var(--light-border)] [&_svg]:text-[var(--light-border)]",
+                error:
+                  "bg-[var(--light-red)] border-[var(--main-red)] [&_svg]:text-[var(--main-red)]",
+                success:
+                  "bg-[var(--very-light-green)] border-[var(--base-green)] [&_svg]:text-[var(--base-green)]",
+              },
+            }}
+          />
+          <Providers> {children}</Providers>
+        </ReduxProvider>
       </body>
     </html>
   );

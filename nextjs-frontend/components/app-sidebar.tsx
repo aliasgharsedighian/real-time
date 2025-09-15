@@ -19,7 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import UserButton from "./UserButton";
-import { useAuthStore } from "@/store/useAuthStore";
 import { Loader2, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { capitalizeFirstLetter } from "./utils/stringUtils";
@@ -32,6 +31,8 @@ import { useCreateChat } from "@/hooks/useCreateChat";
 import { useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
 import { getSocket } from "@/lib/socket";
+import { selectToken, selectUser } from "@/store/redux/authSlice";
+import { useSelector } from "react-redux";
 
 // This is sample data.
 
@@ -39,8 +40,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { push } = useRouter();
   const [loading, setLoading] = React.useState(true);
   const [chats, setChats] = React.useState<any[]>([]);
-  const token = useAuthStore((state) => state.token);
-  const user = useAuthStore((state) => state.user);
+  const token = useSelector(selectToken);
+  const user = useSelector(selectUser);
 
   React.useEffect(() => {
     setLoading(true);

@@ -1,11 +1,12 @@
 "use client";
 
 import { useSidebar } from "@/components/ui/sidebar";
-import { useAuthStore } from "@/store/useAuthStore";
+import { selectUser } from "@/store/redux/authSlice";
 import { useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
 
 function Dashboard() {
-  const user = useAuthStore((state) => state.user);
+  const user = useSelector(selectUser);
   const router = useRouter();
   const { setOpen } = useSidebar();
 

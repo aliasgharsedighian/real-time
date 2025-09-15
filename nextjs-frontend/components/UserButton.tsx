@@ -7,14 +7,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import { logoutUser } from "@/hooks/useAuth";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  selectToken,
+  selectUser,
+  setToken,
+  setUser,
+} from "@/store/redux/authSlice";
 
 export default function UserButton() {
-  const token = useAuthStore((state) => state.token);
-  const { setToken, setUser } = useAuthStore.getState();
-  const user = useAuthStore((state) => state.user);
+  const dispatch = useDispatch();
+  const token = useSelector(selectToken);
+  const user = useSelector(selectUser);
 
   const { mutateAsync: logout, isPending: logoutPending } = logoutUser(token);
 
@@ -24,8 +30,8 @@ export default function UserButton() {
         onSuccess: (response) => {
           const res = response.data;
           if (res.statusCode === 200) {
-            setToken(null);
-            setUser(null);
+            dispatch(setToken(null));
+            dispatch(setUser(null));
           }
         },
       });
@@ -50,7 +56,7 @@ export default function UserButton() {
         <div className="flex flex-col">
           <Link
             className="flex items-start gap-3 border-b pb-2"
-            href="/profile"
+            href="/dashboard/profile"
           >
             <Avatar className="w-10 h-10">
               <AvatarImage src="/assets/icons/user-icon.png" alt="User" />

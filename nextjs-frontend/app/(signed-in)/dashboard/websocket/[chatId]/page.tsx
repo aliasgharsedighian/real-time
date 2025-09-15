@@ -4,11 +4,12 @@ import { useParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSocket } from "@/lib/socket";
-import { useAuthStore } from "@/store/useAuthStore";
 import { formatDateBasedOnToday } from "@/components/utils/dateUtils";
 import { Button } from "@/components/ui/button";
 import { SendIcon } from "lucide-react";
 import ChatSkeleton from "../components/ChatLoading";
+import { useSelector } from "react-redux";
+import { selectToken, selectUser } from "@/store/redux/authSlice";
 
 const PAGE_SIZE = 100;
 
@@ -34,7 +35,7 @@ export default function ChatRoomPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const params = useParams<{ chatId: string }>();
   const chatId = Number(params.chatId);
-  const user = useAuthStore((state) => state.user);
+  const user = useSelector(selectUser);
   const [input, setInput] = useState("");
   const [typingUsers, setTypingUsers] = useState<string[]>([]); // track users typing
 
@@ -43,7 +44,7 @@ export default function ChatRoomPage() {
   let typingTimeout: NodeJS.Timeout;
 
   // Replace this with your actual token (e.g., from session)
-  const token = useAuthStore((state) => state.token) || "";
+  const token = useSelector(selectToken) || "";
 
   // Load initial messages
   const {
