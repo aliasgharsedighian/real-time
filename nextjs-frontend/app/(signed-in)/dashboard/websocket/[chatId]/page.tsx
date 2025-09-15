@@ -205,13 +205,13 @@ export default function ChatRoomPage() {
           <div className="bg-white absolute top-0 w-full z-10">
             <p className="text-center text-sm text-gray-500">
               {typingUsers.length === 1
-                ? `${typingUsers[0]} is typing...`
+                ? `${typingUsers[0] ? typingUsers[0] : "User"} is typing...`
                 : `${typingUsers.length} people are typing...`}
             </p>
           </div>
         )}
         <div className="flex-1 overflow-y-auto">
-          {messages.reverse().map((msg: any, index: number) => {
+          {messages.map((msg: any, index: number) => {
             const currentUser = msg.senderId === user?.id;
 
             return (

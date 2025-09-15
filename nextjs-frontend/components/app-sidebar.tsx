@@ -152,6 +152,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           onSuccess: (response) => {
             const result = response.data;
             push(`/dashboard/websocket/${result.data.id}`);
+            setSearchData([]);
+            setContactSelect([]);
+            setSearchInput("");
+            setOpenSearchDialog(false);
           },
           onError: () => {},
         }
@@ -235,7 +239,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     Welcome back
                   </span>
                   <span className="text-sm font-semibold">
-                    {`${user?.profile.firstname} ${user?.profile.lastname}`}
+                    {user?.profile.firstname
+                      ? `${user?.profile.firstname} ${user?.profile.lastname}`
+                      : `${user?.email}`}
                   </span>
                 </div>
                 <UserButton />

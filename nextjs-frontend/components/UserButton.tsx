@@ -16,8 +16,10 @@ import {
   setToken,
   setUser,
 } from "@/store/redux/authSlice";
+import { useRouter } from "next/navigation";
 
 export default function UserButton() {
+  const { push } = useRouter();
   const dispatch = useDispatch();
   const token = useSelector(selectToken);
   const user = useSelector(selectUser);
@@ -29,9 +31,10 @@ export default function UserButton() {
       await logout(undefined, {
         onSuccess: (response) => {
           const res = response.data;
+          dispatch(setToken(null));
+          dispatch(setUser(null));
           if (res.statusCode === 200) {
-            dispatch(setToken(null));
-            dispatch(setUser(null));
+            push("/");
           }
         },
       });
