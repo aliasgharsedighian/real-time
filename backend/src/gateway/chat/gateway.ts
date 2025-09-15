@@ -56,9 +56,30 @@ export class ChatGateway implements OnGatewayConnection {
       client.emit('error', { message: 'Not a participant' });
       return;
     }
+    if (ok) {
+      const room = `chat:${payload.chatId}`;
+      await client.join(room);
+      client.emit('chat:joined', { room, chatId: payload.chatId });
+    }
+  }
+
+  @SubscribeMessage('chat:leave')
+  async onLeave(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { chatId: number; userId: number },
+  ) {
+    const ok = await this.chatService.ensureParticipant(
+      payload.chatId,
+      payload.userId,
+    );
+    if (!ok) {
+      client.emit('error', { message: 'Not a participant' });
+      return;
+    }
+
     const room = `chat:${payload.chatId}`;
-    await client.join(room);
-    client.emit('chat:joined', { room, chatId: payload.chatId });
+    await client.leave(room);
+    client.emit('chat:left', { room, chatId: payload.chatId });
   }
 
   // Send a message -> persist -> broadcast
@@ -76,6 +97,7 @@ export class ChatGateway implements OnGatewayConnection {
       client.emit('error', { message: 'Not a participant' });
       return;
     }
+
     const msg = await this.chatService.createMessage(
       payload.chatId,
       payload.senderId,
@@ -83,7 +105,13 @@ export class ChatGateway implements OnGatewayConnection {
     );
 
     const room = `chat:${payload.chatId}`;
-    this.server.to(room).emit('message:new', msg);
+
+    // Always wrap with chatId
+    this.server.to(room).emit('message:new', {
+      ...msg,
+      chatId: payload.chatId,
+    });
+
     return msg;
   }
 

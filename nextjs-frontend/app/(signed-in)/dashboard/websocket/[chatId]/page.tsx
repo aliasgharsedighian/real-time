@@ -62,6 +62,9 @@ export default function ChatRoomPage() {
   useEffect(() => {
     if (!token || !chatId) return;
 
+    // Leave all old rooms (optional if you track previous chatId)
+    socket.emit("chat:leave", { chatId, userId: user?.id });
+
     // Listen for typing:start
     socket.on(
       "typing:start",
@@ -98,13 +101,16 @@ export default function ChatRoomPage() {
 
     // Listen for new messages
     const handleNewMessage = (msg: any) => {
+      if (msg.chatId !== chatId) return; // ignore if message is from another room
+
       queryClient.setQueryData(
         ["chat", chatId, "messages"],
         (old: any = []) => [...old, msg]
       );
+
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 1000);
+      }, 300);
     };
 
     socket.on("message:new", handleNewMessage);
@@ -113,6 +119,7 @@ export default function ChatRoomPage() {
     }, 500);
 
     return () => {
+      socket.emit("chat:leave", { chatId, userId: user?.id });
       socket.off("message:new", handleNewMessage);
       socket.off("typing:start");
       socket.off("typing:stop");

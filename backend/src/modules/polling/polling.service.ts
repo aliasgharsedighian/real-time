@@ -86,6 +86,7 @@ export class GetMessagesService {
           chatId: chatId,
           userId: senderUserId,
         },
+        select: { id: true },
       });
       if (!isParticipant) {
         throw new Error('User is not a participant of this chat.');
