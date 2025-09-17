@@ -63,7 +63,7 @@ export default function ChatRoomPage() {
     if (!token || !chatId) return;
 
     // Leave all old rooms (optional if you track previous chatId)
-    socket.emit("chat:leave", { chatId, userId: user?.id });
+    // socket.emit("chat:leave", { chatId, userId: user?.id });
 
     // Listen for typing:start
     socket.on(

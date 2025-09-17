@@ -72,7 +72,7 @@ export class PrsimaPollingRepository {
     queryparams: PaginatedQueryRequestDto,
   ) {
     const page = queryparams?.page || 1;
-    const limit = queryparams?.limit || 20;
+    const limit = queryparams?.limit || 500;
     const skip = (+page - 1) * +limit;
     const chat = await this.prisma.message.findMany({
       where: {
@@ -138,8 +138,21 @@ export class PrsimaPollingRepository {
           },
         ],
       },
-      select: {
-        id: true,
+      include: {
+        sender: {
+          select: {
+            id: true,
+            email: true,
+            profile: true,
+          },
+        },
+        readStatuses: {
+          where: {
+            userId: {
+              not: userId,
+            },
+          },
+        },
       },
     });
 
@@ -156,7 +169,18 @@ export class PrsimaPollingRepository {
     return {
       unreadCount: unreadMessages.length,
       users: users?.participants,
-      chats: chat.reverse(),
+      chats:
+        unreadMessages.length === 0
+          ? chat.reverse()
+          : chat
+              .reverse()
+              .filter((item) =>
+                unreadMessages.some(
+                  (unreadItem) => unreadItem?.id !== item?.id,
+                ),
+              )
+              .concat(unreadMessages),
+      unreadMessages,
     };
   }
 
