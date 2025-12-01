@@ -36,13 +36,7 @@ import { Input } from "./ui/input";
 import { useSignin, useSignup } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import UserButton from "./UserButton";
-import { useDispatch, useSelector } from "react-redux";
-import {
-  login,
-  selectIsLoggedIn,
-  setToken,
-  setUser,
-} from "@/store/redux/authSlice";
+import { useAuthStore } from "@/store/useAuthStore";
 
 const signUpformSchema = z
   .object({
@@ -61,8 +55,10 @@ const signinFormSchema = z.object({
 });
 
 function AuthButton({ type }: { type: string }) {
-  const dispatch = useDispatch();
-  const isLoggedIn = useSelector(selectIsLoggedIn);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const setToken = useAuthStore((state) => state.setToken);
+  const setUser = useAuthStore((state) => state.setUser);
+  const login = useAuthStore((state) => state.login);
 
   const [tab, setTab] = useState("Signin");
   const [openSignDialog, setOpenSignDialog] = useState(false);
@@ -100,7 +96,7 @@ function AuthButton({ type }: { type: string }) {
           onSuccess: (response) => {
             const res = response.data;
             if (res.statusCode === 201) {
-              dispatch(setToken(res.data.token.accessToken));
+              setToken(res.data.token.accessToken);
               setTimeout(() => {
                 getUserInfo(res.data.token.accessToken);
               }, 1000);
@@ -153,8 +149,8 @@ function AuthButton({ type }: { type: string }) {
       });
       const user = response.data.data;
       // Save user in redux
-      dispatch(setUser(user));
-      dispatch(login({ token, user }));
+      setUser(user);
+      login({ token, user });
       toast.success("login successfully");
       // push("/polling");
     } catch (error) {

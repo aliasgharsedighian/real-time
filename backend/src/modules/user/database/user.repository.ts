@@ -8,29 +8,33 @@ export class PrismaUserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findById(id: number) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id,
-      },
-      select: {
-        id: true,
-        email: true,
-        phoneNumber: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        // exclude: password
-        profile: {
-          select: {
-            id: true,
-            firstname: true,
-            lastname: true,
-            address: true,
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          email: true,
+          phoneNumber: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+          // exclude: password
+          profile: {
+            select: {
+              id: true,
+              firstname: true,
+              lastname: true,
+              address: true,
+            },
           },
         },
-      },
-    });
-    return user;
+      });
+      return user;
+    } catch (error) {
+      throw error``;
+    }
   }
 
   async findByEmail(email: string, currentUserId: number) {

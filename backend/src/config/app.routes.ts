@@ -19,6 +19,7 @@ export const routesV1 = {
     searchContact: `${root}/search-user`,
   },
   user: {
+    findUserById: `${root}/user/:id`,
     updateProfile: `auth/update-profile`,
     updateUser: `auth/update-user/:id`,
   },

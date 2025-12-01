@@ -9,20 +9,15 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { logoutUser } from "@/hooks/useAuth";
-import { useDispatch, useSelector } from "react-redux";
-import {
-  selectToken,
-  selectUser,
-  setToken,
-  setUser,
-} from "@/store/redux/authSlice";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export default function UserButton() {
   const { push } = useRouter();
-  const dispatch = useDispatch();
-  const token = useSelector(selectToken);
-  const user = useSelector(selectUser);
+  const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+  const setToken = useAuthStore((state) => state.setToken);
+  const setUser = useAuthStore((state) => state.setUser);
 
   const { mutateAsync: logout, isPending: logoutPending } = logoutUser(token);
 
@@ -31,8 +26,8 @@ export default function UserButton() {
       await logout(undefined, {
         onSuccess: (response) => {
           const res = response.data;
-          dispatch(setToken(null));
-          dispatch(setUser(null));
+          setToken(null);
+          setUser(null);
           if (res.statusCode === 200) {
             push("/");
           }

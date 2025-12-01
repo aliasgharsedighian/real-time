@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import React from "react";
+import ChatDetailHeader from "./dashboard/components/ChatDetailHeader";
 
 function layout({ children }: { children: React.ReactNode }) {
   return (
@@ -28,11 +29,8 @@ function layout({ children }: { children: React.ReactNode }) {
               orientation="vertical"
               className="mr-2 data-[orientation=vertical]:h-4"
             />
-            <Link href="/dashboard">
-              <h1 className="text-lg font-bold tracking-wider uppercase">
-                Beam
-              </h1>
-            </Link>
+
+            <ChatDetailHeader />
           </header>
           <div className="flex flex-1 flex-col gap-4">{children}</div>
         </SidebarInset>

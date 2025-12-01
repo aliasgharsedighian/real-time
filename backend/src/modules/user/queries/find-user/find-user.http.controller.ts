@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -36,6 +37,13 @@ export class FindUserHttpController {
       body.search,
       user.id,
     );
+
+    return result;
+  }
+
+  @Get(routesV1.user.findUserById)
+  async findUserById(@Param() params: { id: number }) {
+    const result = await this.userService.findUserById(+params.id);
 
     return result;
   }

@@ -30,4 +30,25 @@ export class FindUserService {
       throw new Error(`Service Error serachUserByEmail: ${error.message}`);
     }
   }
+
+  async findUserById(id: number) {
+    try {
+      const user = await this.userRepo.findById(id);
+
+      if (!user) {
+        return {
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'user not found',
+        };
+      }
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'user found successfully',
+        data: user,
+      };
+    } catch (error) {
+      throw new Error(`Service Error findUserById: ${error.message}`);
+    }
+  }
 }

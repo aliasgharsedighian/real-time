@@ -8,8 +8,8 @@ import { formatDateBasedOnToday } from "@/components/utils/dateUtils";
 import { Button } from "@/components/ui/button";
 import { SendIcon } from "lucide-react";
 import ChatSkeleton from "../components/ChatLoading";
-import { useSelector } from "react-redux";
-import { selectToken, selectUser } from "@/store/redux/authSlice";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useChatStore } from "@/store/useChatStore";
 
 const PAGE_SIZE = 100;
 
@@ -27,7 +27,7 @@ async function fetchInitialMessages(chatId: number, token: string) {
 
   const data = await res.json();
 
-  return data.data.chats ?? [];
+  return data.data ?? {};
 }
 
 export default function ChatRoomPage() {
@@ -35,16 +35,22 @@ export default function ChatRoomPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const params = useParams<{ chatId: string }>();
   const chatId = Number(params.chatId);
-  const user = useSelector(selectUser);
+  const user = useAuthStore((state) => state.user);
+  const setCurrentChatId = useChatStore((s) => s.setCurrentChatId);
+  const setCurrentOpenUserDetail = useChatStore(
+    (s) => s.setCurrentOpenUserDetail
+  );
+  const typingUsers = useChatStore((s) => s.typingUsers);
+
   const [input, setInput] = useState("");
-  const [typingUsers, setTypingUsers] = useState<string[]>([]); // track users typing
+  // const [typingUsers, setTypingUsers] = useState<string[]>([]); // track users typing
 
   const queryClient = useQueryClient();
   const socket = getSocket();
   let typingTimeout: NodeJS.Timeout;
 
   // Replace this with your actual token (e.g., from session)
-  const token = useSelector(selectToken) || "";
+  const token = useAuthStore((state) => state.token);
 
   // Load initial messages
   const {
@@ -58,81 +64,98 @@ export default function ChatRoomPage() {
     enabled: !!token && !!chatId, // only run if token and chatId exist
   });
 
+  useEffect(() => {
+    console.log(typingUsers);
+  });
+
   // Setup socket
   useEffect(() => {
-    if (!token || !chatId) return;
+    if (!token || !chatId || !user) return;
 
-    // Leave all old rooms (optional if you track previous chatId)
-    // socket.emit("chat:leave", { chatId, userId: user?.id });
+    // Zustand actions
+    const addTypingUser = useChatStore.getState().addTypingUser;
+    const removeTypingUser = useChatStore.getState().removeTypingUser;
 
-    // Listen for typing:start
-    socket.on(
-      "typing:start",
-      (payload: { chatId: number; userId: number; username: string }) => {
-        if (
-          payload.chatId === chatId &&
-          payload.username !== user?.profile.firstname
-        ) {
-          setTypingUsers((prev) => [...new Set([...prev, payload.username])]);
-        }
+    const bottom = bottomRef.current;
+
+    // --- Handle typing:start ---
+    const handleTypingStart = (payload: {
+      chatId: number;
+      userId: number;
+      username: string;
+    }) => {
+      if (payload.chatId === chatId && payload.userId !== user.id) {
+        // Add user to typingUsers in store
+        addTypingUser({
+          id: payload.userId,
+          userId: payload.userId,
+          chatId: payload.chatId,
+          user: {
+            id: payload.userId,
+            email: null,
+            profile: {
+              id: payload.userId,
+              firstname: user.profile.firstname || user.email || "",
+              lastname: "",
+              address: null,
+              userId: payload.userId,
+            },
+          },
+        });
       }
-    );
+    };
 
-    // Listen for typing:stop
+    // --- Handle typing:stop ---
+    const handleTypingStop = (payload: { chatId: number; userId: number }) => {
+      if (payload.chatId === chatId && payload.userId !== user.id) {
+        removeTypingUser(payload.userId);
+      }
+    };
 
-    setTimeout(() => {
-      socket.on(
-        "typing:stop",
-        (payload: { chatId: number; userId: number; username: string }) => {
-          if (
-            payload.chatId === chatId &&
-            payload.username !== user?.profile.firstname
-          ) {
-            setTypingUsers((prev) =>
-              prev.filter((u) => u !== payload.username)
-            );
-          }
-        }
-      );
-    }, 2000);
+    socket.on("typing:start", handleTypingStart);
+    socket.on("typing:stop", handleTypingStop);
 
-    // Join chat room
-    socket.emit("chat:join", { chatId, userId: user?.id });
+    // --- Join chat room ---
+    socket.emit("chat:join", { chatId, userId: user.id });
 
-    // Listen for new messages
+    // --- Handle new messages ---
     const handleNewMessage = (msg: any) => {
-      if (msg.chatId !== chatId) return; // ignore if message is from another room
+      if (msg.chatId !== chatId) return;
 
       queryClient.setQueryData(
         ["chat", chatId, "messages"],
         (old: any = []) => [...old, msg]
       );
 
+      // Scroll to bottom
       setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        bottom?.scrollIntoView({ behavior: "smooth" });
       }, 300);
     };
 
     socket.on("message:new", handleNewMessage);
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 500);
+
+    // initial scroll
+    setTimeout(() => bottom?.scrollIntoView({ behavior: "smooth" }), 500);
 
     return () => {
-      socket.emit("chat:leave", { chatId, userId: user?.id });
+      socket.emit("chat:leave", { chatId, userId: user.id });
+      socket.off("typing:start", handleTypingStart);
+      socket.off("typing:stop", handleTypingStop);
       socket.off("message:new", handleNewMessage);
-      socket.off("typing:start");
-      socket.off("typing:stop");
-      // Optionally leave room
-      // socket.emit("chat:leave", { chatId, userId: CURRENT_USER_ID });
     };
-  }, [chatId, token, queryClient, user?.id]);
+  }, [chatId, token, user?.id, queryClient]);
 
   useEffect(() => {
     if (isSuccess) {
       bottomRef.current?.scrollIntoView({ behavior: "instant" });
+      setCurrentOpenUserDetail(messages.users);
     }
   }, [isSuccess]);
+
+  useEffect(() => {
+    setCurrentChatId(Number(params.chatId));
+  }, []);
 
   const sendMessage = () => {
     if (!input.trim()) return;
@@ -212,125 +235,149 @@ export default function ChatRoomPage() {
           <div className="bg-white absolute top-0 w-full z-10">
             <p className="text-center text-sm text-gray-500">
               {typingUsers.length === 1
-                ? `${typingUsers[0] ? typingUsers[0] : "User"} is typing...`
+                ? `${
+                    typingUsers[0].user.profile.firstname
+                      ? typingUsers[0].user.profile.firstname
+                      : typingUsers[0].user.email
+                  } is typing...`
                 : `${typingUsers.length} people are typing...`}
             </p>
           </div>
         )}
         <div className="flex-1 overflow-y-auto">
-          {messages.map((msg: any, index: number) => {
-            const currentUser = msg.senderId === user?.id;
+          {messages.chats
+            ? messages?.chats.map((msg: any, index: number) => {
+                const currentUser = msg.senderId === user?.id;
 
-            return (
-              <div
-                key={index}
-                className={`px-2 flex mb-3 ${
-                  !currentUser ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`flex gap-2 items-start max-w-[85%] ${
-                    currentUser ? "flex-row" : "flex-row-reverse"
-                  }`}
-                >
-                  {currentUser ? (
-                    <div
-                      style={{
-                        background: "#efefef",
-                        borderRadius: "100%",
-                        width: "35px",
-                        height: "35px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        flex: "none",
-                      }}
-                    >
-                      <img
-                        style={{ width: "28px", height: "28px" }}
-                        src="/assets/icons/people-user-team.png"
-                        alt=""
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        background: "#efefef",
-                        borderRadius: "100%",
-                        width: "35px",
-                        height: "35px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        flex: "none",
-                      }}
-                    >
-                      <img
-                        style={{ width: "28px", height: "28px" }}
-                        src="/assets/icons/user-icon.png"
-                        alt=""
-                      />
-                    </div>
-                  )}
+                return (
                   <div
-                    className={`flex flex-col gap-0.5 ${
-                      currentUser ? "items-start" : "items-end"
+                    key={index}
+                    className={`px-2 flex mb-3 ${
+                      !currentUser ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <span className="text-[11px]">
-                      {formatDateBasedOnToday(msg.createdAt)}
-                    </span>
                     <div
-                      className={`flex items-end relative py-2.5 px-3 rounded-br-[10px] rounded-bl-[10px] break-words whitespace-pre-wrap relative text-sm leading-[1.4] ${
-                        currentUser
-                          ? "bg-[#2b7fff] text-white rounded-tr-[12px]"
-                          : "bg-[#f1f1f1] text-[#333] rounded-tl-[12px]"
+                      className={`flex gap-2 items-start max-w-[85%] ${
+                        currentUser ? "flex-row" : "flex-row-reverse"
                       }`}
                     >
-                      <span className="pr-2">{msg.content}</span>
                       {currentUser ? (
-                        msg.readStatuses ? (
-                          msg?.readStatuses?.length === 0 ? (
-                            <div className="absolute right-1 bottom-2">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                strokeWidth={1.5}
-                                stroke="currentColor"
-                                className="size-3"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="m4.5 12.75 6 6 9-13.5"
-                                />
-                              </svg>
-                            </div>
-                          ) : (
-                            <div className="absolute right-1 bottom-2">
-                              <div className="relative flex items-center">
+                        <div
+                          style={{
+                            background: "#efefef",
+                            borderRadius: "100%",
+                            width: "35px",
+                            height: "35px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            flex: "none",
+                          }}
+                        >
+                          <img
+                            style={{ width: "28px", height: "28px" }}
+                            src="/assets/icons/people-user-team.png"
+                            alt=""
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            background: "#efefef",
+                            borderRadius: "100%",
+                            width: "35px",
+                            height: "35px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            flex: "none",
+                          }}
+                        >
+                          <img
+                            style={{ width: "28px", height: "28px" }}
+                            src="/assets/icons/user-icon.png"
+                            alt=""
+                          />
+                        </div>
+                      )}
+                      <div
+                        className={`flex flex-col gap-0.5 ${
+                          currentUser ? "items-start" : "items-end"
+                        }`}
+                      >
+                        <span className="text-[11px]">
+                          {formatDateBasedOnToday(msg.createdAt)}
+                        </span>
+                        <div
+                          className={`flex items-end relative py-2.5 px-3 rounded-br-[10px] rounded-bl-[10px] break-words whitespace-pre-wrap relative text-sm leading-[1.4] ${
+                            currentUser
+                              ? "bg-[#2b7fff] text-white rounded-tr-[12px]"
+                              : "bg-[#f1f1f1] text-[#333] rounded-tl-[12px]"
+                          }`}
+                        >
+                          <span className="pr-2">{msg.content}</span>
+                          {currentUser ? (
+                            msg.readStatuses ? (
+                              msg?.readStatuses?.length === 0 ? (
+                                <div className="absolute right-1 bottom-2">
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={1.5}
+                                    stroke="currentColor"
+                                    className="size-3"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="m4.5 12.75 6 6 9-13.5"
+                                    />
+                                  </svg>
+                                </div>
+                              ) : (
+                                <div className="absolute right-1 bottom-2">
+                                  <div className="relative flex items-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={1.5}
+                                      stroke="currentColor"
+                                      className="size-3 absolute right-0"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="m4.5 12.75 6 6 9-13.5"
+                                      />
+                                    </svg>
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth={1.5}
+                                      stroke="currentColor"
+                                      className="size-3 absolute right-1"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="m4.5 12.75 6 6 9-13.5"
+                                      />
+                                    </svg>
+                                  </div>
+                                </div>
+                              )
+                            ) : (
+                              <div className="absolute right-1 bottom-2">
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   strokeWidth={1.5}
                                   stroke="currentColor"
-                                  className="size-3 absolute right-0"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="m4.5 12.75 6 6 9-13.5"
-                                  />
-                                </svg>
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  strokeWidth={1.5}
-                                  stroke="currentColor"
-                                  className="size-3 absolute right-1"
+                                  className="size-3"
                                 >
                                   <path
                                     strokeLinecap="round"
@@ -339,33 +386,15 @@ export default function ChatRoomPage() {
                                   />
                                 </svg>
                               </div>
-                            </div>
-                          )
-                        ) : (
-                          <div className="absolute right-1 bottom-2">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              strokeWidth={1.5}
-                              stroke="currentColor"
-                              className="size-3"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="m4.5 12.75 6 6 9-13.5"
-                              />
-                            </svg>
-                          </div>
-                        )
-                      ) : null}
+                            )
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })
+            : null}
 
           <div ref={bottomRef} />
         </div>

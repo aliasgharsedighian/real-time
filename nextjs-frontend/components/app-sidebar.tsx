@@ -31,8 +31,8 @@ import { useCreateChat } from "@/hooks/useCreateChat";
 import { useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
 import { getSocket } from "@/lib/socket";
-import { selectToken, selectUser } from "@/store/redux/authSlice";
-import { useSelector } from "react-redux";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useChatStore } from "@/store/useChatStore";
 
 // This is sample data.
 
@@ -40,8 +40,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { push } = useRouter();
   const [loading, setLoading] = React.useState(true);
   const [chats, setChats] = React.useState<any[]>([]);
-  const token = useSelector(selectToken);
-  const user = useSelector(selectUser);
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
+
+  const currentChatId = useChatStore((s) => s.currentChatId);
+  const setCurrentChatId = useChatStore((s) => s.setCurrentChatId);
 
   React.useEffect(() => {
     setLoading(true);
@@ -266,7 +269,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               ChannelsList.length !== 0 ? (
                 ChannelsList?.map((chat: any) => (
                   <Link key={chat.id} href={`/dashboard/websocket/${chat.id}`}>
-                    <div className="border-b py-3 px-2">
+                    <div
+                      onClick={() => setCurrentChatId(chat.id)}
+                      className={`border-b py-3 px-2 rounded-md ${
+                        currentChatId === chat.id ? "bg-gray-300" : ""
+                      }`}
+                    >
                       <div className="w-full flex justify-between">
                         <span className="font-bold">
                           {chat.participants.length === 1 ? (

@@ -23,12 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useUpdateProfile } from "@/hooks/useAuth";
-import { useDispatch, useSelector } from "react-redux";
-import {
-  selectToken,
-  selectUser,
-  updateProfile,
-} from "@/store/redux/authSlice";
+import { useAuthStore } from "@/store/useAuthStore";
 
 const updateFormSchema = z.object({
   firstname: z.string().optional(),
@@ -36,9 +31,9 @@ const updateFormSchema = z.object({
 });
 
 function ProfilePage() {
-  const dispatch = useDispatch();
-  const token = useSelector(selectToken);
-  const user = useSelector(selectUser);
+  const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+  const updateProfile = useAuthStore.getState().updateProfile;
 
   const updtaeForm = useForm<z.infer<typeof updateFormSchema>>({
     resolver: zodResolver(updateFormSchema),
@@ -60,7 +55,7 @@ function ProfilePage() {
         {
           onSuccess: (response) => {
             const res = response.data;
-            dispatch(updateProfile({ profile: res.data }));
+            updateProfile({ profile: res.data });
             toast.success(res.message);
           },
         }
