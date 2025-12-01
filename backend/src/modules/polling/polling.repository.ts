@@ -154,6 +154,9 @@ export class PrsimaPollingRepository {
           },
         },
       },
+      orderBy: {
+        createdAt: 'asc',
+      },
     });
 
     // Mark as read when someone views the chat
@@ -178,8 +181,7 @@ export class PrsimaPollingRepository {
                 unreadMessages.some(
                   (unreadItem) => unreadItem?.id !== item?.id,
                 ),
-              )
-              .concat(unreadMessages),
+              ),
       unreadMessages,
     };
   }

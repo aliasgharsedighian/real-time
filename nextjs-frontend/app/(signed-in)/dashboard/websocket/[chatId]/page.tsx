@@ -64,10 +64,6 @@ export default function ChatRoomPage() {
     enabled: !!token && !!chatId, // only run if token and chatId exist
   });
 
-  useEffect(() => {
-    console.log(typingUsers);
-  });
-
   // Setup socket
   useEffect(() => {
     if (!token || !chatId || !user) return;
@@ -84,7 +80,10 @@ export default function ChatRoomPage() {
       userId: number;
       username: string;
     }) => {
-      if (payload.chatId === chatId && payload.userId !== user.id) {
+      if (
+        payload.chatId === chatId &&
+        payload.username !== user?.profile.firstname
+      ) {
         // Add user to typingUsers in store
         addTypingUser({
           id: payload.userId,
@@ -95,7 +94,7 @@ export default function ChatRoomPage() {
             email: null,
             profile: {
               id: payload.userId,
-              firstname: user.profile.firstname || user.email || "",
+              firstname: payload.username || user.email || "",
               lastname: "",
               address: null,
               userId: payload.userId,
@@ -106,8 +105,15 @@ export default function ChatRoomPage() {
     };
 
     // --- Handle typing:stop ---
-    const handleTypingStop = (payload: { chatId: number; userId: number }) => {
-      if (payload.chatId === chatId && payload.userId !== user.id) {
+    const handleTypingStop = (payload: {
+      chatId: number;
+      userId: number;
+      username: string;
+    }) => {
+      if (
+        payload.chatId === chatId &&
+        payload.username !== user?.profile.firstname
+      ) {
         removeTypingUser(payload.userId);
       }
     };
@@ -122,15 +128,17 @@ export default function ChatRoomPage() {
     const handleNewMessage = (msg: any) => {
       if (msg.chatId !== chatId) return;
 
-      queryClient.setQueryData(
-        ["chat", chatId, "messages"],
-        (old: any = []) => [...old, msg]
-      );
+      queryClient.setQueryData(["chat", chatId, "messages"], (old: any) => {
+        const messages = old?.chats ?? [];
+        return { ...old, chats: [...messages, msg] };
+      });
 
       // Scroll to bottom
       setTimeout(() => {
         bottom?.scrollIntoView({ behavior: "smooth" });
-      }, 300);
+      }, 100);
+
+      markAllRead();
     };
 
     socket.on("message:new", handleNewMessage);
@@ -252,13 +260,26 @@ export default function ChatRoomPage() {
                 return (
                   <div
                     key={index}
-                    className={`px-2 flex mb-3 ${
+                    className={`px-2 flex mb-3 relative ${
                       !currentUser ? "justify-end" : "justify-start"
+                    } ${
+                      index === messages.chats.length - messages.unreadCount
+                        ? "border-t"
+                        : ""
                     }`}
                   >
+                    {index === messages.chats.length - messages.unreadCount && (
+                      <span className="absolute text-sm flex items-center justify-center w-[96%]">
+                        unread messages
+                      </span>
+                    )}
                     <div
                       className={`flex gap-2 items-start max-w-[85%] ${
                         currentUser ? "flex-row" : "flex-row-reverse"
+                      } ${
+                        index === messages.chats.length - messages.unreadCount
+                          ? "mt-7"
+                          : ""
                       }`}
                     >
                       {currentUser ? (
