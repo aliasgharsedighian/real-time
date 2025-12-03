@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSocket } from "@/lib/socket";
@@ -26,6 +26,10 @@ async function fetchInitialMessages(chatId: number, token: string) {
   );
 
   const data = await res.json();
+
+  if (data.statusCode === 404) {
+    notFound();
+  }
 
   return data.data ?? {};
 }
@@ -133,18 +137,10 @@ export default function ChatRoomPage() {
         return { ...old, chats: [...messages, msg] };
       });
 
-      // Scroll to bottom
-      setTimeout(() => {
-        bottom?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-
       markAllRead();
     };
 
     socket.on("message:new", handleNewMessage);
-
-    // initial scroll
-    setTimeout(() => bottom?.scrollIntoView({ behavior: "smooth" }), 500);
 
     return () => {
       socket.emit("chat:leave", { chatId, userId: user.id });
@@ -185,6 +181,9 @@ export default function ChatRoomPage() {
       userId: user?.id,
       messageIds: messages.map((m: any) => m.id),
     });
+    setTimeout(() => {
+      bottomRef?.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -42,7 +42,11 @@ export class GetMessagesService {
       });
 
       if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant in this chat.');
+        return {
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'User is not a participant of this chat.',
+          data: null,
+        };
       }
 
       const chat = await this.pollingRepo.getChatContentsById(
