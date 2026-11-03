@@ -1,139 +1,100 @@
+import { Link } from "react-router-dom";
+import { ArrowRight, MessageCircle, Moon, Send, Zap } from "lucide-react";
 import AuthButton from "@/features/auth/components/AuthButton";
-import FeatureCard from "@/shared/components/FeatureCard";
 import Header from "@/shared/components/Header";
-import { MessageCircle, Shield, Users, Video, Zap } from "lucide-react";
+import { Brand } from "@/shared/components/Brand";
+import FeatureCard from "@/shared/components/FeatureCard";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="">
+    <div className="brand-scene min-h-dvh overflow-hidden">
       <Header />
-      <main className="flex-1 flex flex-col items-center px-4 py-16 sm:px-6 text-center gap-20">
-        <div className="max-w-4xl space-y-8 relative">
-          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-amber-50 via-yellow-50 to-stone-100 dark:from-yellow-500/10 dark:via-amber-500/5 dark:to-transparent rounded-3xl blur-3xl scale-150 opacity-60"></div>
-          <div className="space-y-8 relative max-w-4xl">
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight text-foreground">
-              Connect instantly
+      <main className="mx-auto max-w-6xl px-5 pb-16 sm:px-8">
+        <section className="grid min-h-[75dvh] items-center gap-10 py-12 text-center md:grid-cols-2 md:py-20 md:text-left">
+          <div className="relative order-first mx-auto flex w-full max-w-sm items-center justify-center rounded-[2.5rem] border border-border bg-[#050A12] px-6 py-14 shadow-[0_0_80px_var(--brand-halo)] md:order-last md:py-24">
+            <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] bg-[url('/brand/gotham-skyline.svg')] bg-cover bg-bottom opacity-60" />
+            <Brand variant="vertical" className="relative w-full max-w-72" />
+          </div>
+          <div className="space-y-6">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-medium text-brand">
+              <span className="size-1.5 rounded-full bg-primary" /> YOUR SIGNAL.
+              YOUR PEOPLE.
+            </span>
+            <h1 className="text-4xl leading-[1.12] font-bold tracking-tight sm:text-6xl">
+              Out of the dark.
               <br />
-              <span className="text-brand">
-                Chat smarter.
-              </span>
+              <span className="text-brand">Into the conversation.</span>
             </h1>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              The modern messaging platform that combines lightning-fast chat
-              and crystal-clear video calls in one seamless experience.
+            <p className="mx-auto max-w-md text-base leading-7 text-muted-foreground md:mx-0">
+              A little Gotham. A lot of connection. Bring your conversations to
+              life with BatGram.
+            </p>
+            <div className="flex flex-col items-center gap-4 md:items-start">
+              <AuthButton type="button" />
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-brand"
+              >
+                Already have an account? Log in{" "}
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Real-time messaging. Made for your everyday.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-6">
-            <AuthButton type="button" />
-          </div>
-
-          <div className="pt-8">
-            <p className="text-sm text-muted-foreground mb-4">
-              Trusted by thousand of users worldwide
+        </section>
+        <section className="space-y-8 border-t border-border py-12 text-center">
+          <div>
+            <p className="mb-3 text-xs font-semibold tracking-[.2em] text-brand">
+              STAY IN YOUR ELEMENT
             </p>
-            <div className="flex justify-center items-center gap-8 text-muted-foreground">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-foreground">50K+</div>
-                <div className="text-sm">Active Users</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-foreground">1M+</div>
-                <div className="text-sm">Message sent</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-foreground">99.9%</div>
-                <div className="text-sm">Uptime</div>
-              </div>
-            </div>
+            <h2 className="text-3xl font-bold tracking-tight">Chat smarter.</h2>
           </div>
-
-          {/* Enhanced features sections */}
-          <div className="w-full max-w-6xl">
-            {/* Section divider */}
-            <div className="w-full flex items-center justify-center mb-16">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent"></div>
-              <div className="px-6">
-                <div className="w-2 h-2 rounded-full bg-primary/60"></div>
-              </div>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent"></div>
-            </div>
-
-            <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-                Everything you meed to stay connected
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FeatureCard
+              icon={MessageCircle}
+              title="Keep it flowing"
+              description="Real-time messages, typing indicators and read receipts keep the conversation moving."
+            />
+            <FeatureCard
+              icon={Moon}
+              title="Your kind of night"
+              description="An electric dark theme or a fresh light look. Switch whenever you feel like it."
+            />
+            <FeatureCard
+              icon={Zap}
+              title="Always within reach"
+              description="Install BatGram on your home screen and jump straight back into your chats."
+            />
+          </div>
+        </section>
+        <div className="brand-panel flex flex-col items-center justify-between gap-5 rounded-3xl p-6 text-center sm:flex-row sm:text-left">
+          <div className="flex items-center gap-4">
+            <Send className="size-7 shrink-0 text-brand" />
+            <div>
+              <h2 className="font-semibold">
+                Your next conversation starts here.
               </h2>
-              <p className="text-base sm:textlg text-muted-foreground max-w-2xl mx-auto">
-                Powerfull features designed for seamless communications, whether
-                you&apos;re chatting with friends or collaborating with teams.
+              <p className="mt-1 text-sm text-muted-foreground">
+                Find your people. Send your signal.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
-              <FeatureCard
-                icon={MessageCircle}
-                title="Instant Messaging"
-                description="Lightning-fast message with real-time delivery. Chat with friends and colleagues seamlessly"
-              />
-              <FeatureCard
-                icon={Video}
-                title="HD Video Calls"
-                description="Soon"
-              />
-              <FeatureCard
-                icon={Shield}
-                title="Privacy First"
-                description="End-to-end encription keeps your conversitions private. Your data belongs to you, always."
-              />
-              <FeatureCard
-                icon={Users}
-                title="Group Chats"
-                description="Create groups with friends, family, or colleagues. Manage conversations with advanced controls."
-              />
-              <FeatureCard
-                icon={Zap}
-                title="Lightning Fast"
-                description="Optimized for speed and performance. Works seamlessly across all your device with instant sync."
-              />
-            </div>
           </div>
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-brand"
+          >
+            Get started <ArrowRight className="size-4" />
+          </Link>
         </div>
       </main>
-      <footer className="border-t bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
-            <div>
-              <span className="text-xl font-bold tracking-light">BatGram</span>
-              <p className="text-sm text-muted-foreground mt-1">
-                The Future of communication
-              </p>
-            </div>
-
-            <div className="flex items-center gap-8">
-              <a
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Terms of Services
-              </a>
-              <a
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Support
-              </a>
-            </div>
-          </div>
-          <div className="border-t mt-8 pt-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} BatGram.
-            </p>
-          </div>
+      <footer className="border-t border-border px-5 py-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+          <Brand className="w-36" />
+          <p className="text-xs text-muted-foreground">
+            © {new Date().getFullYear()} BatGram. Stay connected.
+          </p>
         </div>
       </footer>
     </div>

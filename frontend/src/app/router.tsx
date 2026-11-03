@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Outlet, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import HomePage from "@/pages/HomePage";
+import { BrandLoading } from "@/shared/components/BrandLoading";
 
 const ChatLayout = lazy(() => import("./layouts/ChatLayout"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
@@ -14,9 +15,7 @@ function RouteBoundary() {
   return (
     <Suspense
       fallback={
-        <div role="status" className="grid min-h-[60dvh] place-items-center">
-          Loading…
-        </div>
+        <BrandLoading />
       }
     >
       <Outlet />

@@ -5,21 +5,24 @@ import { Button } from "@/shared/ui/button";
 import { errorMessage } from "@/shared/lib/api";
 import { useSessionStore } from "@/features/auth/session-store";
 import { ThemeToggle } from "@/shared/components/ThemeToggle";
+import { Brand } from "@/shared/components/Brand";
+import { BrandLoading } from "@/shared/components/BrandLoading";
+import { Link } from "react-router-dom";
 
 export default function LoginPage() {
   const { user, checking, error, retry } = useSession();
-  if (checking)
-    return (
-      <div role="status" className="grid min-h-dvh place-items-center">
-        Checking your session…
-      </div>
-    );
+  if (checking) return <BrandLoading message="Checking your session…" />;
   if (user) return <Navigate to="/dashboard" replace />;
   return (
-    <main className="grid min-h-dvh place-items-center p-6">
-      <div className="max-w-md space-y-6 text-center">
+    <main className="brand-scene grid min-h-dvh place-items-center p-5">
+      <div className="brand-panel flex w-full max-w-md flex-col items-center gap-6 rounded-[2rem] p-6 py-10 text-center sm:p-10">
         <ThemeToggle />
-        <h1 className="text-3xl font-bold">Welcome to BatGram</h1>
+        <Link to="/" aria-label="BatGram home">
+          <Brand variant="vertical" className="w-56" />
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Your signal starts here.
+        </h1>
         <p className="text-muted-foreground">
           Sign in or create an account to continue to your chats.
         </p>

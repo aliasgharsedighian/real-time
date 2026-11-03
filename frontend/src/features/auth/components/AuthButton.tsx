@@ -18,7 +18,7 @@ export default function AuthButton({ type }: { type: "header" | "button" }) {
     );
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button className="brand-cta min-h-11 rounded-full px-5" variant={type === "header" ? "outline" : "default"} onClick={() => setOpen(true)}>
         {type === "header" ? "Sign In/Sign Up" : "Start Chatting Free"}
       </Button>
       {open && (

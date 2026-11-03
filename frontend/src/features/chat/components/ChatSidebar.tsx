@@ -1,113 +1,101 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { MessageCircle, RefreshCw } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { MessageCircle, UserRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
+  SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   useSidebar,
 } from "@/shared/ui/sidebar";
-import { Button } from "@/shared/ui/button";
+import { Brand } from "@/shared/components/Brand";
 import { displayName } from "@/shared/lib/types";
-import { formatDateBasedOnToday } from "@/shared/lib/date";
-import { errorMessage } from "@/shared/lib/api";
 import { useSession } from "@/features/auth/session-context";
 import UserButton from "@/features/auth/components/UserButton";
-import { useChatList } from "../hooks/use-chat-list";
-import { NewChatDialog } from "./NewChatDialog";
+import { ChatList } from "./ChatList";
 
 export function ChatSidebar() {
   const { user } = useSession();
+  const location = useLocation();
   const { setOpenMobile } = useSidebar();
-  const [open, setOpen] = useState(false);
-  const chats = useChatList();
   return (
-    <Sidebar variant="floating">
-      <NewChatDialog open={open} onOpenChange={setOpen} />
-      <SidebarHeader>
-        <p className="px-2 pt-2 text-lg font-bold">Bat<span className="text-brand">Gram</span></p>
-        <div className="flex items-center justify-between p-2">
-          <div className="min-w-0">
-            <span className="text-xs text-muted-foreground">Welcome back</span>
+    <Sidebar
+      variant="sidebar"
+      collapsible="icon"
+      className="border-r border-border"
+    >
+      <SidebarHeader className="gap-4 border-b border-border px-3 py-5">
+        <Link
+          to="/dashboard"
+          aria-label="BatGram chats"
+          onClick={() => setOpenMobile(false)}
+        >
+          <Brand className="w-full max-w-56 group-data-[collapsible=icon]:hidden" />
+          <Brand
+            variant="icon"
+            className="hidden size-10 rounded-xl group-data-[collapsible=icon]:block"
+          />
+        </Link>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location.pathname !== "/dashboard/profile"}
+              size="lg"
+              tooltip="Chats"
+              className="rounded-xl data-[active=true]:text-brand"
+            >
+              <Link to="/dashboard" onClick={() => setOpenMobile(false)}>
+                <MessageCircle />
+                <span className="group-data-[collapsible=icon]:sr-only">
+                  Messages
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location.pathname === "/dashboard/profile"}
+              size="lg"
+              tooltip="Profile"
+              className="rounded-xl data-[active=true]:text-brand"
+            >
+              <Link
+                to="/dashboard/profile"
+                onClick={() => setOpenMobile(false)}
+              >
+                <UserRound />
+                <span className="group-data-[collapsible=icon]:sr-only">
+                  My profile
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent className="overflow-hidden group-data-[collapsible=icon]:hidden">
+        <ChatList onNavigate={() => setOpenMobile(false)} />
+      </SidebarContent>
+      <SidebarFooter className="mt-auto border-t border-border p-3">
+        <div className="brand-panel flex min-w-0 items-center gap-3 rounded-2xl p-2 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+          <UserButton />
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="truncate text-sm font-semibold">
               {displayName(user)}
             </p>
+            <Link
+              to="/dashboard/profile"
+              className="text-xs text-brand"
+              onClick={() => setOpenMobile(false)}
+            >
+              Your BatGram profile
+            </Link>
           </div>
-          <UserButton />
         </div>
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <Button
-            variant="outline"
-            className="mb-3 w-full"
-            onClick={() => setOpen(true)}
-          >
-            Start New Chat
-          </Button>
-          {chats.isPending && (
-            <p role="status" className="py-8 text-center text-sm">
-              Loading chats…
-            </p>
-          )}
-          {chats.isError && (
-            <div className="space-y-3 p-3 text-sm">
-              <p role="alert">{errorMessage(chats.error)}</p>
-              <Button variant="outline" onClick={() => void chats.refetch()}>
-                <RefreshCw />
-                Try again
-              </Button>
-            </div>
-          )}
-          {chats.data?.length === 0 && (
-            <div className="flex flex-col items-center gap-4 px-4 py-12 text-center">
-              <MessageCircle className="size-16 opacity-20" />
-              <h2 className="text-xl font-medium">Ready to chat?</h2>
-              <p className="text-sm text-muted-foreground">
-                Your conversations will appear here once you start chatting with
-                others.
-              </p>
-            </div>
-          )}
-          <nav aria-label="Conversations" className="flex flex-col gap-2">
-            {chats.data?.map((chat) => (
-              <NavLink
-                key={chat.id}
-                to={`/dashboard/websocket/${chat.id}`}
-                onClick={() => setOpenMobile(false)}
-                className={({ isActive }) =>
-                  `rounded-md border-b px-2 py-3 ${isActive ? "bg-muted" : "hover:bg-muted/50"}`
-                }
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-bold">
-                    {chat.isGroup || chat.participants.length > 1
-                      ? "Group"
-                      : displayName(chat.participants[0]?.user)}
-                  </span>
-                  {!!chat._count?.messages && (
-                    <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-sm text-primary-foreground">
-                      {chat._count.messages}
-                    </span>
-                  )}
-                </div>
-                {chat.messages?.slice(0, 1).map((message) => (
-                  <div
-                    key={message.id}
-                    className="mt-1 flex justify-between gap-2"
-                  >
-                    <p className="truncate text-sm">{message.content}</p>
-                    <span className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDateBasedOnToday(message.createdAt)}
-                    </span>
-                  </div>
-                ))}
-              </NavLink>
-            ))}
-          </nav>
-        </SidebarGroup>
-      </SidebarContent>
+      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -1,63 +1,75 @@
-"""Rasterize the temporary SVG icon using system librsvg/cairo (no pip packages).
+"""Resize the selected BatGram PNG icon with system cairo (no pip packages).
 
 Run from any directory: python3 frontend/scripts/generate-pwa-icons.py
-Replace public/favicon.svg after logo selection and run again.
+Source: public/brand/app-icon.png. Generates all install/browser icons.
 """
 from pathlib import Path
 import ctypes as c
 import ctypes.util
 import struct
+import base64
 
 root = Path(__file__).resolve().parents[1] / "public"
 icons = root / "icons"
 icons.mkdir(exist_ok=True)
-svg = (root / "favicon.svg").read_text()
-
+source_path = root / "brand" / "app-icon.png"
 cairo = c.CDLL(ctypes.util.find_library("cairo"))
-rsvg = c.CDLL(ctypes.util.find_library("rsvg-2"))
-gobject = c.CDLL(ctypes.util.find_library("gobject-2.0"))
-
-
-class Rectangle(c.Structure):
-    _fields_ = [(name, c.c_double) for name in ("x", "y", "width", "height")]
-
-
+cairo.cairo_image_surface_create_from_png.argtypes = [c.c_char_p]
+cairo.cairo_image_surface_create_from_png.restype = c.c_void_p
 cairo.cairo_image_surface_create.argtypes = [c.c_int, c.c_int, c.c_int]
 cairo.cairo_image_surface_create.restype = c.c_void_p
 cairo.cairo_create.argtypes = [c.c_void_p]
 cairo.cairo_create.restype = c.c_void_p
+cairo.cairo_surface_status.argtypes = [c.c_void_p]
+cairo.cairo_surface_status.restype = c.c_int
+cairo.cairo_image_surface_get_width.argtypes = [c.c_void_p]
+cairo.cairo_image_surface_get_width.restype = c.c_int
+cairo.cairo_image_surface_get_height.argtypes = [c.c_void_p]
+cairo.cairo_image_surface_get_height.restype = c.c_int
 cairo.cairo_surface_write_to_png.argtypes = [c.c_void_p, c.c_char_p]
 cairo.cairo_surface_write_to_png.restype = c.c_int
-cairo.cairo_destroy.argtypes = [c.c_void_p]
-cairo.cairo_surface_destroy.argtypes = [c.c_void_p]
-rsvg.rsvg_handle_new_from_data.argtypes = [c.c_char_p, c.c_size_t, c.c_void_p]
-rsvg.rsvg_handle_new_from_data.restype = c.c_void_p
-rsvg.rsvg_handle_render_document.argtypes = [c.c_void_p, c.c_void_p, c.POINTER(Rectangle), c.c_void_p]
-rsvg.rsvg_handle_render_document.restype = c.c_int
-gobject.g_object_unref.argtypes = [c.c_void_p]
+for name in ("cairo_destroy", "cairo_surface_destroy", "cairo_paint"):
+    getattr(cairo, name).argtypes = [c.c_void_p]
+cairo.cairo_set_source_rgb.argtypes = [c.c_void_p, c.c_double, c.c_double, c.c_double]
+cairo.cairo_translate.argtypes = [c.c_void_p, c.c_double, c.c_double]
+cairo.cairo_scale.argtypes = [c.c_void_p, c.c_double, c.c_double]
+cairo.cairo_set_source_surface.argtypes = [c.c_void_p, c.c_void_p, c.c_double, c.c_double]
+
+source = cairo.cairo_image_surface_create_from_png(str(source_path).encode())
+if cairo.cairo_surface_status(source) != 0:
+    raise RuntimeError("Cannot read source PNG")
+width = cairo.cairo_image_surface_get_width(source)
+height = cairo.cairo_image_surface_get_height(source)
 
 
 def render(size, target, maskable=False):
-    source = svg
-    if maskable:
-        # Keep the full symbol within the central safe circle, with opaque edges.
-        source = source.replace('<g id="mark">', '<g id="mark" transform="translate(64 64) scale(.75)">')
-    data = source.encode()
-    handle = rsvg.rsvg_handle_new_from_data(data, len(data), None)
-    if not handle:
-        raise RuntimeError("Cannot read SVG")
     surface = cairo.cairo_image_surface_create(0, size, size)
     context = cairo.cairo_create(surface)
     try:
-        if not rsvg.rsvg_handle_render_document(handle, context, c.byref(Rectangle(0, 0, size, size)), None):
-            raise RuntimeError("Cannot render SVG")
+        cairo.cairo_set_source_rgb(context, 5/255, 10/255, 18/255)
+        cairo.cairo_paint(context)
+        # Maskable symbols fit inside the central 80% safe circle. The
+        # diagonal of a .56-width square is < .8 of the full icon diameter.
+        scale = size * (0.56 if maskable else 1) / max(width, height)
+        cairo.cairo_translate(context, (size - width*scale)/2, (size - height*scale)/2)
+        cairo.cairo_scale(context, scale, scale)
+        cairo.cairo_set_source_surface(context, source, 0, 0)
+        cairo.cairo_paint(context)
         if cairo.cairo_surface_write_to_png(surface, str(target).encode()) != 0:
             raise RuntimeError(f"Cannot write {target}")
     finally:
         cairo.cairo_destroy(context)
         cairo.cairo_surface_destroy(surface)
-        gobject.g_object_unref(handle)
 
+
+# SVG favicon embeds the approved raster artwork, without redrawing the logo.
+encoded = base64.b64encode(source_path.read_bytes()).decode()
+(root / "favicon.svg").write_text(
+    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {width}">'
+    f'<rect width="{width}" height="{width}" fill="#050A12"/>'
+    f'<image y="{(width-height)/2}" width="{width}" height="{height}" href="data:image/png;base64,{encoded}"/>'
+    '</svg>\n'
+)
 
 for size in (16, 32, 48):
     render(size, icons / f"favicon-{size}.png")
@@ -76,3 +88,5 @@ for size, data in frames:
     offset += len(data)
 (root / "favicon.ico").write_bytes(header + entries + b"".join(data for _, data in frames))
 print("Generated favicons, Apple Touch, PWA and maskable icons.")
+
+cairo.cairo_surface_destroy(source)

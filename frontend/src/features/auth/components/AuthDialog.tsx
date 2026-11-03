@@ -35,6 +35,7 @@ import { Input } from "@/shared/ui/input";
 import { authenticate } from "../api";
 import { errorMessage } from "@/shared/lib/api";
 import { useSessionStore } from "../session-store";
+import { Brand } from "@/shared/components/Brand";
 
 const signUpformSchema = z
   .object({
@@ -121,8 +122,9 @@ function AuthDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-3xl border-primary/20">
         <DialogHeader>
+          <Brand className="mx-auto mb-3 w-48" />
           <DialogTitle>Sign In/Sign Up</DialogTitle>
           <DialogDescription>
             You can Sign In to your account. if you don't have one , please Sign
@@ -210,7 +212,7 @@ function AuthDialog({
                   <CardTitle>Signup</CardTitle>
                   <CardDescription>
                     insert your email and choose password at least 8 character.
-                    your password hashing and secure.
+                    Choose a password with at least 8 characters.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-6">

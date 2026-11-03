@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMax slice">
+  <defs>
+    <radialGradient id="glow"><stop stop-color="#00D4FF" stop-opacity=".32"/><stop offset="1" stop-color="#050A12" stop-opacity="0"/></radialGradient>
+    <pattern id="windows" width="25" height="34" patternUnits="userSpaceOnUse"><rect width="3" height="9" x="10" y="10" fill="#00B4FF" opacity=".45"/></pattern>
+    <path id="city" d="M0 900V625h55V500h45v125h50V380h30v-55h18v55h30v290h60V550h50v-90h35v90h35v160h45V400h27v-60h15V230h10v110h15v60h27v210h45V490h45v-50h20v50h45v250h40V590h65V290h25v-70h16v70h25v300h42V450h20v-35h35v35h20v240h55V510h65v70h55v-90h30v-60h15v60h30v180h60v-80h70V900Z"/>
+  </defs>
+  <ellipse cx="820" cy="270" rx="450" ry="400" fill="url(#glow)"/>
+  <circle cx="840" cy="210" r="62" fill="#62E4FF" opacity=".22"/>
+  <circle cx="824" cy="195" r="10" fill="#00B4FF" opacity=".1"/>
+  <use href="#city" fill="#071724"/>
+  <use href="#city" fill="url(#windows)"/>
+</svg>

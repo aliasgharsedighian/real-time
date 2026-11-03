@@ -8,8 +8,8 @@
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#101216",
-  "theme_color": "#101216",
+  "background_color": "#050A12",
+  "theme_color": "#050A12",
   "categories": ["social", "communication"],
   "prefer_related_applications": false,
   "icons": [

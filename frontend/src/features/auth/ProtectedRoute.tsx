@@ -3,6 +3,7 @@ import { useSession } from "./session-context";
 import { useSessionStore } from "./session-store";
 import { Button } from "@/shared/ui/button";
 import { errorMessage } from "@/shared/lib/api";
+import { BrandLoading } from "@/shared/components/BrandLoading";
 
 export function ProtectedRoute() {
   const { user, checking, error, retry } = useSession();
@@ -18,9 +19,7 @@ export function ProtectedRoute() {
     );
   if (checking)
     return (
-      <div role="status" className="grid min-h-dvh place-items-center">
-        Checking your session…
-      </div>
+      <BrandLoading message="Checking your session…" />
     );
   if (error || !user)
     return (

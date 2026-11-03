@@ -8,6 +8,10 @@ import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
 import { api, errorMessage, unwrap } from "@/shared/lib/api";
 import type { ApiResponse, Profile, User } from "@/shared/lib/types";
+import { displayName } from "@/shared/lib/types";
+import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
+import { ThemePicker } from "@/shared/components/ThemePicker";
+import { Brand } from "@/shared/components/Brand";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import {
@@ -66,8 +70,20 @@ export default function ProfilePage() {
     }
   }
   return (
-    <div className="p-4 sm:p-6">
-      <Card className="mx-auto max-w-2xl">
+    <div className="brand-scene flex-1 p-4 pb-8 sm:p-8">
+      <div className="mx-auto mb-6 flex max-w-xl flex-col items-center gap-3 text-center">
+        <IdentityAvatar
+          name={displayName(user)}
+          className="size-24 border-2 border-primary text-3xl shadow-[0_0_35px_var(--brand-halo)]"
+        />
+        <h2 className="max-w-full truncate text-2xl font-semibold">
+          {displayName(user)}
+        </h2>
+        <p className="max-w-full truncate text-sm text-muted-foreground">
+          {user?.email || user?.phoneNumber || "Your BatGram account"}
+        </p>
+      </div>
+      <Card className="brand-panel mx-auto max-w-xl rounded-3xl">
         <CardHeader>
           <CardTitle>Profile</CardTitle>
           <CardDescription>Update your profile</CardDescription>
@@ -83,7 +99,7 @@ export default function ProfilePage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {name === "firstname" ? "Firstname" : "Lastname"}
+                        {name === "firstname" ? "First name" : "Last name"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -105,6 +121,10 @@ export default function ProfilePage() {
           </Form>
         </CardContent>
       </Card>
+      <section className="brand-panel mx-auto mt-5 max-w-xl rounded-3xl p-6">
+        <ThemePicker />
+      </section>
+      <Brand className="mx-auto mt-8 w-32 opacity-70" />
     </div>
   );
 }

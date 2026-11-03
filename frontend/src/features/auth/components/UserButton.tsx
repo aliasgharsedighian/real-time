@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
+import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { Button } from "@/shared/ui/button";
 import { api } from "@/shared/lib/api";
@@ -40,10 +40,7 @@ export default function UserButton() {
           aria-label="Account"
           className="rounded-full"
         >
-          <Avatar>
-            <AvatarImage src="/assets/icons/user-icon.png" alt="" />
-            <AvatarFallback>{name.charAt(0)}</AvatarFallback>
-          </Avatar>
+          <IdentityAvatar name={name} className="size-9" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-3">

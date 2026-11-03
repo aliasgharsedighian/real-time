@@ -8,6 +8,8 @@ import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { formatDateBasedOnToday } from "@/shared/lib/date";
 import { errorMessage } from "@/shared/lib/api";
+import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
+import { displayName } from "@/shared/lib/types";
 import NotFoundPage from "@/pages/NotFoundPage";
 import { chatKeys, getHistory } from "./api";
 import { useChatRoom } from "./hooks/use-chat-room";
@@ -101,7 +103,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
 
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden chat-scene"
       aria-label="Chat room"
     >
       {!room.connected && (
@@ -125,7 +127,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               element.scrollHeight - element.scrollTop - element.clientHeight <
               100;
         }}
-        className="min-h-0 flex-1 overflow-y-auto px-3 py-2"
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
         role="log"
         aria-label="Messages"
         aria-live="polite"
@@ -148,22 +150,25 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 </p>
               )}
               <div
-                className={`mb-3 flex ${own ? "justify-start" : "justify-end"}`}
+                className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`flex max-w-[85%] items-start gap-2 ${own ? "" : "flex-row-reverse"}`}
+                  className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
                 >
-                  <img
-                    className="size-8 rounded-full bg-muted p-1"
-                    src={
+                  <IdentityAvatar
+                    name={displayName(
                       own
-                        ? "/assets/icons/people-user-team.png"
-                        : "/assets/icons/user-icon.png"
-                    }
-                    alt=""
+                        ? user
+                        : (message.sender ??
+                            history.data?.users.find(
+                              (participant) =>
+                                participant.userId === message.senderId,
+                            )?.user),
+                    )}
+                    className="hidden size-7 text-[10px] sm:inline-flex"
                   />
                   <div
-                    className={`flex min-w-0 flex-col gap-1 ${own ? "items-start" : "items-end"}`}
+                    className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
                   >
                     <time
                       className="text-[11px] text-muted-foreground"
@@ -172,7 +177,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                       {formatDateBasedOnToday(message.createdAt)}
                     </time>
                     <div
-                      className={`flex items-end gap-2 rounded-b-xl px-3 py-2.5 text-sm ${own ? "rounded-tr-xl bg-primary text-primary-foreground" : "rounded-tl-xl bg-muted text-foreground"}`}
+                      className={`flex items-end gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "rounded-br-sm message-own" : "rounded-bl-sm message-incoming"}`}
                     >
                       <span
                         className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
@@ -199,7 +204,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
         <div ref={bottom} />
       </div>
       <form
-        className="shrink-0 border-t"
+        className="relative shrink-0 border-t border-border bg-card/90 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -208,42 +213,49 @@ function ChatRoom({ chatId }: { chatId: number }) {
         <label htmlFor="message-input" className="sr-only">
           Message
         </label>
-        <textarea
-          id="message-input"
-          className="block min-h-20 w-full resize-none p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-          dir="auto"
-          value={input}
-          onChange={(event) => {
-            setInput(event.target.value);
-            room.startTyping();
-          }}
-          onBlur={room.stopTyping}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder="Write your message…"
-        />
-        {sendError && (
-          <p role="alert" className="px-3 py-2 text-sm text-destructive">
-            {sendError}
-          </p>
-        )}
-        <div className="flex items-center justify-end border-t px-3 py-2">
+        <div className="flex items-end gap-2">
+          <textarea
+            id="message-input"
+            rows={1}
+            className="block min-h-12 max-h-36 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            dir="auto"
+            value={input}
+            onChange={(event) => {
+              setInput(event.target.value);
+              room.startTyping();
+            }}
+            onBlur={room.stopTyping}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder="Write your message…"
+          />
           <Button
             type="submit"
+            size="icon"
+            className="brand-cta size-12 shrink-0 rounded-full"
             aria-label="Send message"
             disabled={!input.trim() || pending || !room.connected}
           >
-            {pending ? "Sending…" : <SendIcon />}
+            {pending ? (
+              <span className="animate-pulse text-xs">…</span>
+            ) : (
+              <SendIcon />
+            )}
           </Button>
         </div>
+        {sendError && (
+          <p role="alert" className="px-1 pt-2 text-sm text-destructive">
+            {sendError}
+          </p>
+        )}
       </form>
     </section>
   );
