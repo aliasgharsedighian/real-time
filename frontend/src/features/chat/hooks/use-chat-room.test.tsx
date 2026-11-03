@@ -1,0 +1,117 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { SessionContext } from "@/features/auth/session-context";
+import { useSessionStore } from "@/features/auth/session-store";
+import { useChatRoom } from "./use-chat-room";
+import { chatKeys } from "../api";
+import type { History, Message } from "../types";
+
+const fake = vi.hoisted(() => ({
+  handlers: new Map<string, (...args: never[]) => void>(),
+  emit: vi.fn(),
+}));
+vi.mock("../socket", () => ({
+  getSocket: () => ({
+    connected: true,
+    connect: vi.fn(),
+    emit: fake.emit,
+    on: (event: string, handler: (...args: never[]) => void) =>
+      fake.handlers.set(event, handler),
+    off: (event: string) => fake.handlers.delete(event),
+  }),
+}));
+
+function mount() {
+  const cache = new QueryClient();
+  const key = chatKeys.history("refresh", 7);
+  cache.setQueryData<History>(key, { messages: [], users: [], unreadIds: [] });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={cache}>
+      <SessionContext.Provider
+        value={{
+          user: { id: 1, email: "me@example.test", profile: null },
+          checking: false,
+          error: null,
+          retry: vi.fn(),
+        }}
+      >
+        {children}
+      </SessionContext.Provider>
+    </QueryClientProvider>
+  );
+  const hook = renderHook(() => useChatRoom(7, true), { wrapper });
+  return { cache, key, ...hook };
+}
+
+describe("chat room events", () => {
+  beforeEach(() => {
+    fake.handlers.clear();
+    fake.emit.mockClear();
+    useSessionStore
+      .getState()
+      .setTokens({ accessToken: "access", refreshToken: "refresh" });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  });
+  it("appends an incoming message to normalized history and reads its actual id", () => {
+    const { cache, key } = mount();
+    const message: Message = {
+      id: 8,
+      chatId: 7,
+      senderId: 2,
+      content: "Hello",
+      createdAt: "2026-11-03T10:00:00.000Z",
+    };
+    act(() => {
+      fake.handlers.get("message:new")!(message as never);
+    });
+    expect(
+      cache.getQueryData<History>(key)?.messages.map((entry) => entry.id),
+    ).toEqual([8]);
+    expect(fake.emit).toHaveBeenCalledWith("message:read", {
+      chatId: 7,
+      userId: 1,
+      messageIds: [8],
+    });
+  });
+  it("does not acknowledge reading a message in a hidden tab", () => {
+    mount();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    const message: Message = {
+      id: 8,
+      chatId: 7,
+      senderId: 2,
+      content: "Hello",
+      createdAt: "2026-11-03T10:00:00.000Z",
+    };
+    act(() => {
+      fake.handlers.get("message:new")!(message as never);
+    });
+    expect(
+      fake.emit.mock.calls.some(([event]) => event === "message:read"),
+    ).toBe(false);
+  });
+  it("rejoins the room and requests missed history after reconnect", () => {
+    const { cache } = mount();
+    const invalidate = vi.spyOn(cache, "invalidateQueries");
+    fake.emit.mockClear();
+    act(() => {
+      fake.handlers.get("disconnect")!();
+      fake.handlers.get("connect")!();
+    });
+    expect(fake.emit).toHaveBeenCalledWith("chat:join", {
+      chatId: 7,
+      userId: 1,
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: chatKeys.history("refresh", 7),
+    });
+  });
+});

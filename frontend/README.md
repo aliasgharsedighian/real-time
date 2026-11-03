@@ -1,0 +1,117 @@
+# فرانت‌اند فعال Beam
+
+از این مرحله توسعهٔ فرانت در **`frontend/`** با React + Vite انجام می‌شود. `nextjs-frontend/` به‌عنوان مرجع قبلی نگه داشته شده و وابستگی اجرایی این پروژه نیست.
+
+## شروع
+
+Node.js نسخهٔ 22.12 یا بالاتر لازم است؛ `.nvmrc` شاخهٔ 22 را مشخص می‌کند.
+
+```bash
+cd frontend
+nvm use
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+نشانی توسعه: `http://localhost:3003`. اگر همین پورت اشغال باشد، Vite صریحاً خطا می‌دهد. در محیطی که nvm نیست از Node سازگار نصب‌شده استفاده کنید.
+
+فایل ignored به نام `.env.local` برای اتصال به بک‌اند محلی تنظیم شده است؛ `.env.example` نیز همین نشانی‌ها را دارد:
+
+```dotenv
+VITE_API_URL=http://localhost:3333
+VITE_SOCKET_URL=http://localhost:3333/chat
+```
+
+کلاینت `/api/v1/` را به آدرس API اضافه می‌کند؛ URL دارای `/api/v1` نیز پذیرفته می‌شود. `VITE_*` عمومی است؛ رمز یا secret در آن قرار ندهید. بک‌اند مستقل است و باید جداگانه اجرا شود. خطاهای تنظیمات و مجوزهای بک‌اند در [مرجع بک‌اند](../docs/backend-context.md) ثبت شده‌اند؛ در این انتقال اصلاح نشده‌اند.
+
+## فرمان‌ها
+
+```bash
+npm run dev        # Vite، پورت 3003
+npm run build      # TypeScript اجباری + build production
+npm run preview    # پیش‌نمایش خروجی dist، پورت 3003
+npm run typecheck
+npm run lint       # بدون --fix
+npm test
+```
+
+برای production محتوای `dist/` سرو می‌شود؛ `vite preview` صرفاً پیش‌نمایش است. سرور وب باید مسیرهای ناشناختهٔ فایل را به `index.html` برگرداند تا reload لینک مستقیم کار کند. نمونهٔ قسمت location در Nginx:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+API/socket روی سرور بک‌اند مستقل می‌مانند. originهای مجاز، HTTPS و آدرس‌های محیط مقصد باید با آن هماهنگ شوند. این repository استقرار را خودکار تغییر نمی‌دهد.
+
+## ساختار توسعه
+
+```text
+src/
+  app/
+    layouts/          # پوستهٔ برنامه
+    providers.tsx     # QueryClient، session و toast
+    router.tsx        # تنها محل تعریف مسیرها و guard
+  features/
+    auth/             # API، نشست، محافظ مسیر و فرم حساب
+    chat/             # API، socket، مدل پیام، cache، hook و اجزای چت
+    profile/          # ویرایش پروفایل
+  pages/              # صفحه‌های عمومی و حالت‌های مسیر
+  shared/
+    ui/               # سورس اجزای shadcn/Radix
+    components/       # UI مشترک محصول
+    hooks/            # hookهای عمومی مثل breakpoint
+    lib/              # تنظیم محیط، HTTP، انواع مشترک و utility
+  styles/             # Tailwind و توکن‌های پوسته
+  test/               # setup تست
+```
+
+الگو feature-based است: منطق یک قابلیت در همان feature بماند؛ اجزای واقعاً عمومی به shared منتقل شوند. pageها و app مسئول ترکیب قابلیت‌ها هستند. پیام‌ها در TanStack Query نگه داشته می‌شوند؛ Zustand فقط توکن‌های نشست را مدیریت می‌کند. برای هر قابلیتٔ جدید، API/types/components/hooks متناسب با اندازهٔ آن افزوده شود؛ نیازی به ساخت پوشه‌های خالی یا barrel file عمومی نیست.
+
+## Tailwind و shadcn/ui
+
+Tailwind 4 از `@tailwindcss/vite` بارگذاری می‌شود. اجزای shadcn موجود از فرانت قبلی، همراه با توکن‌ها و style `new-york` منتقل شده‌اند؛ وابستگی‌های Radix و style utilities مستقل نصب می‌شوند. بنابراین ظاهر primitiveها حفظ شده است. `components.json` با `rsc: false` و aliasهای جدید تنظیم شده است.
+
+```bash
+npx shadcn@latest add textarea
+```
+
+اجزای جدید در `src/shared/ui` قرار می‌گیرند. alias سراسری `@/` به `src/` اشاره می‌کند. این پروژه هیچ import از Next، middleware یا نیاز به سرور Next ندارد.
+
+## مسیرهای خصوصی و نشست
+
+- `/` و `/login` عمومی هستند؛ ورود/ثبت‌نام فعلی همچنان modal دارد.
+- `/dashboard`، `/dashboard/profile` و `/dashboard/websocket/:chatId` زیر guard مشترک‌اند؛ URL اتاق برای لینک‌های قدیمی حفظ شده است.
+- guard صرف وجود token را کافی نمی‌داند: user-info باید کاربر را تأیید کند. هنگام تأیید، محتوا مخفی است؛ خطای موقت شبکه امکان retry دارد؛ 401 نشست را پاک می‌کند.
+- ورود مهمان به مسیر خصوصی به login هدایت و مسیر مقصد حفظ می‌شود. کنترل مجوز نهایی هر داده همچنان وظیفهٔ بک‌اند است.
+- access/refresh token با کلید مستقل `beam-session-v1` در localStorage نگهداری می‌شوند؛ cookie خوانده نمی‌شود. اطلاعات storeهای قدیمی خودکار وارد نمی‌شود؛ ورود دوباره لازم است.
+- HTTP با Bearer فرستاده می‌شود؛ 401 یک بار با refresh endpoint و یک درخواست refresh مشترک بازآزمایی می‌شود. خروج حتی هنگام قطع شبکه نشست محلی، cache و socket را پاک می‌کند. بک‌اند فعلی ابطال توکن ندارد.
+
+## قرارداد چت و مرز انتقال
+
+ظاهر landing، sidebar، پروفایل و حباب پیام از ساختار فعلی حفظ شده است؛ منطق وابسته به Next با React Router و hookهای تایپ‌شده جایگزین شده است. ارسال، typing و read از Socket.IO و تاریخچه/ساخت چت/مخاطب از REST هستند.
+
+- تاریخچهٔ صفحهٔ اول با limit=100 گرفته می‌شود؛ آرایه‌های همپوشان chats/unreadMessages ادغام و بر اساس id حذف تکرار می‌شوند. بارگذاری تاریخچهٔ بیشتر هنوز پیاده‌سازی نشده، همانند صفحهٔ فعال قبلی.
+- socket در اتاق join و پس از reconnect دوباره join می‌کند؛ تاریخچه پس از reconnect دوباره گرفته می‌شود. پیام و read receipt cache مشترک را به‌روز می‌کنند.
+- فهرست از `chat:list` همراه ack می‌آید. چون بک‌اند برای کاربر خارج از room رویداد inbox ندارد، هر ۱۰ ثانیه و پس از رویداد مرتبط تازه می‌شود؛ این fallback در آینده با رویداد اختصاصی کاربر جایگزین‌پذیر است.
+- ارسال تا ack در حالت pending می‌ماند؛ متن در خطا حفظ می‌شود؛ retry خودکار ارسال وجود ندارد چون بک‌اند clientMessageId ندارد و خطر ارسال تکراری هست. timeout الزاماً به معنی ذخیره‌نشدن پیام نیست.
+- draft هر چت/کاربر در sessionStorage همان تب نگهداری می‌شود. typing تایمر و cleanup دارد. دریافت پیام، scroll کاربر در وسط تاریخچه را به زور جابه‌جا نمی‌کند.
+- گروه هنوز در بک‌اند placeholder است؛ انتخاب چند مخاطب در UI حفظ شده ولی پاسخ نامعتبر به navigation نامعتبر تبدیل نمی‌شود و خطا نشان داده می‌شود. قابلیت فایل/تماس افزوده نشده است.
+- socket token را در handshake می‌فرستد، اما بک‌اند فعلی آن را اعتبارسنجی نمی‌کند و هنوز userId/senderId می‌خواهد؛ این قرارداد برای سازگاری حفظ شده و **امنیت socket باید در بک‌اند اصلاح شود**.
+- GET تاریخچه در بک‌اند read status می‌نویسد؛ تعریف دقیق دیده‌شدن و شمارش unread همچنان نیازمند اصلاح مشترک است. frontend به تنهایی این رفتار را تضمین نمی‌کند.
+
+اسناد قبلی [بک‌اند](../docs/backend-context.md) و [Next.js](../docs/nextjs-frontend-context.md) snapshot بررسی پیش از مهاجرت‌اند؛ برای وضعیت فرانت فعال، این README و کد `frontend/` مبنا هستند.
+
+تست‌های فعلی guard، بازیابی نشست، خطای شبکه و نرمال‌سازی پیام/رسید را پوشش می‌دهند؛ تست مرورگر با دو حساب واقعی و بک‌اند باید مرحلهٔ بعدی بررسی محصول باشد.
+
+### نتیجهٔ بررسی انتقال — ۲۰۲۶-۱۱-۰۳
+
+- نصب مستقل پکیج‌ها و ایجاد `package-lock.json` انجام شد.
+- build شامل TypeScript و Vite موفق است؛ فرم ورود و صفحه‌ها lazy هستند و React در chunk مستقل cache می‌شود.
+- lint بدون خطا و ۲۰ تست در ۶ فایل موفق بودند؛ شامل بازگشت به لینک خصوصی پس از ورود، refresh همزمان، رسید پیام و rejoin پس از reconnect.
+- خروجی production با سرور موقت preview بررسی شد: صفحهٔ اصلی، لینک مستقیم پروفایل و اتاق، مسیر ناموجود و assetهای JS/CSS سرو شدند. مسیر ناموجود در SPA با shell پاسخ می‌گیرد و صفحهٔ 404 توسط router نمایش داده می‌شود.
+- این بررسی HTTP و تست‌های شبیه‌سازی‌شده جایگزین آزمون تصویری مرورگر یا آزمون چت با دو کاربر واقعی نیستند. بک‌اند و فایل‌های Next.js در انتقال تغییر نکردند.
+
+راهنمای تنظیم اولیه: [Vite](https://vite.dev/guide/)، [Tailwind با Vite](https://tailwindcss.com/docs/installation/using-vite)، [shadcn با Vite](https://ui.shadcn.com/docs/installation/vite).
