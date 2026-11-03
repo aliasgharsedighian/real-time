@@ -3,6 +3,7 @@ export interface Profile {
   firstname: string | null;
   lastname: string | null;
   address: string | null;
+  avatarId?: string | null;
 }
 
 export interface User {

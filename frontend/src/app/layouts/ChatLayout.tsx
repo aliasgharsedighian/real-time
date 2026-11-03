@@ -75,7 +75,15 @@ export default function ChatLayout() {
           <Separator orientation="vertical" className="hidden h-6 md:block" />
           {match ? (
             <>
-              <IdentityAvatar name={title} className="size-10" />
+              <IdentityAvatar
+                avatarId={
+                  participants.length === 1
+                    ? participants[0]?.user.profile?.avatarId
+                    : undefined
+                }
+                name={title}
+                className="size-10"
+              />
               <div className="min-w-0">
                 <h1 className="truncate text-sm font-semibold">{title}</h1>
                 <p className="mt-0.5 text-xs text-brand">Conversation</p>

@@ -134,7 +134,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     ownTimer.current = setTimeout(stopTyping, 2000);
   }
 
-  async function send(content: string) {
+  async function send(content: string, attachmentId?: string) {
     const socket = getSocket();
     if (!socket.connected || !userId)
       throw new Error("You are offline. Your message has not been sent.");
@@ -142,14 +142,22 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     try {
       message = await socket
         .timeout(8000)
-        .emitWithAck("message:send", { chatId, senderId: userId, content });
+        .emitWithAck("message:send", {
+          chatId,
+          senderId: userId,
+          content,
+          ...(attachmentId ? { attachmentId } : {}),
+        });
     } catch {
       throw new Error(
         "No delivery confirmation received. Check the conversation before sending again.",
       );
     }
     if (!message?.id)
-      throw new Error("The server did not accept your message.");
+      throw new Error(
+        (message as unknown as { message?: string })?.message ||
+          "The server did not accept your message.",
+      );
     cache.setQueryData<History>(chatKeys.history(identity, chatId), (old) =>
       old ? { ...old, messages: mergeMessages(old.messages, [message]) } : old,
     );

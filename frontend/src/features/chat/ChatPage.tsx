@@ -1,7 +1,15 @@
+import { Media, LocalPreview } from "@/features/uploads/Media";
+import {
+  discardFile,
+  uploadFile,
+  useUploadPolicy,
+  validateUpload,
+  type MediaFile,
+} from "@/features/uploads/api";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CheckCheck, SendIcon } from "lucide-react";
+import { Check, CheckCheck, SendIcon, Paperclip, X } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
 import { Button } from "@/shared/ui/button";
@@ -35,6 +43,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
+  const policy = useUploadPolicy();
+  const [file, setFile] = useState<File>();
+  const [uploaded, setUploaded] = useState<MediaFile>();
+  const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
   const [pending, setPending] = useState(false);
   const [sendError, setSendError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -63,17 +79,44 @@ function ChatRoom({ chatId }: { chatId: number }) {
   }, [lastMessageId, messages?.length]);
 
   async function submit() {
-    if (!input.trim() || pending) return;
+    if ((!input.trim() && !file && !uploaded) || pending || !room.connected)
+      return;
     const text = input;
     setPending(true);
     setSendError("");
     try {
-      await room.send(text);
+      let attachment = uploaded;
+      const request = new AbortController();
+      uploadController.current = request;
+      if (file && !attachment) {
+        if (!policy.data)
+          throw new Error("Upload settings are unavailable. Please try again.");
+        validateUpload(file, policy.data);
+        setUploading(true);
+        setProgress(0);
+        try {
+          attachment = await uploadFile<MediaFile>(
+            `files/chats/${chatId}`,
+            file,
+            request.signal,
+            setProgress,
+          );
+          if (request.signal.aborted) return;
+          setUploaded(attachment);
+        } finally {
+          setUploading(false);
+        }
+      }
+      if (request.signal.aborted) return;
+      await room.send(text, attachment?.id);
+      setFile(undefined);
+      setUploaded(undefined);
       setInput((current) => (current === text ? "" : current));
       nearBottom.current = true;
       bottom.current?.scrollIntoView?.({ behavior: "smooth" });
     } catch (error) {
-      setSendError(errorMessage(error));
+      if (!uploadController.current?.signal.aborted)
+        setSendError(errorMessage(error));
     } finally {
       setPending(false);
     }
@@ -156,6 +199,15 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
                 >
                   <IdentityAvatar
+                    avatarId={
+                      (own
+                        ? user
+                        : (message.sender ??
+                          history.data?.users.find(
+                            (p) => p.userId === message.senderId,
+                          )?.user)
+                      )?.profile?.avatarId
+                    }
                     name={displayName(
                       own
                         ? user
@@ -177,8 +229,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
                       {formatDateBasedOnToday(message.createdAt)}
                     </time>
                     <div
-                      className={`flex items-end gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "rounded-br-sm message-own" : "rounded-bl-sm message-incoming"}`}
+                      className={`flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "rounded-br-sm message-own" : "rounded-bl-sm message-incoming"}`}
                     >
+                      {message.attachments?.map((attachment) => (
+                        <Media key={attachment.id} file={attachment} />
+                      ))}
                       <span
                         className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                         dir="auto"
@@ -210,13 +265,105 @@ function ChatRoom({ chatId }: { chatId: number }) {
           void submit();
         }}
       >
+        {(file || uploaded) && (
+          <div className="mb-3 flex items-start gap-3 rounded-xl border border-border p-3">
+            <div className="min-w-0 flex-1">
+              {file ? (
+                <LocalPreview file={file} />
+              ) : (
+                uploaded && <Media file={uploaded} />
+              )}
+              <p className="mt-1 truncate text-xs">
+                {file?.name || "Attachment ready"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={pending}
+              aria-label="Remove attachment"
+              onClick={() => {
+                if (uploaded) void discardFile(uploaded.id).catch(() => {});
+                setFile(undefined);
+                setUploaded(undefined);
+              }}
+            >
+              <X />
+            </Button>
+          </div>
+        )}
+        {uploading && (
+          <div role="status" className="mb-2 text-sm">
+            <progress
+              value={progress}
+              max={100}
+              aria-label="Upload progress"
+              className="w-full"
+            />
+            <p>
+              {progress < 100
+                ? `Uploading… ${progress}%`
+                : "Processing attachment…"}
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => uploadController.current?.abort()}
+            >
+              Cancel upload
+            </Button>
+          </div>
+        )}
+        <input
+          ref={picker}
+          type="file"
+          className="sr-only"
+          aria-label="Choose chat photo or video"
+          disabled={pending || !policy.data}
+          accept={
+            policy.data
+              ? [
+                  ...policy.data.imageMimeTypes,
+                  ...policy.data.videoMimeTypes,
+                ].join(",")
+              : ""
+          }
+          onChange={(event) => {
+            const chosen = event.target.files?.[0];
+            event.target.value = "";
+            if (!chosen || !policy.data) return;
+            try {
+              validateUpload(chosen, policy.data);
+              if (uploaded) void discardFile(uploaded.id).catch(() => {});
+              setFile(chosen);
+              setUploaded(undefined);
+              setSendError("");
+            } catch (error) {
+              setSendError(errorMessage(error));
+            }
+          }}
+        />
         <label htmlFor="message-input" className="sr-only">
           Message
         </label>
         <div className="flex items-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-12 shrink-0"
+            aria-label="Attach photo or video"
+            disabled={pending || !policy.data}
+            onClick={() => picker.current?.click()}
+          >
+            <Paperclip />
+          </Button>
           <textarea
             id="message-input"
             rows={1}
+            maxLength={10000}
+            disabled={pending}
             className="block min-h-12 max-h-36 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             dir="auto"
             value={input}
@@ -242,7 +389,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
             size="icon"
             className="brand-cta size-12 shrink-0 rounded-full"
             aria-label="Send message"
-            disabled={!input.trim() || pending || !room.connected}
+            disabled={
+              (!input.trim() && !file && !uploaded) ||
+              pending ||
+              !room.connected
+            }
           >
             {pending ? (
               <span className="animate-pulse text-xs">…</span>
@@ -251,6 +402,20 @@ function ChatRoom({ chatId }: { chatId: number }) {
             )}
           </Button>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {policy.data
+            ? `Photos up to ${policy.data.imageMaxBytes / 1024 / 1024} MB · Videos up to ${policy.data.videoMaxBytes / 1024 / 1024} MB / ${policy.data.videoMaxSeconds / 60} min`
+            : "Loading upload settings…"}
+        </p>
+        {policy.isError && (
+          <Button
+            type="button"
+            variant="link"
+            onClick={() => void policy.refetch()}
+          >
+            Retry upload settings
+          </Button>
+        )}
         {sendError && (
           <p role="alert" className="px-1 pt-2 text-sm text-destructive">
             {sendError}

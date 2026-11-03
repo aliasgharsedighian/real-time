@@ -1,4 +1,5 @@
 import { Logger, Module, Provider } from '@nestjs/common';
+import { ChatModule } from '../../gateway/chat/chat.module';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PollingController } from './polling.controller';
 import { GetMessagesService } from './polling.service';
@@ -13,7 +14,7 @@ const queryHandlers: Provider[] = [GetMessagesService];
 const repositories: Provider[] = [PrsimaPollingRepository];
 
 @Module({
-  imports: [CqrsModule],
+  imports: [CqrsModule, ChatModule],
   controllers: [...httpControllers],
   providers: [Logger, ...repositories, ...commandHandlers, ...queryHandlers],
 })

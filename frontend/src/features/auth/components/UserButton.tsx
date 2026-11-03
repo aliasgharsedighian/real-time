@@ -40,7 +40,11 @@ export default function UserButton() {
           aria-label="Account"
           className="rounded-full"
         >
-          <IdentityAvatar name={name} className="size-9" />
+          <IdentityAvatar
+            avatarId={user?.profile?.avatarId}
+            name={name}
+            className="size-9"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-3">

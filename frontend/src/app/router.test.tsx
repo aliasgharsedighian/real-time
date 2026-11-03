@@ -6,6 +6,11 @@ import { routes } from "./router";
 import { authenticate, getCurrentUser } from "@/features/auth/api";
 import { useSessionStore } from "@/features/auth/session-store";
 
+vi.mock("@/features/uploads/api", () => ({
+  useUploadPolicy: () => ({
+    data: { avatarMaxBytes: 5 * 1024 * 1024, imageMimeTypes: ["image/jpeg"] },
+  }),
+}));
 vi.mock("@/features/auth/api", () => ({
   authenticate: vi.fn(),
   getCurrentUser: vi.fn(),

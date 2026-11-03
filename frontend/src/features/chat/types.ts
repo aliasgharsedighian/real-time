@@ -1,3 +1,4 @@
+import type { MediaFile } from "@/features/uploads/api";
 import type { User } from "@/shared/lib/types";
 
 export interface ReadReceipt {
@@ -10,6 +11,7 @@ export interface Message {
   chatId: number;
   senderId: number;
   content: string;
+  attachments?: MediaFile[];
   createdAt: string;
   sender?: User;
   readStatuses?: ReadReceipt[];

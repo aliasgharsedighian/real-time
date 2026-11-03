@@ -1,3 +1,5 @@
+import { FilesUploadModule } from './modules/files-upload/files-upload.module';
+import { ChatModule } from './gateway/chat/chat.module';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -7,9 +9,6 @@ import { PollingModule } from './modules/polling/polling.module';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
 import { UserModule } from './modules/user/user.module';
-import { ChatGateway } from './gateway/chat/gateway';
-import { ChatService } from './gateway/chat/chat.service';
-import { PrismaClient } from '@prisma/client';
 
 const modules = [AuthModule, PollingModule, UserModule];
 
@@ -26,13 +25,12 @@ const prismaModule = [PrismaModule];
     ThrottlerModule.forRoot([{ limit: 100, ttl: 2 * 60 * 1000 }]), //2 minutes
     // Modules
     ...modules,
+    FilesUploadModule,
+    ChatModule,
     ...prismaModule,
   ],
   controllers: [],
   providers: [
-    ChatGateway,
-    ChatService,
-    PrismaClient,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

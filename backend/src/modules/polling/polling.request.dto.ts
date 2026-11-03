@@ -6,14 +6,20 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  MaxLength,
   Max,
   Min,
 } from 'class-validator';
 
 export class SendMessageRequestDto {
-  @IsNotEmpty({ message: 'content is required' })
   @IsString()
+  @MaxLength(10000)
   readonly content: string;
+
+  @IsOptional()
+  @IsUUID()
+  readonly attachmentId?: string;
 
   @IsNotEmpty({ message: 'chatId is required' })
   @IsNumber()

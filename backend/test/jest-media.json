@@ -1,0 +1,8 @@
+{
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "media.integration-spec.ts$",
+  "moduleNameMapper": { "^src/(.*)$": "<rootDir>/src/$1" },
+  "transform": { "^.+\\.ts$": "ts-jest" },
+  "testTimeout": 60000
+}

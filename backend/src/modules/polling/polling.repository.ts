@@ -1,3 +1,4 @@
+import { fileSelect } from '../files-upload/upload.policy';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
 import { PaginatedQueryRequestDto } from './polling.request.dto';
@@ -55,6 +56,7 @@ export class PrsimaPollingRepository {
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1, // latest message
+            include: { attachments: { select: fileSelect } },
           },
         },
         orderBy: {
@@ -84,6 +86,7 @@ export class PrsimaPollingRepository {
       skip,
       take: limit,
       include: {
+        attachments: { select: fileSelect },
         sender: {
           select: {
             id: true,
@@ -139,6 +142,7 @@ export class PrsimaPollingRepository {
         ],
       },
       include: {
+        attachments: { select: fileSelect },
         sender: {
           select: {
             id: true,

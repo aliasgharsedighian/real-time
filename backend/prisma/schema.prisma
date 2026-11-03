@@ -44,11 +44,15 @@ model User {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
+  uploadedFiles UploadFile[]
+
   otps OTP[] @relation("UserOTPs")
 }
 
 model Profile {
   id        Int     @id @default(autoincrement())
+  avatarId String? @unique
+  avatar UploadFile? @relation("Avatar", fields: [avatarId], references: [id], onDelete: SetNull)
   firstname String?
   lastname  String?
   address   String?
@@ -58,6 +62,7 @@ model Profile {
 
 model Chat {
   id            Int            @id @default(autoincrement())
+  files UploadFile[]
   isGroup      Boolean           @default(false)
   participants  ChatParticipant[]
   messages      Message[]
@@ -76,6 +81,7 @@ model ChatParticipant {
 
 model Message {
   id        Int   @id @default(autoincrement())
+  attachments UploadFile[]
   content   String
   chat      Chat     @relation(fields: [chatId], references: [id])
   chatId    Int
@@ -96,5 +102,26 @@ model MessageReadStatus {
   @@unique([messageId, userId]) // prevent duplicate read status
 
   @@index([userId, messageId])
+  @@index([messageId])
+}
+model UploadFile {
+  id String @id @default(uuid())
+  storageKey String @unique
+  kind String
+  mimeType String
+  size Int
+  width Int
+  height Int
+  duration Float?
+  ownerId Int
+  owner User @relation(fields: [ownerId], references: [id])
+  chatId Int?
+  chat Chat? @relation(fields: [chatId], references: [id])
+  messageId Int?
+  message Message? @relation(fields: [messageId], references: [id])
+  avatar Profile? @relation("Avatar")
+  createdAt DateTime @default(now())
+  @@index([ownerId, createdAt])
+  @@index([chatId])
   @@index([messageId])
 }

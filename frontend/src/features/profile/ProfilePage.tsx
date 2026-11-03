@@ -1,3 +1,4 @@
+import { AvatarEditor } from "./AvatarEditor";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,9 +74,11 @@ export default function ProfilePage() {
     <div className="brand-scene flex-1 p-4 pb-8 sm:p-8">
       <div className="mx-auto mb-6 flex max-w-xl flex-col items-center gap-3 text-center">
         <IdentityAvatar
+          avatarId={user?.profile?.avatarId}
           name={displayName(user)}
           className="size-24 border-2 border-primary text-3xl shadow-[0_0_35px_var(--brand-halo)]"
         />
+        <AvatarEditor hasAvatar={!!user?.profile?.avatarId} />
         <h2 className="max-w-full truncate text-2xl font-semibold">
           {displayName(user)}
         </h2>

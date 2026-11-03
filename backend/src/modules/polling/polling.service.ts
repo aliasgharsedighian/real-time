@@ -1,3 +1,5 @@
+import { ChatService } from '../../gateway/chat/chat.service';
+import { ChatGateway } from '../../gateway/chat/gateway';
 import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   CreateChatRequestDto,
@@ -12,6 +14,8 @@ export class GetMessagesService {
   constructor(
     private pollingRepo: PrsimaPollingRepository,
     private readonly prisma: PrismaService,
+    private readonly chats: ChatService,
+    private readonly gateway: ChatGateway,
   ) {}
 
   async getMessage(userId: number) {
@@ -93,22 +97,24 @@ export class GetMessagesService {
         select: { id: true },
       });
       if (!isParticipant) {
-        throw new Error('User is not a participant of this chat.');
+        throw new ForbiddenException('User is not a participant of this chat.');
       }
 
-      const messageCreated = await this.pollingRepo.sendMessage(
-        senderUserId,
+      const messageCreated = await this.chats.createMessage(
         chatId,
+        senderUserId,
         content,
+        dto.attachmentId,
       );
 
+      this.gateway.broadcast(messageCreated);
       return {
         statusCode: HttpStatus.CREATED,
         message: 'send Message successfully',
         data: messageCreated,
       };
     } catch (error) {
-      throw new Error(`Service Error "sendMessage": ${error.message}`);
+      throw error;
     }
   }
 

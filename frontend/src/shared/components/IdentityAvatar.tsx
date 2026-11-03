@@ -1,12 +1,16 @@
+import { useFileUrl } from "@/features/uploads/Media";
 import { cn } from "@/shared/lib/utils";
 
 export function IdentityAvatar({
   name,
+  avatarId,
   className,
 }: {
   name: string;
+  avatarId?: string | null;
   className?: string;
 }) {
+  const media = useFileUrl(avatarId);
   const initials = name
     .split(/[\s@._-]+/)
     .filter(Boolean)
@@ -21,7 +25,15 @@ export function IdentityAvatar({
         className,
       )}
     >
-      {initials || "?"}
+      {media.url ? (
+        <img
+          src={media.url}
+          alt=""
+          className="size-full rounded-full object-cover"
+        />
+      ) : (
+        initials || "?"
+      )}
     </span>
   );
 }

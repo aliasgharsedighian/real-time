@@ -155,7 +155,14 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                   `flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition-colors ${isActive ? "border-primary/25 bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "border-transparent hover:border-border hover:bg-muted/60"}`
                 }
               >
-                <IdentityAvatar name={title} />
+                <IdentityAvatar
+                  avatarId={
+                    !chat.isGroup
+                      ? chat.participants[0]?.user.profile?.avatarId
+                      : undefined
+                  }
+                  name={title}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold">
@@ -175,7 +182,12 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                       className="truncate text-xs leading-5 text-muted-foreground"
                       dir="auto"
                     >
-                      {lastMessage?.content || "Start the conversation"}
+                      {lastMessage?.content ||
+                        (lastMessage?.attachments?.length
+                          ? lastMessage.attachments[0].kind === "VIDEO"
+                            ? "Video"
+                            : "Photo"
+                          : "Start the conversation")}
                     </p>
                     {!!chat._count?.messages && (
                       <span
