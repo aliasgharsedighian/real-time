@@ -1,10 +1,10 @@
 # Real-time chat
 
-فرانت فعال پروژه از این مرحله **React + Vite در [`frontend/`](frontend/README.md)** است. توسعهٔ جدید فرانت در همین پوشه انجام می‌شود؛ `nextjs-frontend/` فقط به‌عنوان نسخهٔ قبلی نگه داشته شده است.
+فرانت اصلی پروژه **React + Vite در [`frontend/`](frontend/README.md)** است. هر درخواست تغییر فرانت یا UX به‌صورت پیش‌فرض روی همین پوشه اعمال می‌شود. `nextjs-frontend/` فقط بکاپ موقت است؛ حذف آن به درخواست صریح بعدی موکول شده است.
 
 - بک‌اند: `backend/` — NestJS، PostgreSQL و Prisma؛ اجرا مستقل از فرانت.
 - فرانت: `frontend/` — React، TypeScript، React Router، Tailwind و shadcn/ui؛ پورت توسعه 3003.
-- اسناد بررسی: [`docs/backend-context.md`](docs/backend-context.md) و [`docs/nextjs-frontend-context.md`](docs/nextjs-frontend-context.md).
+- مراجع فعلی: [فرانت اصلی](docs/frontend-context.md) و [بک‌اند](docs/backend-context.md). [بررسی تاریخی Next.js](docs/nextjs-frontend-context.md) فقط برای رجوع به بکاپ است.
 
 ```bash
 cd frontend
