@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,6 +31,9 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
       imageMaxBytes: 10e6,
       videoMaxBytes: 100e6,
       videoMaxSeconds: 300,
+      audioMaxSeconds: 300,
+      audioMaxBytes: 20e6,
+      audioMimeTypes: ["audio/webm"],
       imageMimeTypes: ["image/jpeg"],
       videoMimeTypes: ["video/mp4"],
     },
@@ -40,6 +43,11 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
 vi.mock("@/features/uploads/Media", () => ({
   LocalPreview: ({ file }: { file: File }) => <p>Preview: {file.name}</p>,
   Media: () => <p>Sent attachment</p>,
+}));
+vi.mock("./components/ChatEmojiPicker", () => ({
+  default: ({ onSelect }: { onSelect: (emoji: string) => void }) => (
+    <button onClick={() => onSelect("😀")}>Pick smile</button>
+  ),
 }));
 function setup() {
   render(
@@ -57,7 +65,9 @@ function setup() {
   );
 }
 async function select(type = "video/mp4") {
-  const picker = await screen.findByLabelText("Choose chat photo or video");
+  const picker = await screen.findByLabelText(
+    "Choose chat photo, video or audio",
+  );
   fireEvent.change(picker, {
     target: { files: [new File(["media"], "clip.mp4", { type })] },
   });
@@ -71,6 +81,80 @@ describe("chat attachments", () => {
       .setTokens({ accessToken: "access", refreshToken: "refresh" });
     mocks.upload.mockResolvedValue({ id: "attachment-id", kind: "VIDEO" });
     mocks.send.mockResolvedValue(undefined);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  it("switches between microphone and send as text is entered and cleared", async () => {
+    setup();
+    await screen.findByRole("button", { name: "Hold to record voice message" });
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "hello" },
+    });
+    expect(screen.getByRole("button", { name: "Send message" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Hold to record voice message" }),
+    ).toBeTruthy();
+  });
+  it("inserts the selected emoji into the message", async () => {
+    setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose emoji" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Pick smile" }));
+    expect(
+      (screen.getByLabelText("Message") as HTMLTextAreaElement).value,
+    ).toBe("😀");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("previews a held recording on release and uploads only after confirmation", async () => {
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    const stop = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi
+          .fn()
+          .mockResolvedValue({ getTracks: () => [{ stop }] }),
+      },
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        static isTypeSupported() {
+          return true;
+        }
+        state = "inactive";
+        mimeType = "audio/webm";
+        ondataavailable?: (event: { data: Blob }) => void;
+        onstop?: () => void;
+        start() {
+          this.state = "recording";
+        }
+        stop() {
+          this.state = "inactive";
+          this.ondataavailable?.({ data: new Blob(["voice"]) });
+          this.onstop?.();
+        }
+      },
+    );
+    setup();
+    const mic = await screen.findByRole("button", {
+      name: "Hold to record voice message",
+    });
+    fireEvent.pointerDown(mic, { button: 0, pointerId: 1 });
+    await screen.findByText(/Recording 0:00/);
+    fireEvent.pointerUp(mic, { pointerId: 1 });
+    await screen.findByText(/Listen to your voice message/);
+    expect(stop).toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith("", "attachment-id"),
+    );
+    expect(mocks.upload.mock.calls[0][1].type).toBe("audio/webm");
   });
   it("uploads a video and sends an attachment without requiring a caption", async () => {
     setup();
@@ -122,9 +206,9 @@ describe("chat attachments", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Send message",
+          name: "Hold to record voice message",
         }) as HTMLButtonElement
       ).disabled,
-    ).toBe(true);
+    ).toBe(false);
   });
 });

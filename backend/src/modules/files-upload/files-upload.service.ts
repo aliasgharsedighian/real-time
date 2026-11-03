@@ -61,13 +61,16 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
       if (!avatar) await this.ensureParticipant(chatId, ownerId);
       const image = uploadPolicy.imageMimeTypes.includes(file.mimetype);
       const video = uploadPolicy.videoMimeTypes.includes(file.mimetype);
-      if ((!image && !video) || (avatar && !image))
+      const audio = uploadPolicy.audioMimeTypes.includes(file.mimetype);
+      if ((!image && !video && !audio) || (avatar && !image))
         throw new BadRequestException('Unsupported file type.');
       const max = avatar
         ? uploadPolicy.avatarMaxBytes
         : image
           ? uploadPolicy.imageMaxBytes
-          : uploadPolicy.videoMaxBytes;
+          : audio
+            ? uploadPolicy.audioMaxBytes
+            : uploadPolicy.videoMaxBytes;
       if (!file.size || file.size > max)
         throw new BadRequestException(
           `File must be between 1 byte and ${max / 1024 / 1024} MB.`,
@@ -78,11 +81,13 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
         );
       this.active++;
       acquired = true;
-      const storageKey = `media/${randomUUID()}.${image ? 'webp' : 'mp4'}`;
+      const storageKey = `media/${randomUUID()}.${image ? 'webp' : audio ? 'm4a' : 'mp4'}`;
       output = join(uploadRoot(), storageKey);
       const metadata = image
         ? await this.processor.image(file.path, output, avatar)
-        : await this.processor.video(file.path, output);
+        : audio
+          ? await this.processor.audio(file.path, output)
+          : await this.processor.video(file.path, output);
       if (!avatar) {
         const record = await this.prisma.uploadFile.create({
           data: { ...metadata, storageKey, ownerId, chatId },

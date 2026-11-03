@@ -186,7 +186,9 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                         (lastMessage?.attachments?.length
                           ? lastMessage.attachments[0].kind === "VIDEO"
                             ? "Video"
-                            : "Photo"
+                            : lastMessage.attachments[0].kind === "AUDIO"
+                              ? "Voice message"
+                              : "Photo"
                           : "Start the conversation")}
                     </p>
                     {!!chat._count?.messages && (

@@ -87,6 +87,69 @@ describe('private media uploads', () => {
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
     await rm(join(directory, data.storageKey));
   });
+  it('encodes real voice audio as M4A and removes the input', async () => {
+    const wav = Buffer.alloc(44 + 16000 * 2);
+    wav.write('RIFF', 0);
+    wav.writeUInt32LE(wav.length - 8, 4);
+    wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(16000, 24);
+    wav.writeUInt32LE(32000, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(wav.length - 44, 40);
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/chats/3')
+      .attach('file', wav, { filename: 'voice.wav', contentType: 'audio/wav' });
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      kind: 'AUDIO',
+      mimeType: 'audio/mp4',
+      width: 0,
+      height: 0,
+    });
+    expect((response.body as { duration: number }).duration).toBeGreaterThan(0);
+    const data = (
+      prisma.uploadFile.create.mock.calls as [
+        { data: { storageKey: string } },
+      ][]
+    )[0][0].data;
+    expect(data.storageKey).toMatch(/\.m4a$/);
+    expect(
+      (await readFile(join(directory, data.storageKey))).toString(
+        'ascii',
+        4,
+        8,
+      ),
+    ).toBe('ftyp');
+    expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+    await rm(join(directory, data.storageKey));
+  });
+  it('rejects forged audio and cleans temporary files', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/chats/3')
+      .attach('file', Buffer.from('not audio'), {
+        filename: 'voice.webm',
+        contentType: 'audio/webm',
+      });
+    expect(response.status).toBe(400);
+    expect(prisma.uploadFile.create).not.toHaveBeenCalled();
+    expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+    expect(await readdir(join(directory, 'media'))).toEqual([]);
+  });
+  it('rejects audio as an avatar', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/avatar')
+      .attach('file', Buffer.from('audio'), {
+        filename: 'voice.webm',
+        contentType: 'audio/webm',
+      });
+    expect(response.status).toBe(400);
+    expect(prisma.uploadFile.create).not.toHaveBeenCalled();
+  });
   it('rejects a forged MIME type and cleans both original and partial output', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/files/chats/3')

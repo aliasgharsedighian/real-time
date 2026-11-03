@@ -60,6 +60,128 @@ export class MediaProcessorService {
     }
   }
 
+  async audio(input: string, output: string) {
+    try {
+      const handle = await import('node:fs/promises').then((fs) =>
+        fs.open(input, 'r'),
+      );
+      const header = Buffer.alloc(16);
+      try {
+        await handle.read(header, 0, 16, 0);
+      } finally {
+        await handle.close();
+      }
+      const supported =
+        header.toString('ascii', 4, 8) === 'ftyp' ||
+        header.readUInt32BE(0) === 0x1a45dfa3 ||
+        header.toString('ascii', 0, 4) === 'OggS' ||
+        (header.toString('ascii', 0, 4) === 'RIFF' &&
+          header.toString('ascii', 8, 12) === 'WAVE') ||
+        header.toString('ascii', 0, 3) === 'ID3' ||
+        (header[0] === 0xff && (header[1] & 0xe0) === 0xe0);
+      if (!supported) throw new Error('Unsupported audio container');
+      const probe = async (path: string) => {
+        const { stdout } = await run(
+          process.env.FFPROBE_PATH || ffprobe.path,
+          [
+            '-v',
+            'error',
+            '-protocol_whitelist',
+            'file,pipe',
+            '-show_streams',
+            '-show_format',
+            '-of',
+            'json',
+            path,
+          ],
+          { timeout: 15_000, maxBuffer: 1024 * 1024 },
+        );
+        return JSON.parse(stdout) as ProbeResult;
+      };
+      const source = await probe(input);
+      if (
+        !source.streams?.some((s) => s.codec_type === 'audio') ||
+        source.streams.some(
+          (s) => s.codec_type === 'video' && !s.disposition?.attached_pic,
+        )
+      )
+        throw new Error('Expected audio only');
+      // MediaRecorder WebM may have no duration until decoded. Bound decoding and verify the output.
+      const sourceDuration = Number(source.format?.duration);
+      if (
+        Number.isFinite(sourceDuration) &&
+        sourceDuration > uploadPolicy.audioMaxSeconds
+      )
+        throw new Error('Audio too long');
+      await run(
+        process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg',
+        [
+          '-nostdin',
+          '-v',
+          'error',
+          '-y',
+          '-protocol_whitelist',
+          'file,pipe',
+          '-threads',
+          '2',
+          '-i',
+          input,
+          '-map',
+          '0:a:0',
+          '-vn',
+          '-map_metadata',
+          '-1',
+          '-map_chapters',
+          '-1',
+          '-t',
+          String(uploadPolicy.audioMaxSeconds + 1),
+          '-c:a',
+          'aac',
+          '-b:a',
+          '96k',
+          '-ac',
+          '1',
+          '-movflags',
+          '+faststart',
+          '-fs',
+          String(uploadPolicy.audioMaxBytes),
+          output,
+        ],
+        { timeout: 120_000, maxBuffer: 1024 * 1024 },
+      );
+      const result = await probe(output);
+      const duration = Number(result.format?.duration);
+      const size = Number(result.format?.size);
+      if (
+        !Number.isFinite(duration) ||
+        duration <= 0 ||
+        duration > uploadPolicy.audioMaxSeconds ||
+        !Number.isFinite(size) ||
+        size <= 0 ||
+        size > uploadPolicy.audioMaxBytes ||
+        (Number.isFinite(sourceDuration) &&
+          Math.abs(sourceDuration - duration) > 1)
+      )
+        throw new Error('Invalid audio duration or size');
+      return {
+        kind: 'AUDIO',
+        mimeType: 'audio/mp4',
+        size,
+        width: 0,
+        height: 0,
+        duration,
+      };
+    } catch (error: unknown) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+        throw new ServiceUnavailableException(
+          'Audio processing is unavailable.',
+        );
+      throw new BadRequestException(
+        'Invalid audio. Use WebM, M4A, Ogg, MP3 or WAV, up to 5 minutes.',
+      );
+    }
+  }
+
   async video(input: string, output: string) {
     try {
       // Inspect actual container magic before invoking the decoder. Never permit playlists/URLs.

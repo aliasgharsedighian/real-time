@@ -54,7 +54,15 @@ export function Media({ file }: { file: MediaFile }) {
     );
   return (
     <div className="max-w-full space-y-1">
-      {file.kind === "VIDEO" ? (
+      {file.kind === "AUDIO" ? (
+        <audio
+          src={media.url}
+          controls
+          preload="metadata"
+          aria-label="Voice message"
+          className="w-64 max-w-full"
+        />
+      ) : file.kind === "VIDEO" ? (
         <video
           src={media.url}
           controls
@@ -80,7 +88,7 @@ export function Media({ file }: { file: MediaFile }) {
       )}
       <a
         href={media.url}
-        download={`batgram-${file.id}.${file.kind === "VIDEO" ? "mp4" : "webp"}`}
+        download={`batgram-${file.id}.${file.kind === "VIDEO" ? "mp4" : file.kind === "AUDIO" ? "m4a" : "webp"}`}
         className="block text-xs underline"
       >
         Download · {(file.size / 1024 / 1024).toFixed(2)} MB
@@ -96,7 +104,15 @@ export function LocalPreview({ file }: { file: File }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
   const url = resource?.file === file ? resource?.url : undefined;
-  return file.type.startsWith("video/") ? (
+  return file.type.startsWith("audio/") ? (
+    <audio
+      src={url}
+      controls
+      preload="metadata"
+      aria-label="Voice message preview"
+      className="w-full max-w-sm"
+    />
+  ) : file.type.startsWith("video/") ? (
     <video
       src={url}
       controls

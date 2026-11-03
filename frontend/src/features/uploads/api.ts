@@ -4,7 +4,7 @@ import { useSessionStore } from "@/features/auth/session-store";
 
 export interface MediaFile {
   id: string;
-  kind: "IMAGE" | "VIDEO";
+  kind: "IMAGE" | "VIDEO" | "AUDIO";
   mimeType: string;
   size: number;
   width: number;
@@ -16,6 +16,9 @@ export interface UploadPolicy {
   imageMaxBytes: number;
   videoMaxBytes: number;
   videoMaxSeconds: number;
+  audioMaxBytes: number;
+  audioMaxSeconds: number;
+  audioMimeTypes: string[];
   imageMimeTypes: string[];
   videoMimeTypes: string[];
 }
@@ -32,18 +35,22 @@ export function validateUpload(
   policy: UploadPolicy,
   avatar = false,
 ) {
-  const image = policy.imageMimeTypes.includes(file.type);
-  if (!image && (avatar || !policy.videoMimeTypes.includes(file.type)))
+  const mime = file.type.split(";")[0];
+  const image = policy.imageMimeTypes.includes(mime);
+  const audio = policy.audioMimeTypes?.includes(mime);
+  if (!image && (avatar || (!policy.videoMimeTypes.includes(mime) && !audio)))
     throw new Error(
       avatar
         ? "Choose a JPEG, PNG or WebP image."
-        : "Choose a JPEG, PNG, WebP, MP4, WebM or MOV file.",
+        : "Choose a JPEG, PNG, WebP, MP4, WebM, MOV or audio file.",
     );
   const max = avatar
     ? policy.avatarMaxBytes
     : image
       ? policy.imageMaxBytes
-      : policy.videoMaxBytes;
+      : audio
+        ? policy.audioMaxBytes
+        : policy.videoMaxBytes;
   if (!file.size || file.size > max)
     throw new Error(`File must be between 1 byte and ${max / 1024 / 1024} MB.`);
 }

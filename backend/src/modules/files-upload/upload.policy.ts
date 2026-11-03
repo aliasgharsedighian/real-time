@@ -5,6 +5,16 @@ export const uploadPolicy = {
   imageMaxBytes: 10 * 1024 * 1024,
   videoMaxBytes: 100 * 1024 * 1024,
   videoMaxSeconds: 300,
+  audioMaxBytes: 20 * 1024 * 1024,
+  audioMaxSeconds: 300,
+  audioMimeTypes: [
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/x-wav',
+  ],
   imageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
   videoMimeTypes: ['video/mp4', 'video/webm', 'video/quicktime'],
 };

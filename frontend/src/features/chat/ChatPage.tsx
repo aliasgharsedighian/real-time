@@ -6,10 +6,18 @@ import {
   validateUpload,
   type MediaFile,
 } from "@/features/uploads/api";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CheckCheck, SendIcon, Paperclip, X } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  SendIcon,
+  Paperclip,
+  X,
+  Mic,
+  Smile,
+} from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
 import { Button } from "@/shared/ui/button";
@@ -21,6 +29,10 @@ import { displayName } from "@/shared/lib/types";
 import NotFoundPage from "@/pages/NotFoundPage";
 import { chatKeys, getHistory } from "./api";
 import { useChatRoom } from "./hooks/use-chat-room";
+
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
+import { useVoiceRecorder } from "./hooks/use-voice-recorder";
+const EmojiPicker = lazy(() => import("./components/ChatEmojiPicker"));
 
 export default function ChatPage() {
   const { chatId } = useParams();
@@ -48,11 +60,24 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [uploaded, setUploaded] = useState<MediaFile>();
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const voice = useVoiceRecorder({
+    maxSeconds: policy.data?.audioMaxSeconds ?? 300,
+    maxBytes: policy.data?.audioMaxBytes ?? 20 * 1024 * 1024,
+    onReady: (recording) => {
+      setFile(recording);
+      setUploaded(undefined);
+      setSendError("");
+    },
+    onError: setSendError,
+  });
+  const hasMessage = !!(input.trim() || file || uploaded);
   const picker = useRef<HTMLInputElement>(null);
   const uploadController = useRef<AbortController | null>(null);
   useEffect(() => () => uploadController.current?.abort(), []);
   const [pending, setPending] = useState(false);
-  const [sendError, setSendError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -79,7 +104,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
   }, [lastMessageId, messages?.length]);
 
   async function submit() {
-    if ((!input.trim() && !file && !uploaded) || pending || !room.connected)
+    if (
+      (!input.trim() && !file && !uploaded) ||
+      pending ||
+      voice.active ||
+      !room.connected
+    )
       return;
     const text = input;
     setPending(true);
@@ -273,6 +303,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
               ) : (
                 uploaded && <Media file={uploaded} />
               )}
+              {file?.type.startsWith("audio/") && (
+                <p className="mt-2 text-sm">
+                  Listen to your voice message, then send or discard it.
+                </p>
+              )}
               <p className="mt-1 truncate text-xs">
                 {file?.name || "Attachment ready"}
               </p>
@@ -319,13 +354,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
           ref={picker}
           type="file"
           className="sr-only"
-          aria-label="Choose chat photo or video"
-          disabled={pending || !policy.data}
+          aria-label="Choose chat photo, video or audio"
+          disabled={pending || voice.active || !policy.data}
           accept={
             policy.data
               ? [
                   ...policy.data.imageMimeTypes,
                   ...policy.data.videoMimeTypes,
+                  ...(policy.data.audioMimeTypes ?? []),
                 ].join(",")
               : ""
           }
@@ -344,6 +380,24 @@ function ChatRoom({ chatId }: { chatId: number }) {
             }
           }}
         />
+        {voice.active && (
+          <div
+            role="status"
+            className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm"
+          >
+            <span className="flex items-center gap-2">
+              <Mic className="size-4 animate-pulse text-destructive" />
+              {voice.status === "requesting"
+                ? "Allow microphone access, then hold again if released."
+                : voice.status === "stopping"
+                  ? "Preparing voice preview…"
+                  : `Recording ${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, "0")} · Release to preview`}
+            </span>
+            <Button type="button" variant="ghost" onClick={voice.cancel}>
+              Cancel recording
+            </Button>
+          </div>
+        )}
         <label htmlFor="message-input" className="sr-only">
           Message
         </label>
@@ -353,18 +407,72 @@ function ChatRoom({ chatId }: { chatId: number }) {
             variant="ghost"
             size="icon"
             className="size-12 shrink-0"
-            aria-label="Attach photo or video"
-            disabled={pending || !policy.data}
+            aria-label="Attach photo, video or audio"
+            disabled={pending || voice.active || !policy.data}
             onClick={() => picker.current?.click()}
           >
             <Paperclip />
           </Button>
+          <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-12 shrink-0"
+                aria-label="Choose emoji"
+                disabled={pending || voice.active}
+              >
+                <Smile />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="start"
+              className="w-[min(350px,calc(100vw-24px))] overflow-hidden p-0"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                textarea.current?.focus();
+              }}
+            >
+              <Suspense
+                fallback={
+                  <p role="status" className="p-4">
+                    Loading emojis…
+                  </p>
+                }
+              >
+                {emojiOpen && (
+                  <EmojiPicker
+                    onSelect={(emoji) => {
+                      const element = textarea.current;
+                      const start = element?.selectionStart ?? input.length;
+                      const end = element?.selectionEnd ?? input.length;
+                      const next =
+                        input.slice(0, start) + emoji + input.slice(end);
+                      if (next.length > 10000) return;
+                      setInput(next);
+                      room.startTyping();
+                      requestAnimationFrame(() => {
+                        element?.focus();
+                        element?.setSelectionRange(
+                          start + emoji.length,
+                          start + emoji.length,
+                        );
+                      });
+                    }}
+                  />
+                )}
+              </Suspense>
+            </PopoverContent>
+          </Popover>
           <textarea
+            ref={textarea}
             id="message-input"
             rows={1}
             maxLength={10000}
-            disabled={pending}
-            className="block min-h-12 max-h-36 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            disabled={pending || voice.active}
+            className="block min-h-12 max-h-36 min-w-0 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             dir="auto"
             value={input}
             onChange={(event) => {
@@ -384,27 +492,68 @@ function ChatRoom({ chatId }: { chatId: number }) {
             }}
             placeholder="Write your message…"
           />
-          <Button
-            type="submit"
-            size="icon"
-            className="brand-cta size-12 shrink-0 rounded-full"
-            aria-label="Send message"
-            disabled={
-              (!input.trim() && !file && !uploaded) ||
-              pending ||
-              !room.connected
-            }
-          >
-            {pending ? (
-              <span className="animate-pulse text-xs">…</span>
-            ) : (
-              <SendIcon />
-            )}
-          </Button>
+          {hasMessage ? (
+            <Button
+              type="submit"
+              size="icon"
+              className="brand-cta size-12 shrink-0 rounded-full"
+              aria-label="Send message"
+              disabled={pending || voice.active || !room.connected}
+            >
+              {pending ? (
+                <span className="animate-pulse text-xs">…</span>
+              ) : (
+                <SendIcon />
+              )}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              className="brand-cta size-12 shrink-0 touch-none select-none rounded-full"
+              aria-label="Hold to record voice message"
+              title="Hold to record, release to preview"
+              aria-pressed={voice.active}
+              disabled={
+                pending || !room.connected || !policy.data?.audioMimeTypes
+              }
+              onContextMenu={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+                setEmojiOpen(false);
+                setSendError("");
+                void voice.start();
+              }}
+              onPointerUp={voice.stop}
+              onPointerCancel={voice.cancel}
+              onLostPointerCapture={voice.stop}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") voice.cancel();
+                if (
+                  (event.key === " " || event.key === "Enter") &&
+                  !event.repeat
+                ) {
+                  event.preventDefault();
+                  setSendError("");
+                  void voice.start();
+                }
+              }}
+              onKeyUp={(event) => {
+                if (event.key === " " || event.key === "Enter") {
+                  event.preventDefault();
+                  voice.stop();
+                }
+              }}
+            >
+              <Mic />
+            </Button>
+          )}
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {policy.data
-            ? `Photos up to ${policy.data.imageMaxBytes / 1024 / 1024} MB · Videos up to ${policy.data.videoMaxBytes / 1024 / 1024} MB / ${policy.data.videoMaxSeconds / 60} min`
+            ? `Photos up to ${policy.data.imageMaxBytes / 1024 / 1024} MB · Videos up to ${policy.data.videoMaxBytes / 1024 / 1024} MB / ${policy.data.videoMaxSeconds / 60} min · Hold mic to record voice`
             : "Loading upload settings…"}
         </p>
         {policy.isError && (
