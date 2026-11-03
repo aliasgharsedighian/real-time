@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "preview": "vite preview --host 0.0.0.0 --port 3003",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:pwa": "npm run build && node scripts/check-pwa.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

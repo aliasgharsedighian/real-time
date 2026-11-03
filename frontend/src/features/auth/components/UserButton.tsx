@@ -53,7 +53,7 @@ export default function UserButton() {
         >
           <span className="font-semibold">{name}</span>
           <span className="text-sm text-muted-foreground">{user?.email}</span>
-          <span className="mt-2 text-sm text-blue-600">Edit profile</span>
+          <span className="mt-2 text-sm text-brand">Edit profile</span>
         </Link>
         <Button
           variant="outline"

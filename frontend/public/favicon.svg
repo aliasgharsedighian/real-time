@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#101216"/>
+  <!-- Temporary BatGram monogram, pending the final logo selection. -->
+  <g id="mark">
+    <path fill="#f5c518" d="M136 112h240q36 0 36 36v168q0 36-36 36H245l-74 48v-48h-35q-36 0-36-36V148q0-36 36-36Z"/>
+    <text x="256" y="285" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="148" font-weight="bold" letter-spacing="-8" fill="#101216">BG</text>
+  </g>
+</svg>

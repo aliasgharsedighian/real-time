@@ -109,7 +109,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
           Connecting… Your draft is saved on this device.
         </p>
       )}
-      <div className="min-h-6 px-4 text-sm text-blue-600" aria-live="polite">
+      <div className="min-h-6 px-4 text-sm text-brand" aria-live="polite">
         {room.typing.length === 1
           ? `${room.typing[0].username || "Someone"} is typing…`
           : room.typing.length > 1
@@ -172,7 +172,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                       {formatDateBasedOnToday(message.createdAt)}
                     </time>
                     <div
-                      className={`flex items-end gap-2 rounded-b-xl px-3 py-2.5 text-sm ${own ? "rounded-tr-xl bg-blue-500 text-white" : "rounded-tl-xl bg-muted text-foreground"}`}
+                      className={`flex items-end gap-2 rounded-b-xl px-3 py-2.5 text-sm ${own ? "rounded-tr-xl bg-primary text-primary-foreground" : "rounded-tl-xl bg-muted text-foreground"}`}
                     >
                       <span
                         className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"

@@ -1,4 +1,4 @@
-# فرانت‌اند فعال Beam
+# فرانت‌اند فعال BatGram
 
 نسخهٔ اصلی فرانت **`frontend/`** با React + Vite است. همهٔ درخواست‌های تغییر فرانت و UX به‌صورت پیش‌فرض به همین نسخه مربوط‌اند. `nextjs-frontend/` فقط بکاپ موقت است و فعلاً حذف یا تغییر نمی‌کند. [مرجع فرانت اصلی](../docs/frontend-context.md) تصمیم پروژه و زمینهٔ ادامهٔ توسعه را ثبت می‌کند.
 
@@ -34,6 +34,7 @@ npm run preview    # پیش‌نمایش خروجی dist، پورت 3003
 npm run typecheck
 npm run lint       # بدون --fix
 npm test
+npm run test:pwa   # build + بررسی manifest، آیکون‌ها و رفتار سرویس‌ورکر
 ```
 
 برای production محتوای `dist/` سرو می‌شود؛ `vite preview` صرفاً پیش‌نمایش است. سرور وب باید مسیرهای ناشناختهٔ فایل را به `index.html` برگرداند تا reload لینک مستقیم کار کند. نمونهٔ قسمت location در Nginx:
@@ -115,3 +116,38 @@ npx shadcn@latest add textarea
 - این بررسی HTTP و تست‌های شبیه‌سازی‌شده جایگزین آزمون تصویری مرورگر یا آزمون چت با دو کاربر واقعی نیستند. بک‌اند و فایل‌های Next.js در انتقال تغییر نکردند.
 
 راهنمای تنظیم اولیه: [Vite](https://vite.dev/guide/)، [Tailwind با Vite](https://tailwindcss.com/docs/installation/using-vite)، [shadcn با Vite](https://ui.shadcn.com/docs/installation/vite).
+
+## پوستهٔ BatGram
+
+پوستهٔ پیش‌فرض تاریک است؛ دکمهٔ خورشید/ماه در صفحهٔ اصلی، ورود و سربرگ چت تم را عوض می‌کند. انتخاب با کلید `batgram-theme` ذخیره می‌شود. تم روشن قبلی حفظ شده است. کلیدهای نشست و draft برای حفظ حساب و پیش‌نویس‌های موجود تغییر نکرده‌اند.
+
+## نصب PWA
+
+`public/manifest.webmanifest` نام BatGram، اجرای standalone، محدودهٔ `/` و شروع از `/dashboard` را تعریف می‌کند. شروع از داشبورد همچنان تابع اعتبارسنجی نشست است و مهمان به ورود هدایت می‌شود. آیکون‌های PNG با اندازه‌های ۱۹۲ و ۵۱۲، نسخه‌های maskable مستقل، Apple Touch با اندازهٔ ۱۸۰، favicon چنداندازه‌ای ICO و SVG آماده‌اند. آیکون فعلی نشان موقت **BG در حباب چت** است و پس از انتخاب لوگو جایگزین می‌شود. برای بازتولید آیکون‌ها از `public/favicon.svg` فرمان `python3 scripts/generate-pwa-icons.py` را اجرا کنید؛ ابزار به کتابخانه‌های سیستمی librsvg و cairo نیاز دارد و build به آن وابسته نیست.
+
+سرویس‌ورکر هنگام build در `dist/sw.js` با نسخهٔ مبتنی بر محتوای خروجی تولید و فقط در production ثبت می‌شود. فایل‌های عمومی و chunkهای lazy کش می‌شوند. navigation ابتدا به شبکه می‌رود و هنگام قطع اتصال صفحهٔ `offline.html` نمایش داده می‌شود. درخواست‌های API، نشست، socket و پیام‌ها در کش سرویس‌ورکر ذخیره نمی‌شوند؛ ارسال پیام و تأیید نشست به اینترنت نیاز دارند. نسخهٔ جدید پس از بسته‌شدن پنجره‌های نسخهٔ قبلی فعال می‌شود تا کاربر وسط گفتگو reload نشود.
+
+برای بررسی محلی `npm run build` و سپس `npm run preview` را اجرا کنید. سرویس‌ورکر روی HTTPS یا localhost کار می‌کند؛ روی آدرس HTTP شبکهٔ محلی مثل IP دستگاه فعال نمی‌شود. روی مرورگرهای پشتیبان از گزینهٔ نصب مرورگر و در Safari آیفون از Share → Add to Home Screen استفاده کنید. نصب واقعی و ظاهر آیکون باید روی دستگاه مقصد نیز بررسی شود.
+
+در استقرار، تمام محتوای `dist/` را در ریشهٔ سایت سرو کنید. `sw.js`، `index.html` و manifest نباید کش بلندمدت immutable داشته باشند. در Nginx، این locationها را کنار fallback عمومی SPA قرار دهید تا فایل مفقود به‌جای HTML با 404 پاسخ بگیرد:
+
+```nginx
+location = /sw.js {
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+location = /manifest.webmanifest {
+    default_type application/manifest+json;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+location = /index.html {
+    add_header Cache-Control "no-cache" always;
+    try_files $uri =404;
+}
+location /icons/ {
+    try_files $uri =404;
+}
+```
+
+مراجع: [نصب PWA در MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)، [چرخهٔ سرویس‌ورکر](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers).

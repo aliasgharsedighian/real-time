@@ -14,6 +14,7 @@ import { chatKeys } from "@/features/chat/api";
 import type { History } from "@/features/chat/types";
 import { useSessionStore } from "@/features/auth/session-store";
 import { displayName } from "@/shared/lib/types";
+import { ThemeToggle } from "@/shared/components/ThemeToggle";
 
 export default function ChatLayout() {
   const match = useMatch("/dashboard/websocket/:chatId");
@@ -50,6 +51,7 @@ export default function ChatLayout() {
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-4" />
           <h1 className="truncate font-medium">{title}</h1>
+          <div className="ml-auto"><ThemeToggle /></div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Outlet />

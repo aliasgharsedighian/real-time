@@ -9,12 +9,12 @@ export default function Home() {
       <Header />
       <main className="flex-1 flex flex-col items-center px-4 py-16 sm:px-6 text-center gap-20">
         <div className="max-w-4xl space-y-8 relative">
-          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-20 dark:to-purple-950/20 rounded-3xl blur-3xl scale-150 opacity-60"></div>
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-amber-50 via-yellow-50 to-stone-100 dark:from-yellow-500/10 dark:via-amber-500/5 dark:to-transparent rounded-3xl blur-3xl scale-150 opacity-60"></div>
           <div className="space-y-8 relative max-w-4xl">
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 dark:from-blue-400 dark:via-purple-400 dark:to-indigo-400">
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight text-foreground">
               Connect instantly
               <br />
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple dark:to-pink-400">
+              <span className="text-brand">
                 Chat smarter.
               </span>
             </h1>
@@ -102,7 +102,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
             <div>
-              <span className="text-xl font-bold tracking-light">Beam</span>
+              <span className="text-xl font-bold tracking-light">BatGram</span>
               <p className="text-sm text-muted-foreground mt-1">
                 The Future of communication
               </p>
@@ -131,10 +131,7 @@ export default function Home() {
           </div>
           <div className="border-t mt-8 pt-6 text-center">
             <p className="text-xs text-muted-foreground">
-              2025 Beam. This is a Demo. we have no affilition with any of the
-              brands mentioned in the video including Beam, any usage is purerly
-              educational, in the event of infringement, please contact us and
-              we will remove/alter the content immediately
+              © {new Date().getFullYear()} BatGram.
             </p>
           </div>
         </div>

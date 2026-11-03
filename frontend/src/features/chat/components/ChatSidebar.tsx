@@ -26,6 +26,7 @@ export function ChatSidebar() {
     <Sidebar variant="floating">
       <NewChatDialog open={open} onOpenChange={setOpen} />
       <SidebarHeader>
+        <p className="px-2 pt-2 text-lg font-bold">Bat<span className="text-brand">Gram</span></p>
         <div className="flex items-center justify-between p-2">
           <div className="min-w-0">
             <span className="text-xs text-muted-foreground">Welcome back</span>
@@ -86,7 +87,7 @@ export function ChatSidebar() {
                       : displayName(chat.participants[0]?.user)}
                   </span>
                   {!!chat._count?.messages && (
-                    <span className="flex min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-sm text-white">
+                    <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-sm text-primary-foreground">
                       {chat._count.messages}
                     </span>
                   )}

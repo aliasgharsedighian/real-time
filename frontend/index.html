@@ -1,10 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark" style="color-scheme: dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
-    <title>Beam — Chat</title>
+    <meta name="theme-color" content="#101216" />
+    <meta name="description" content="BatGram — stay connected with real-time messaging." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="BatGram" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>BatGram — Chat</title>
+    <script>
+      try {
+        const theme = localStorage.getItem("batgram-theme") === "light" ? "light" : "dark";
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#101216" : "#ffffff";
+      } catch { /* Default to dark when storage is unavailable. */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

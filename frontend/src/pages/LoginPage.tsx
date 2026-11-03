@@ -4,6 +4,7 @@ import AuthButton from "@/features/auth/components/AuthButton";
 import { Button } from "@/shared/ui/button";
 import { errorMessage } from "@/shared/lib/api";
 import { useSessionStore } from "@/features/auth/session-store";
+import { ThemeToggle } from "@/shared/components/ThemeToggle";
 
 export default function LoginPage() {
   const { user, checking, error, retry } = useSession();
@@ -17,7 +18,8 @@ export default function LoginPage() {
   return (
     <main className="grid min-h-dvh place-items-center p-6">
       <div className="max-w-md space-y-6 text-center">
-        <h1 className="text-3xl font-bold">Welcome to Beam</h1>
+        <ThemeToggle />
+        <h1 className="text-3xl font-bold">Welcome to BatGram</h1>
         <p className="text-muted-foreground">
           Sign in or create an account to continue to your chats.
         </p>

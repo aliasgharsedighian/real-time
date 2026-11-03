@@ -145,7 +145,7 @@ function AuthDialog({
                     if you haven't account yet, please{" "}
                     <span
                       onClick={() => setTab("Signup")}
-                      className="text-blue-600 font-bold cursor-pointer underline"
+                      className="text-brand font-bold cursor-pointer underline"
                     >
                       signUp
                     </span>
