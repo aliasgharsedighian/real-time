@@ -9,6 +9,8 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ProfilePage = lazy(() => import("@/features/profile/ProfilePage"));
 const ChatPage = lazy(() => import("@/features/chat/ChatPage"));
+const CallsPage = lazy(() => import("@/features/calls/CallsPage"));
+const CallPage = lazy(() => import("@/features/calls/CallPage"));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
 
 function RouteBoundary() {
@@ -38,6 +40,8 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <DashboardPage /> },
               { path: "profile", element: <ProfilePage /> },
+              { path: "calls", element: <CallsPage /> },
+              { path: "calls/active", element: <CallPage /> },
               { path: "websocket/:chatId", element: <ChatPage /> },
               { path: "*", element: <NotFoundPage /> },
             ],

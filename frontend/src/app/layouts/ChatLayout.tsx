@@ -20,10 +20,21 @@ import { ThemeToggle } from "@/shared/components/ThemeToggle";
 import { Brand } from "@/shared/components/Brand";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Button } from "@/shared/ui/button";
+import CallProvider from "@/features/calls/CallProvider";
+import { CallButton } from "@/features/calls/CallButton";
 
 export default function ChatLayout() {
+  return (
+    <CallProvider>
+      <ChatLayoutContent />
+    </CallProvider>
+  );
+}
+
+function ChatLayoutContent() {
   const match = useMatch("/dashboard/websocket/:chatId");
   const profile = useMatch("/dashboard/profile");
+  const calls = useMatch("/dashboard/calls/*");
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
   const history = useQuery<History>({
     queryKey: chatKeys.history(identity, Number(match?.params.chatId)),
@@ -82,7 +93,7 @@ export default function ChatLayout() {
       <ChatSidebar />
       <SidebarInset className="min-w-0">
         <header className="flex min-h-18 shrink-0 items-center gap-3 border-b border-border bg-card/50 px-3 pt-[env(safe-area-inset-top)] sm:px-5">
-          {(match || profile) && (
+          {(match || profile || calls) && (
             <Button
               asChild
               variant="ghost"
@@ -95,7 +106,7 @@ export default function ChatLayout() {
             </Button>
           )}
           <SidebarTrigger
-            className={`size-11 shrink-0 ${match || profile ? "hidden md:inline-flex" : ""}`}
+            className={`size-11 shrink-0 ${match || profile || calls ? "hidden md:inline-flex" : ""}`}
           />
           <Separator orientation="vertical" className="hidden h-6 md:block" />
           {match ? (
@@ -139,6 +150,9 @@ export default function ChatLayout() {
             <Brand className="w-36" />
           )}
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            {match && history.data?.chat && !group && (
+              <CallButton chatId={Number(match.params.chatId)} />
+            )}
             <ThemeToggle />
           </div>
         </header>

@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
+import { CallsService } from './calls.service';
 
 @WebSocketGateway({
   cors: { origin: '*', credentials: false },
@@ -21,14 +22,108 @@ export class ChatGateway implements OnGatewayInit {
     private readonly chatService: ChatService,
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
+    private readonly calls: CallsService,
   ) {}
   afterInit(server: Server) {
+    this.calls.server = server;
     server.use((client, next) => {
       void this.authenticate(client).then(
         () => next(),
         () => next(new Error('Unauthorized')),
       );
     });
+  }
+  handleDisconnect(client: Socket) {
+    this.calls.disconnect(client);
+  }
+  @SubscribeMessage('call:list')
+  async callList(@ConnectedSocket() client: Socket) {
+    try {
+      return await this.calls.list(this.userId(client));
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:config')
+  callConfig(@ConnectedSocket() client: Socket) {
+    try {
+      this.userId(client);
+      return this.calls.iceServers();
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:pending')
+  callPending(@ConnectedSocket() client: Socket) {
+    try {
+      return this.calls.pending(this.userId(client));
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:start')
+  async callStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { chatId: number; mode: string },
+  ) {
+    try {
+      return await this.calls.start(client, this.userId(client), payload);
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:accept')
+  async callAccept(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { id: string },
+  ) {
+    try {
+      return await this.calls.accept(client, this.userId(client), payload?.id);
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:end')
+  async callEnd(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { id: string; failed?: boolean },
+  ) {
+    try {
+      return await this.calls.end(
+        client,
+        this.userId(client),
+        payload?.id,
+        payload?.failed === true,
+      );
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:connected')
+  async callConnected(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { id: string },
+  ) {
+    try {
+      return await this.calls.connected(
+        client,
+        this.userId(client),
+        payload?.id,
+      );
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+  @SubscribeMessage('call:signal')
+  callSignal(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { id: string; signal: unknown },
+  ) {
+    try {
+      return this.calls.signal(client, this.userId(client), payload);
+    } catch (error) {
+      return this.failure(client, error);
+    }
   }
   private async authenticate(client: Socket) {
     const token: unknown = client.handshake.auth?.token;

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { MessageCircle, UserRound } from "lucide-react";
+import { MessageCircle, Phone, UserRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -42,7 +42,10 @@ export function ChatSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              isActive={location.pathname !== "/dashboard/profile"}
+              isActive={
+                location.pathname === "/dashboard" ||
+                location.pathname.startsWith("/dashboard/websocket/")
+              }
               size="lg"
               tooltip="Chats"
               className="rounded-xl data-[active=true]:text-brand"
@@ -51,6 +54,22 @@ export function ChatSidebar() {
                 <MessageCircle />
                 <span className="group-data-[collapsible=icon]:sr-only">
                   Messages
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location.pathname.startsWith("/dashboard/calls")}
+              size="lg"
+              tooltip="Calls"
+              className="rounded-xl data-[active=true]:text-brand"
+            >
+              <Link to="/dashboard/calls" onClick={() => setOpenMobile(false)}>
+                <Phone />
+                <span className="group-data-[collapsible=icon]:sr-only">
+                  Calls
                 </span>
               </Link>
             </SidebarMenuButton>

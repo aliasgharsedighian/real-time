@@ -295,7 +295,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                       {formatDateBasedOnToday(message.createdAt)}
                     </time>
                     <div
-                      className={`flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "rounded-br-sm message-own" : "rounded-bl-sm message-incoming"}`}
+                      className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
                     >
                       {message.attachments?.map((attachment) => (
                         <Media key={attachment.id} file={attachment} />

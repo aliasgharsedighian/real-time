@@ -219,13 +219,52 @@ body {
   opacity: 0.28;
 }
 .message-own {
-  background: var(--message-own);
+  --bubble-surface: var(--message-own);
+  --bubble-outline: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: var(--bubble-surface);
   color: var(--message-own-foreground);
-  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  border: 1px solid var(--bubble-outline);
+  border-bottom-right-radius: 0;
 }
 .message-incoming {
-  background: var(--card);
-  border: 1px solid var(--border);
+  --bubble-surface: var(--card);
+  --bubble-outline: var(--border);
+  background: var(--bubble-surface);
+  border: 1px solid var(--bubble-outline);
+  border-bottom-left-radius: 0;
+}
+.message-bubble {
+  position: relative;
+  isolation: isolate;
+}
+.message-bubble::before,
+.message-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  width: 10px;
+  height: 16px;
+  pointer-events: none;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+.message-bubble::before {
+  background: var(--bubble-outline);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M0 0C0 7 3 12 10 15Q6 16 0 16Z'/%3E%3C/svg%3E");
+}
+.message-bubble::after {
+  /* Cover the shared body border; leave one continuous curved outer edge. */
+  background: var(--bubble-surface);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M0 1C0 7 2 11 7 14.8Q4 15 0 15Z'/%3E%3C/svg%3E");
+}
+.message-own::before,
+.message-own::after {
+  right: -9px;
+}
+.message-incoming::before,
+.message-incoming::after {
+  left: -9px;
+  transform: scaleX(-1);
 }
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -74,7 +74,25 @@ model Chat {
   avatar       UploadFile?       @relation("GroupAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
   participants  ChatParticipant[]
   messages      Message[]
+  calls         Call[]
   createdAt     DateTime          @default(now())
+}
+
+// Call history only; media and SDP/ICE are never stored.
+model Call {
+  id String @id @default(uuid())
+  chatId Int
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  callerId Int
+  calleeId Int
+  mode String
+  status String @default("RINGING")
+  createdAt DateTime @default(now())
+  answeredAt DateTime?
+  connectedAt DateTime?
+  endedAt DateTime?
+  @@index([callerId, createdAt])
+  @@index([calleeId, createdAt])
 }
 
 model ChatParticipant {
