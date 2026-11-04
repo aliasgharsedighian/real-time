@@ -4,7 +4,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
 import ChatPage from "./ChatPage";
-const mocks = vi.hoisted(() => ({ send: vi.fn(), upload: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  send: vi.fn(),
+  upload: vi.fn(),
+  history: vi.fn(),
+}));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
     user: { id: 1, email: "sender@test.invalid", profile: null },
@@ -12,7 +16,7 @@ vi.mock("@/features/auth/session-context", () => ({
 }));
 vi.mock("./api", () => ({
   chatKeys: { history: () => ["history"] },
-  getHistory: async () => ({ messages: [], users: [], unreadIds: [] }),
+  getHistory: () => mocks.history(),
 }));
 vi.mock("./hooks/use-chat-room", () => ({
   useChatRoom: () => ({
@@ -75,6 +79,7 @@ async function select(type = "video/mp4") {
 describe("chat attachments", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.history.mockResolvedValue({ messages: [], users: [], unreadIds: [] });
     sessionStorage.clear();
     useSessionStore
       .getState()
@@ -83,6 +88,35 @@ describe("chat attachments", () => {
     mocks.send.mockResolvedValue(undefined);
   });
   afterEach(() => vi.unstubAllGlobals());
+  it("renders departure and removal as group activity instead of sender bubbles", async () => {
+    mocks.history.mockResolvedValue({
+      users: [],
+      unreadIds: [],
+      messages: [
+        {
+          id: 10,
+          chatId: 3,
+          senderId: 2,
+          kind: "MEMBER_LEFT",
+          content: "Alice left the group.",
+          createdAt: "2026-11-04T10:00:00.000Z",
+        },
+        {
+          id: 11,
+          chatId: 3,
+          senderId: 1,
+          kind: "MEMBER_REMOVED",
+          content: "Owner removed Bob from the group.",
+          createdAt: "2026-11-04T10:01:00.000Z",
+        },
+      ],
+    });
+    setup();
+    await screen.findByText("Alice left the group.");
+    expect(screen.getByText("Owner removed Bob from the group.")).toBeTruthy();
+    expect(screen.getAllByLabelText("Group activity")).toHaveLength(2);
+    expect(screen.queryByLabelText("Sent")).toBeNull();
+  });
   it("switches between microphone and send as text is entered and cleared", async () => {
     setup();
     await screen.findByRole("button", { name: "Hold to record voice message" });

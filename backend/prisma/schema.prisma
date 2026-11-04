@@ -90,10 +90,17 @@ model ChatParticipant {
   @@unique([userId, chatId]) // Prevent duplicate participation
 }
 
+enum MessageKind {
+  TEXT
+  MEMBER_LEFT
+  MEMBER_REMOVED
+}
+
 model Message {
   id        Int   @id @default(autoincrement())
   attachments UploadFile[]
   content   String
+  kind      MessageKind @default(TEXT)
   chat      Chat     @relation(fields: [chatId], references: [id])
   chatId    Int
   sender    User     @relation(fields: [senderId], references: [id])

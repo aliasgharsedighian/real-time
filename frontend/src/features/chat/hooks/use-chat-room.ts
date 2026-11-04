@@ -43,7 +43,11 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       const data = cache.getQueryData<History>(key);
       markRead(
         data?.messages
-          .filter((message) => message.senderId !== userId)
+          .filter(
+            (message) =>
+              message.senderId !== userId &&
+              (!message.kind || message.kind === "TEXT"),
+          )
           .map((message) => message.id) ?? [],
       );
     };
@@ -67,7 +71,11 @@ export function useChatRoom(chatId: number, enabled: boolean) {
           ? { ...old, messages: mergeMessages(old.messages, [message]) }
           : old,
       );
-      if (message.senderId !== userId) markRead([message.id]);
+      if (
+        message.senderId !== userId &&
+        (!message.kind || message.kind === "TEXT")
+      )
+        markRead([message.id]);
     };
     const onReceipt = (receipt: ReadReceipt) => {
       cache.setQueryData<History>(key, (old) =>

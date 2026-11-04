@@ -7,7 +7,7 @@ Implemented 2026-11-04 in the active React frontend and NestJS backend.
 - A group has a required, trimmed name (1–100 characters), one owner, and up to 100 current members. Creation requires the creator plus at least one other person; a group remains a group even after shrinking to one member.
 - The creator becomes owner. Only the owner can rename, add/remove other members, or transfer ownership to a current member. Any member can leave.
 - When an owner leaves without transferring ownership, the earliest remaining participant becomes owner. The last departure leaves the conversation inaccessible; existing messages/files are retained rather than deleted.
-- New or re-added members can see the full existing history. There are no public links, approval requests, separate admin roles, or membership activity messages in this version.
+- New or re-added members can see the full existing history. There are no public links, approval requests, separate admin roles in this version. Departures and removals are recorded as group activity.
 - Leaving/removal immediately revokes API and attachment access and removes every connected socket of that user from the chat room. Previously downloaded messages/files cannot be revoked.
 - Group UI shows sender names and the number of readers for sent messages. Double checks mean at least one other person read the message, not that all members read it.
 
@@ -74,3 +74,13 @@ Migration `20261104110000_group_avatar` adds nullable unique `Chat.avatarId` ref
 - Replacements/removal clear the previous record and physical file. Active group photos are excluded from draft cleanup. `chat:updated` invalidates member inbox/history metadata on changes.
 
 Verification after this addition: 44 frontend tests, 14 backend unit tests, four real group integration scenarios and the media integration scenario passed. Group-photo integration covers owner/member/outsider permissions, malformed/oversized files, metadata/events, retained active photos, replacement/removal, ownership changes and revoked access after departure.
+
+## Departure activity
+
+Migration `20261104120000_group_activity` adds `Message.kind` (`TEXT`, `MEMBER_LEFT`, `MEMBER_REMOVED`); all existing messages default to `TEXT`. The local database has been migrated.
+
+Leaving/removal and the associated activity message are saved in the same locked transaction. The activity stores a display-name snapshot in `content`: `Name left the group.` or `Owner removed Name from the group.` It remains available in history even after the participant is gone. It is broadcast as `message:new` after the departing user's sockets are evicted, then inbox/group metadata is invalidated for remaining members. No historical departures are reconstructed.
+
+The frontend renders activity as a centered notice with a timestamp and no sender bubble or delivery checks. Inbox previews include the notice; unread counts and read receipts include only `TEXT`. Clients cannot create system kinds through message sending: REST rejects extra fields and socket sends always create `TEXT`.
+
+Verification: 45 frontend tests, 14 backend unit tests, five group integration scenarios and the media integration scenario passed. New checks cover persistent/live departure names, removal vs voluntary leaving, rejected/duplicate departures, event types that cannot be forged by clients, independent unread semantics and activity rendering.

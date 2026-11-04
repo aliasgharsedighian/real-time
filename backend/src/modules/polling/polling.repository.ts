@@ -64,6 +64,7 @@ export class PrsimaPollingRepository {
     const unreadMessages = await this.prisma.message.findMany({
       where: {
         chatId,
+        kind: 'TEXT',
         senderId: { not: userId },
         NOT: [
           {
@@ -110,6 +111,7 @@ export class PrsimaPollingRepository {
     const unreadMessages = await this.prisma.message.findMany({
       where: {
         chatId: chatId,
+        kind: 'TEXT',
         senderId: {
           not: userId,
         },

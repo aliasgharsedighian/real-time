@@ -133,7 +133,7 @@ export class GroupsService {
   }
 
   async remove(chatId: number, userId: number, targetId: number) {
-    const remaining = await this.prisma.$transaction(async (tx) => {
+    const { remaining, event } = await this.prisma.$transaction(async (tx) => {
       const group = await this.group(tx, chatId, userId, userId !== targetId);
       const target = group.participants.find((p) => p.userId === targetId);
       if (!target) throw new NotFoundException('Member not found.');
@@ -149,9 +149,33 @@ export class GroupsService {
         });
       }
       await tx.chatParticipant.delete({ where: { id: target.id } });
-      return others.map((p) => p.userId);
+      const actor = group.participants.find((p) => p.userId === userId)!;
+      const name = (user: typeof target.user) =>
+        [user.profile?.firstname, user.profile?.lastname]
+          .filter(Boolean)
+          .join(' ') ||
+        user.email ||
+        `User #${user.id}`;
+      const left = userId === targetId;
+      const event = await tx.message.create({
+        data: {
+          chatId,
+          senderId: userId,
+          kind: left ? 'MEMBER_LEFT' : 'MEMBER_REMOVED',
+          content: left
+            ? `${name(target.user)} left the group.`
+            : `${name(actor.user)} removed ${name(target.user)} from the group.`,
+        },
+        include: {
+          sender: { select: { id: true, email: true, profile: true } },
+          attachments: true,
+          readStatuses: true,
+        },
+      });
+      return { remaining: others.map((p) => p.userId), event };
     });
     this.gateway.removeChatMember(chatId, targetId);
+    this.gateway.broadcast(event);
     this.gateway.notifyChatChanged(chatId, remaining);
     return { data: null, message: 'Member left the group' };
   }

@@ -25,6 +25,7 @@ export class ChatService {
           select: {
             messages: {
               where: {
+                kind: 'TEXT',
                 senderId: { not: userId },
                 NOT: [
                   {
@@ -118,7 +119,12 @@ export class ChatService {
     const now = new Date();
     // Upsert each read status (unique by messageId+userId)
     const allowed = await this.prisma.message.findMany({
-      where: { id: { in: messageIds }, chatId, senderId: { not: userId } },
+      where: {
+        id: { in: messageIds },
+        chatId,
+        kind: 'TEXT',
+        senderId: { not: userId },
+      },
       select: { id: true },
     });
     const ops = allowed.map(({ id: messageId }) =>

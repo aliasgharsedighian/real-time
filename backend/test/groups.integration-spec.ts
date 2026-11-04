@@ -255,13 +255,11 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
       ).avatarId,
     ).toBe(firstId);
     const owner = await socket(0);
-    const claim = await owner
-      .timeout(5000)
-      .emitWithAck('message:send', {
-        chatId: chat.id,
-        content: '',
-        attachmentId: firstId,
-      });
+    const claim = await owner.timeout(5000).emitWithAck('message:send', {
+      chatId: chat.id,
+      content: '',
+      attachmentId: firstId,
+    });
     expect(claim.id).toBeUndefined();
     await request(base)
       .delete(`/api/v1/files/${firstId}`)
@@ -300,6 +298,71 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     await read(0, third.body.avatarId).expect(403);
     await read(1, third.body.avatarId).expect(200);
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+  });
+
+  it('persists and broadcasts named departure events without unread counts or client-forged event types', async () => {
+    const chat = await create({
+      participant: [ids[1], ids[2]],
+      isGroup: true,
+      name: 'Activity group',
+    });
+    const owner = await socket(0),
+      remaining = await socket(2);
+    await owner.timeout(5000).emitWithAck('chat:join', { chatId: chat.id });
+    await remaining.timeout(5000).emitWithAck('chat:join', { chatId: chat.id });
+    await http(1).delete(`groups/${chat.id}/members/${ids[2]}`).expect(403);
+    expect(await prisma.message.count({ where: { chatId: chat.id } })).toBe(0);
+    const notification = once(owner, 'message:new');
+    await http(1).delete(`groups/${chat.id}/members/${ids[1]}`).expect(200);
+    const event = await notification;
+    expect(event).toMatchObject({
+      chatId: chat.id,
+      kind: 'MEMBER_LEFT',
+      content: 'Member 1 left the group.',
+      senderId: ids[1],
+    });
+    await http(1).delete(`groups/${chat.id}/members/${ids[1]}`).expect(404);
+    expect(await prisma.message.count({ where: { chatId: chat.id } })).toBe(1);
+    const inbox = await owner.timeout(5000).emitWithAck('chat:list');
+    expect(inbox.find((c: any) => c.id === chat.id)._count.messages).toBe(0);
+    expect(inbox.find((c: any) => c.id === chat.id).messages[0].content).toBe(
+      'Member 1 left the group.',
+    );
+    const history = await http().get(`polling/${chat.id}`).expect(200);
+    expect(history.body.data.chats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: event.id, kind: 'MEMBER_LEFT' }),
+      ]),
+    );
+    expect(history.body.data.unreadMessages).toHaveLength(0);
+    await owner
+      .timeout(5000)
+      .emitWithAck('message:read', { chatId: chat.id, messageIds: [event.id] });
+    expect(
+      await prisma.messageReadStatus.count({ where: { messageId: event.id } }),
+    ).toBe(0);
+    const forged = await owner
+      .timeout(5000)
+      .emitWithAck('message:send', {
+        chatId: chat.id,
+        content: 'Regular text',
+        kind: 'MEMBER_LEFT',
+      });
+    expect(forged.kind).toBe('TEXT');
+    await http()
+      .post('polling')
+      .send({ chatId: chat.id, content: 'Fake', kind: 'MEMBER_LEFT' })
+      .expect(400);
+    const removed = once(owner, 'message:new');
+    await http().delete(`groups/${chat.id}/members/${ids[2]}`).expect(200);
+    expect(await removed).toMatchObject({
+      kind: 'MEMBER_REMOVED',
+      content: 'Member 0 removed Member 2 from the group.',
+    });
+    const reloaded = await http().get(`polling/${chat.id}`).expect(200);
+    expect(
+      reloaded.body.data.chats.filter((m: any) => m.kind !== 'TEXT'),
+    ).toHaveLength(2);
   });
 
   it('delivers to multiple members, protects management, keeps independent reads and evicts removed sockets', async () => {

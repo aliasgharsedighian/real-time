@@ -211,6 +211,32 @@ function ChatRoom({ chatId }: { chatId: number }) {
           </p>
         )}
         {messages?.map((message) => {
+          if (
+            message.kind === "MEMBER_LEFT" ||
+            message.kind === "MEMBER_REMOVED"
+          )
+            return (
+              <div
+                key={message.id}
+                className="my-4 flex justify-center"
+                aria-label="Group activity"
+              >
+                <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
+                  <p
+                    dir="auto"
+                    className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                  >
+                    {message.content}
+                  </p>
+                  <time
+                    dateTime={message.createdAt}
+                    className="block text-[10px] opacity-75"
+                  >
+                    {formatDateBasedOnToday(message.createdAt)}
+                  </time>
+                </div>
+              </div>
+            );
           const own = message.senderId === user?.id;
           const read = message.readStatuses?.some(
             (receipt) => receipt.userId !== user?.id,
