@@ -71,11 +71,12 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     const onMessage = (message: Message) => {
       if (message.chatId !== chatId) return;
       cache.setQueryData<History>(key, (old) =>
-        old
+        old && !old.window?.afterId
           ? { ...old, messages: mergeMessages(old.messages, [message]) }
           : old,
       );
       if (
+        !cache.getQueryData<History>(key)?.window?.afterId &&
         message.senderId !== userId &&
         (!message.kind || message.kind === "TEXT")
       )
@@ -188,7 +189,9 @@ export function useChatRoom(chatId: number, enabled: boolean) {
           "The server did not accept your message.",
       );
     cache.setQueryData<History>(chatKeys.history(identity, chatId), (old) =>
-      old ? { ...old, messages: mergeMessages(old.messages, [message]) } : old,
+      old && !old.window?.afterId
+        ? { ...old, messages: mergeMessages(old.messages, [message]) }
+        : old,
     );
     void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
     stopTyping();

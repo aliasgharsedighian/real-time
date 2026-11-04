@@ -46,6 +46,31 @@ function mount() {
 }
 
 describe("chat room events", () => {
+  it("keeps new live messages out of a search window with a gap and does not mark them read", () => {
+    const { cache, key } = mount();
+    act(() =>
+      cache.setQueryData<History>(key, {
+        messages: [],
+        users: [],
+        unreadIds: [],
+        window: { beforeId: 5, afterId: 10, focusId: 7 },
+      }),
+    );
+    fake.emit.mockClear();
+    act(() =>
+      fake.handlers.get("message:new")!({
+        id: 100,
+        chatId: 7,
+        senderId: 2,
+        content: "Live",
+        createdAt: "2026-11-04T12:00:00Z",
+      } as never),
+    );
+    expect(cache.getQueryData<History>(key)?.messages).toEqual([]);
+    expect(
+      fake.emit.mock.calls.some(([event]) => event === "message:read"),
+    ).toBe(false);
+  });
   beforeEach(() => {
     fake.handlers.clear();
     fake.emit.mockClear();

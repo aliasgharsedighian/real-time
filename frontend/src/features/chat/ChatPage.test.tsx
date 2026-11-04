@@ -10,10 +10,16 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
 import ChatPage from "./ChatPage";
+import {
+  MessageSearchProvider,
+  useMessageSearch,
+} from "./message-search-context";
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   upload: vi.fn(),
   history: vi.fn(),
+  search: vi.fn(),
+  window: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -23,6 +29,8 @@ vi.mock("@/features/auth/session-context", () => ({
 vi.mock("./api", () => ({
   chatKeys: { history: () => ["history"] },
   getHistory: (...args: unknown[]) => mocks.history(...args),
+  searchMessages: (...args: unknown[]) => mocks.search(...args),
+  getMessageWindow: (...args: unknown[]) => mocks.window(...args),
 }));
 vi.mock("./hooks/use-chat-room", () => ({
   useChatRoom: () => ({
@@ -60,6 +68,12 @@ vi.mock("./components/ChatEmojiPicker", () => ({
     <button onClick={() => onSelect("😀")}>Pick smile</button>
   ),
 }));
+function SearchOpener() {
+  const search = useMessageSearch();
+  return (
+    <button onClick={() => search.setOpen(true)}>Open search panel</button>
+  );
+}
 function setup() {
   render(
     <QueryClientProvider
@@ -69,7 +83,15 @@ function setup() {
     >
       <MemoryRouter initialEntries={["/dashboard/websocket/3"]}>
         <Routes>
-          <Route path="/dashboard/websocket/:chatId" element={<ChatPage />} />
+          <Route
+            path="/dashboard/websocket/:chatId"
+            element={
+              <MessageSearchProvider>
+                <SearchOpener />
+                <ChatPage />
+              </MessageSearchProvider>
+            }
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -84,6 +106,69 @@ async function select(type = "video/mp4") {
   });
 }
 describe("chat attachments", () => {
+  it.each([false, true])(
+    "opens an old server search result in a %s group chat and returns to latest messages",
+    async (isGroup) => {
+      const message = (id: number, content: string) => ({
+        id,
+        chatId: 3,
+        senderId: 2,
+        content,
+        createdAt: "2026-11-04T10:00:00Z",
+      });
+      const users = [
+        {
+          userId: 2,
+          user: { id: 2, email: "alice@test.invalid", profile: null },
+        },
+      ];
+      mocks.history.mockResolvedValue({
+        messages: [message(100, "Latest message")],
+        users,
+        unreadIds: [],
+        nextPage: null,
+        chat: { id: 3, isGroup, name: "Search group", participants: users },
+      });
+      mocks.search.mockResolvedValue({
+        messages: [
+          { ...message(30, "needle from last month"), sender: users[0].user },
+        ],
+        nextCursor: null,
+      });
+      mocks.window.mockResolvedValue({
+        messages: [
+          message(30, "needle from last month"),
+          message(31, "Next to the old message"),
+        ],
+        beforeId: 30,
+        afterId: 31,
+      });
+      setup();
+      await screen.findByText("Latest message");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Open search panel" }),
+      );
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "Search message text" }),
+        { target: { value: "needle" } },
+      );
+      const excerpt = await screen.findByText("needle", { selector: "mark" });
+      fireEvent.click(excerpt.closest("button")!);
+      await screen.findByText("Next to the old message");
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-message-id="30"]')?.className,
+        ).not.toContain("ring-2"),
+      );
+      expect(screen.queryByText("Latest message")).toBeNull();
+      expect(mocks.window.mock.calls[0][1]).toEqual({ aroundId: 30 });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Back to latest messages" }),
+      );
+      await screen.findByText("Latest message");
+      expect(document.querySelector('[data-message-id="30"]')).toBeNull();
+    },
+  );
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.history.mockResolvedValue({ messages: [], users: [], unreadIds: [] });

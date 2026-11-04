@@ -5,6 +5,54 @@ import { useMessageScroll } from "./use-message-scroll";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("centers a selected search message and keeps it in view across list updates", () => {
+  type Focus = { id: number; requestId: number } | undefined;
+  const { result, rerender } = renderHook(
+    ({ focus, items }: { focus: Focus; items: Message[] }) =>
+      useMessageScroll({
+        messages: items,
+        loadingOlder: false,
+        canLoadOlder: false,
+        loadOlder: async () => {},
+        focusMessage: focus,
+      }),
+    { initialProps: { focus: undefined as Focus, items: messages(1, 50) } },
+  );
+  const element = document.createElement("div");
+  let top = 0;
+  Object.defineProperties(element, {
+    clientHeight: { get: () => 300 },
+    scrollHeight: { get: () => 5000 },
+    scrollTop: {
+      get: () => top,
+      set: (value: number) => {
+        top = Math.max(0, Math.min(value, 4700));
+      },
+    },
+  });
+  const row = {
+    dataset: { messageId: "10" },
+    getBoundingClientRect: () => ({
+      top: 900 - top,
+      bottom: 1000 - top,
+      height: 100,
+    }),
+  };
+  element.querySelector = (() =>
+    row) as unknown as typeof element.querySelector;
+  element.querySelectorAll = (() => [
+    row,
+  ]) as unknown as typeof element.querySelectorAll;
+  result.current.container.current = element;
+  rerender({ focus: undefined, items: messages(1, 50) });
+  expect(top).toBe(4700);
+  const focus = { id: 10, requestId: 1 };
+  rerender({ focus, items: messages(1, 50) });
+  expect(top).toBe(800);
+  rerender({ focus, items: messages(1, 51) });
+  expect(top).toBe(800);
+});
+
 const messages = (start: number, end: number): Message[] =>
   Array.from({ length: end - start + 1 }, (_, index) => ({
     id: start + index,

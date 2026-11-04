@@ -2,7 +2,12 @@ import { api, unwrap } from "@/shared/lib/api";
 import type { ApiResponse, User } from "@/shared/lib/types";
 import { getSocket } from "./socket";
 import { normalizeHistory } from "./message-cache";
-import type { Chat, HistoryResponse } from "./types";
+import type {
+  Chat,
+  HistoryResponse,
+  MessageSearchPage,
+  MessageWindow,
+} from "./types";
 
 export const chatKeys = {
   list: (identity?: string) => ["chats", identity] as const,
@@ -50,6 +55,40 @@ export async function searchUsers(search: string, signal?: AbortSignal) {
     { signal },
   );
   return unwrap(data);
+}
+
+export async function searchMessages(
+  chatId: number,
+  q: string,
+  beforeId?: number,
+  signal?: AbortSignal,
+) {
+  return unwrap(
+    (
+      await api.get<ApiResponse<MessageSearchPage>>(
+        `realtime/polling/${chatId}/search`,
+        {
+          params: { q, ...(beforeId ? { beforeId } : {}) },
+          signal,
+        },
+      )
+    ).data,
+  );
+}
+
+export async function getMessageWindow(
+  chatId: number,
+  cursor: { aroundId?: number; beforeId?: number; afterId?: number },
+  signal?: AbortSignal,
+) {
+  return unwrap(
+    (
+      await api.get<ApiResponse<MessageWindow>>(
+        `realtime/polling/${chatId}/window`,
+        { params: cursor, signal },
+      )
+    ).data,
+  );
 }
 
 export async function createChat(

@@ -125,6 +125,8 @@ model Message {
   senderId  Int
   createdAt DateTime @default(now())
   readStatuses MessageReadStatus[]
+
+  @@index([chatId, id])
 }
 
 model MessageReadStatus {

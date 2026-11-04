@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
 import { Link, Outlet, useMatch, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
+import {
+  MessageSearchProvider,
+  useMessageSearch,
+} from "@/features/chat/message-search-context";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   SidebarInset,
@@ -91,77 +95,97 @@ function ChatLayoutContent() {
       className="h-dvh min-h-0 overflow-hidden"
     >
       <ChatSidebar />
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-        <header className="flex min-h-18 shrink-0 items-center gap-3 border-b border-border bg-card/50 px-3 pt-[env(safe-area-inset-top)] sm:px-5">
-          {(match || profile || calls) && (
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="size-11 shrink-0 md:hidden"
-            >
-              <Link to="/dashboard" aria-label="Back to chats">
-                <ArrowLeft />
-              </Link>
-            </Button>
-          )}
-          <SidebarTrigger
-            className={`size-11 shrink-0 ${match || profile || calls ? "hidden md:inline-flex" : ""}`}
-          />
-          <Separator orientation="vertical" className="hidden h-6 md:block" />
-          {match ? (
-            group ? (
-              <GroupInfoDialog
-                chat={group}
-                trigger={
-                  <>
-                    <IdentityAvatar
-                      avatarId={group.avatarId}
-                      name={title}
-                      className="size-10"
-                    />
-                    <div className="min-w-0">
-                      <h1 className="truncate text-sm font-semibold">
-                        {title}
-                      </h1>
-                      <p className="mt-0.5 truncate text-xs text-brand">
-                        {group.participants.length} members · Group info
-                      </p>
-                    </div>
-                  </>
-                }
-              />
-            ) : (
-              <>
-                <IdentityAvatar
-                  avatarId={participants[0]?.user.profile?.avatarId}
-                  name={title}
-                  className="size-10"
-                />
-                <div className="min-w-0">
-                  <h1 className="truncate text-sm font-semibold">{title}</h1>
-                  <p className="mt-0.5 text-xs text-brand">Conversation</p>
-                </div>
-              </>
-            )
-          ) : profile ? (
-            <h1 className="font-semibold">My profile</h1>
-          ) : (
-            <Brand className="w-36" />
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {match && history.data?.chat && !group && (
-              <CallButton chatId={Number(match.params.chatId)} />
+      <MessageSearchProvider key={match?.params.chatId ?? "other"}>
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+          <header className="flex min-h-18 shrink-0 items-center gap-3 border-b border-border bg-card/50 px-3 pt-[env(safe-area-inset-top)] sm:px-5">
+            {(match || profile || calls) && (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="size-11 shrink-0 md:hidden"
+              >
+                <Link to="/dashboard" aria-label="Back to chats">
+                  <ArrowLeft />
+                </Link>
+              </Button>
             )}
-            <ThemeToggle />
+            <SidebarTrigger
+              className={`size-11 shrink-0 ${match || profile || calls ? "hidden md:inline-flex" : ""}`}
+            />
+            <Separator orientation="vertical" className="hidden h-6 md:block" />
+            {match ? (
+              group ? (
+                <GroupInfoDialog
+                  chat={group}
+                  trigger={
+                    <>
+                      <IdentityAvatar
+                        avatarId={group.avatarId}
+                        name={title}
+                        className="size-10"
+                      />
+                      <div className="min-w-0">
+                        <h1 className="truncate text-sm font-semibold">
+                          {title}
+                        </h1>
+                        <p className="mt-0.5 truncate text-xs text-brand">
+                          {group.participants.length} members · Group info
+                        </p>
+                      </div>
+                    </>
+                  }
+                />
+              ) : (
+                <>
+                  <IdentityAvatar
+                    avatarId={participants[0]?.user.profile?.avatarId}
+                    name={title}
+                    className="size-10"
+                  />
+                  <div className="min-w-0">
+                    <h1 className="truncate text-sm font-semibold">{title}</h1>
+                    <p className="mt-0.5 text-xs text-brand">Conversation</p>
+                  </div>
+                </>
+              )
+            ) : profile ? (
+              <h1 className="font-semibold">My profile</h1>
+            ) : (
+              <Brand className="w-36" />
+            )}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {match && history.data?.chat && !group && (
+                <CallButton chatId={Number(match.params.chatId)} />
+              )}
+              {match && <SearchMessagesButton />}
+              <ThemeToggle />
+            </div>
+          </header>
+          <div
+            className={`flex min-h-0 flex-1 flex-col ${match ? "overflow-hidden" : "overflow-y-auto"}`}
+          >
+            <Outlet />
           </div>
-        </header>
-        <div
-          className={`flex min-h-0 flex-1 flex-col ${match ? "overflow-hidden" : "overflow-y-auto"}`}
-        >
-          <Outlet />
-        </div>
-      </SidebarInset>
+        </SidebarInset>
+      </MessageSearchProvider>
     </SidebarProvider>
+  );
+}
+
+function SearchMessagesButton() {
+  const search = useMessageSearch();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-11"
+      aria-label="Search this conversation"
+      aria-expanded={search.open}
+      aria-controls="message-search-panel"
+      onClick={() => search.setOpen(!search.open)}
+    >
+      <Search />
+    </Button>
   );
 }

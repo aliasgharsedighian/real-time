@@ -15,6 +15,9 @@ import { GetMessagesService } from './polling.service';
 import { JwtGuard } from 'src/libs/guard';
 import { GetUser } from 'src/libs/decorators';
 import { User } from '@prisma/client';
+import { MessageSearchService } from './message-search.service';
+import { MessageWindowDto, SearchMessagesDto } from './message-search.dto';
+import { Throttle } from '@nestjs/throttler';
 import {
   CreateChatRequestDto,
   UpdateGroupRequestDto,
@@ -31,7 +34,27 @@ export class PollingController {
   constructor(
     private messageService: GetMessagesService,
     private groups: GroupsService,
+    private search: MessageSearchService,
   ) {}
+
+  @Get('realtime/polling/:id/search')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  searchMessages(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Query() query: SearchMessagesDto,
+  ) {
+    return this.search.search(params.id, user.id, query);
+  }
+
+  @Get('realtime/polling/:id/window')
+  messageWindow(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Query() query: MessageWindowDto,
+  ) {
+    return this.search.window(params.id, user.id, query);
+  }
 
   @Get(routesV1.polling.message)
   async getMessage(@GetUser() user: User) {

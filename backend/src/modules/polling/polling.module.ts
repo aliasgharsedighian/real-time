@@ -1,4 +1,5 @@
 import { GroupsService } from './groups.service';
+import { MessageSearchService } from './message-search.service';
 import { Logger, Module, Provider } from '@nestjs/common';
 import { ChatModule } from '../../gateway/chat/chat.module';
 import { CqrsModule } from '@nestjs/cqrs';
@@ -19,6 +20,7 @@ const repositories: Provider[] = [PrsimaPollingRepository];
   controllers: [...httpControllers],
   providers: [
     GroupsService,
+    MessageSearchService,
     Logger,
     ...repositories,
     ...commandHandlers,

@@ -45,11 +45,21 @@ export interface HistoryResponse {
   users: Participant[];
 }
 export interface History {
+  window?: Omit<MessageWindow, "messages"> & { focusId: number };
   nextPage?: number | null;
   chat?: ChatDetails;
   messages: Message[];
   users: Participant[];
   unreadIds: number[];
+}
+export interface MessageWindow {
+  messages: Message[];
+  beforeId: number | null;
+  afterId: number | null;
+}
+export interface MessageSearchPage {
+  messages: Message[];
+  nextCursor: number | null;
 }
 export interface TypingEvent {
   chatId: number;

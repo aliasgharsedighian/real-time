@@ -6,11 +6,13 @@ export function useMessageScroll({
   loadingOlder,
   canLoadOlder,
   loadOlder,
+  focusMessage,
 }: {
   messages?: Message[];
   loadingOlder: boolean;
   canLoadOlder: boolean;
   loadOlder: () => Promise<void>;
+  focusMessage?: { id: number; requestId: number };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -20,6 +22,7 @@ export function useMessageScroll({
   const previousScrollTop = useRef(0);
   const anchor = useRef<{ id: string; offset: number } | null>(null);
   const prefetch = useRef<HTMLDivElement>(null);
+  const appliedFocus = useRef<typeof focusMessage>(undefined);
 
   const rememberPosition = useCallback(() => {
     const element = container.current;
@@ -68,8 +71,33 @@ export function useMessageScroll({
   }, [rememberPosition]);
 
   useLayoutEffect(() => {
+    const element = container.current;
+    if (
+      element &&
+      element.clientHeight > 0 &&
+      focusMessage &&
+      appliedFocus.current !== focusMessage
+    ) {
+      const row = element.querySelector<HTMLElement>(
+        `[data-message-id="${focusMessage.id}"]`,
+      );
+      if (row) {
+        initialized.current = true;
+        nearBottom.current = false;
+        element.scrollTop +=
+          row.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          Math.max(
+            0,
+            (element.clientHeight - row.getBoundingClientRect().height) / 2,
+          );
+        appliedFocus.current = focusMessage;
+        rememberPosition();
+        return;
+      }
+    }
     if (messages?.length) syncPosition();
-  }, [messages, loadingOlder, syncPosition]);
+  }, [messages, loadingOlder, focusMessage, syncPosition, rememberPosition]);
 
   useEffect(() => {
     const element = container.current;
