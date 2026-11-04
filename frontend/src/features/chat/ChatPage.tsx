@@ -8,7 +8,6 @@ import {
 } from "@/features/uploads/api";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
   Check,
   CheckCheck,
@@ -19,15 +18,15 @@ import {
   Smile,
 } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
-import { useSessionStore } from "@/features/auth/session-store";
 import { Button } from "@/shared/ui/button";
-import { Skeleton } from "@/shared/ui/skeleton";
+import { BrandLoading } from "@/shared/components/BrandLoading";
 import { formatDateBasedOnToday } from "@/shared/lib/date";
 import { errorMessage } from "@/shared/lib/api";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { displayName } from "@/shared/lib/types";
 import NotFoundPage from "@/pages/NotFoundPage";
-import { chatKeys, getHistory } from "./api";
+import { useChatHistory } from "./hooks/use-chat-history";
+import { useMessageScroll } from "./hooks/use-message-scroll";
 import { useChatRoom } from "./hooks/use-chat-room";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
@@ -43,14 +42,7 @@ export default function ChatPage() {
 
 function ChatRoom({ chatId }: { chatId: number }) {
   const { user } = useSession();
-  const identity = useSessionStore((state) => state.tokens?.refreshToken);
-  const history = useQuery({
-    queryKey: chatKeys.history(identity, chatId),
-    queryFn: ({ signal }) => getHistory(chatId, signal),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
+  const history = useChatHistory(chatId);
   const room = useChatRoom(chatId, history.isSuccess);
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
@@ -78,12 +70,15 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const uploadController = useRef<AbortController | null>(null);
   useEffect(() => () => uploadController.current?.abort(), []);
   const [pending, setPending] = useState(false);
-  const bottom = useRef<HTMLDivElement>(null);
-  const container = useRef<HTMLDivElement>(null);
-  const nearBottom = useRef(true);
-  const initialized = useRef(false);
   const messages = history.data?.messages;
-  const lastMessageId = messages?.at(-1)?.id;
+  const { container, content, bottom, nearBottom, prefetch, rememberPosition } =
+    useMessageScroll({
+      messages,
+      loadingOlder: history.loadingOlder,
+      canLoadOlder:
+        !!history.data?.nextPage && !history.olderError && !history.isFetching,
+      loadOlder: history.loadOlder,
+    });
   const firstUnread = messages?.find(
     (message) =>
       message.senderId !== user?.id &&
@@ -94,14 +89,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
     if (input) sessionStorage.setItem(key, input);
     else sessionStorage.removeItem(key);
   }, [input, chatId, user?.id]);
-  useEffect(() => {
-    if (!messages?.length) return;
-    if (!initialized.current || nearBottom.current)
-      bottom.current?.scrollIntoView?.({
-        behavior: initialized.current ? "smooth" : "instant",
-      });
-    initialized.current = true;
-  }, [lastMessageId, messages?.length]);
 
   async function submit() {
     if (
@@ -151,19 +138,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
       setPending(false);
     }
   }
-  if (history.isPending)
-    return (
-      <div role="status" className="space-y-6 p-6">
-        <span className="sr-only">Loading messages</span>
-        {[1, 2, 3, 4].map((id) => (
-          <Skeleton
-            key={id}
-            className={`h-16 w-2/3 ${id % 2 ? "" : "ml-auto"}`}
-          />
-        ))}
-      </div>
-    );
-  if (history.isError)
+  if (history.isPending) return <BrandLoading message="Loading messages…" />;
+  if (history.isError && !history.data)
     return (
       <div className="space-y-4 p-6 text-center">
         <h1 className="text-xl font-semibold">
@@ -193,149 +169,182 @@ function ChatRoom({ chatId }: { chatId: number }) {
       </div>
       <div
         ref={container}
-        onScroll={() => {
-          const element = container.current;
-          if (element)
-            nearBottom.current =
-              element.scrollHeight - element.scrollTop - element.clientHeight <
-              100;
-        }}
-        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+        onScroll={rememberPosition}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 [overflow-anchor:none]"
         role="log"
         aria-label="Messages"
         aria-live="polite"
       >
-        {messages?.length === 0 && (
-          <p className="py-12 text-center text-muted-foreground">
-            Start the conversation with a message.
-          </p>
-        )}
-        {messages?.map((message) => {
-          if (
-            message.kind === "MEMBER_LEFT" ||
-            message.kind === "MEMBER_REMOVED"
-          )
-            return (
-              <div
-                key={message.id}
-                className="my-4 flex justify-center"
-                aria-label="Group activity"
-              >
-                <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
-                  <p
-                    dir="auto"
-                    className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                  >
-                    {message.content}
-                  </p>
-                  <time
-                    dateTime={message.createdAt}
-                    className="block text-[10px] opacity-75"
-                  >
-                    {formatDateBasedOnToday(message.createdAt)}
-                  </time>
-                </div>
-              </div>
-            );
-          const own = message.senderId === user?.id;
-          const read = message.readStatuses?.some(
-            (receipt) => receipt.userId !== user?.id,
-          );
-          return (
-            <div key={message.id}>
-              {message.id === firstUnread && (
-                <p className="my-4 border-t pt-2 text-center text-xs text-muted-foreground">
-                  Unread messages
+        <div ref={content}>
+          {history.loadingOlder ? (
+            <BrandLoading compact message="Loading earlier messages…" />
+          ) : history.data?.nextPage ? (
+            <div className="flex flex-col items-center gap-1 py-2">
+              {!!history.olderError && (
+                <p
+                  role="alert"
+                  className="text-center text-xs text-muted-foreground"
+                >
+                  Could not load earlier messages.{" "}
+                  {errorMessage(history.olderError)}
                 </p>
               )}
-              <div
-                className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={history.isFetching}
+                onClick={() => void history.loadOlder()}
               >
+                {history.olderError ? "Try again" : "Load earlier messages"}
+              </Button>
+            </div>
+          ) : null}
+          {messages?.length === 0 && (
+            <p className="py-12 text-center text-muted-foreground">
+              Start the conversation with a message.
+            </p>
+          )}
+          {messages?.map((message, index) => {
+            if (
+              message.kind === "MEMBER_LEFT" ||
+              message.kind === "MEMBER_REMOVED"
+            )
+              return (
                 <div
-                  className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
+                  key={message.id}
+                  data-message-id={message.id}
+                  ref={
+                    index === Math.min(9, messages.length - 1)
+                      ? prefetch
+                      : undefined
+                  }
+                  className="my-4 flex justify-center"
+                  aria-label="Group activity"
                 >
-                  <IdentityAvatar
-                    avatarId={
-                      (own
-                        ? user
-                        : (message.sender ??
-                          history.data?.users.find(
-                            (p) => p.userId === message.senderId,
-                          )?.user)
-                      )?.profile?.avatarId
-                    }
-                    name={displayName(
-                      own
-                        ? user
-                        : (message.sender ??
-                            history.data?.users.find(
-                              (participant) =>
-                                participant.userId === message.senderId,
-                            )?.user),
-                    )}
-                    className="hidden size-7 text-[10px] sm:inline-flex"
-                  />
-                  <div
-                    className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
-                  >
-                    {history.data?.chat?.isGroup && !own && (
-                      <span className="text-xs font-semibold text-brand">
-                        {displayName(
-                          message.sender ??
-                            history.data.users.find(
-                              (p) => p.userId === message.senderId,
-                            )?.user,
-                        )}
-                      </span>
-                    )}
+                  <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
+                    <p
+                      dir="auto"
+                      className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                    >
+                      {message.content}
+                    </p>
                     <time
-                      className="text-[11px] text-muted-foreground"
                       dateTime={message.createdAt}
+                      className="block text-[10px] opacity-75"
                     >
                       {formatDateBasedOnToday(message.createdAt)}
                     </time>
+                  </div>
+                </div>
+              );
+            const own = message.senderId === user?.id;
+            const read = message.readStatuses?.some(
+              (receipt) => receipt.userId !== user?.id,
+            );
+            return (
+              <div
+                key={message.id}
+                data-message-id={message.id}
+                ref={
+                  index === Math.min(9, messages.length - 1)
+                    ? prefetch
+                    : undefined
+                }
+              >
+                {message.id === firstUnread && (
+                  <p className="my-4 border-t pt-2 text-center text-xs text-muted-foreground">
+                    Unread messages
+                  </p>
+                )}
+                <div
+                  className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
+                  >
+                    <IdentityAvatar
+                      avatarId={
+                        (own
+                          ? user
+                          : (message.sender ??
+                            history.data?.users.find(
+                              (p) => p.userId === message.senderId,
+                            )?.user)
+                        )?.profile?.avatarId
+                      }
+                      name={displayName(
+                        own
+                          ? user
+                          : (message.sender ??
+                              history.data?.users.find(
+                                (participant) =>
+                                  participant.userId === message.senderId,
+                              )?.user),
+                      )}
+                      className="hidden size-7 text-[10px] sm:inline-flex"
+                    />
                     <div
-                      className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
+                      className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
                     >
-                      {message.attachments?.map((attachment) => (
-                        <Media key={attachment.id} file={attachment} />
-                      ))}
-                      <span
-                        className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                        dir="auto"
-                      >
-                        {message.content}
-                      </span>
-                      {own && (
-                        <span
-                          aria-label={
-                            read
-                              ? history.data?.chat?.isGroup
-                                ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
-                                : "Read"
-                              : "Sent"
-                          }
-                          title={
-                            history.data?.chat?.isGroup
-                              ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
-                              : undefined
-                          }
-                        >
-                          {read ? (
-                            <CheckCheck className="size-3" />
-                          ) : (
-                            <Check className="size-3" />
+                      {history.data?.chat?.isGroup && !own && (
+                        <span className="text-xs font-semibold text-brand">
+                          {displayName(
+                            message.sender ??
+                              history.data.users.find(
+                                (p) => p.userId === message.senderId,
+                              )?.user,
                           )}
                         </span>
                       )}
+                      <time
+                        className="text-[11px] text-muted-foreground"
+                        dateTime={message.createdAt}
+                      >
+                        {formatDateBasedOnToday(message.createdAt)}
+                      </time>
+                      <div
+                        className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
+                      >
+                        {message.attachments?.map((attachment) => (
+                          <Media key={attachment.id} file={attachment} />
+                        ))}
+                        <span
+                          className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                          dir="auto"
+                        >
+                          {message.content}
+                        </span>
+                        {own && (
+                          <span
+                            aria-label={
+                              read
+                                ? history.data?.chat?.isGroup
+                                  ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
+                                  : "Read"
+                                : "Sent"
+                            }
+                            title={
+                              history.data?.chat?.isGroup
+                                ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
+                                : undefined
+                            }
+                          >
+                            {read ? (
+                              <CheckCheck className="size-3" />
+                            ) : (
+                              <Check className="size-3" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-        <div ref={bottom} />
+            );
+          })}
+          <div ref={bottom} />
+        </div>
       </div>
       <form
         className="relative shrink-0 border-t border-border bg-card/90 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]"

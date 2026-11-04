@@ -45,6 +45,7 @@ export interface HistoryResponse {
   users: Participant[];
 }
 export interface History {
+  nextPage?: number | null;
   chat?: ChatDetails;
   messages: Message[];
   users: Participant[];

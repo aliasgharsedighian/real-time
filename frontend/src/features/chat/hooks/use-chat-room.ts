@@ -25,17 +25,20 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     const timers = new Map<number, ReturnType<typeof setTimeout>>();
     const key = chatKeys.history(identity, chatId);
     let hasJoined = false;
+    const acknowledged = new Set<number>();
     const markRead = (ids: number[]) => {
       if (
         document.visibilityState === "visible" &&
         socket.connected &&
         ids.length
       ) {
-        for (let offset = 0; offset < ids.length; offset += 1000)
+        const unread = ids.filter((id) => !acknowledged.has(id));
+        for (const id of unread) acknowledged.add(id);
+        for (let offset = 0; offset < unread.length; offset += 1000)
           socket.emit("message:read", {
             chatId,
             userId,
-            messageIds: ids.slice(offset, offset + 1000),
+            messageIds: unread.slice(offset, offset + 1000),
           });
       }
     };
@@ -52,6 +55,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       );
     };
     const join = () => {
+      acknowledged.clear();
       setConnected(true);
       socket.emit("chat:join", { chatId, userId });
       if (hasJoined) void cache.invalidateQueries({ queryKey: key });
@@ -116,7 +120,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       if (
         event.type === "updated" &&
         event.action.type === "success" &&
-        !event.action.manual &&
         event.query.queryKey.every(
           (part: unknown, index: number) => part === key[index],
         ) &&

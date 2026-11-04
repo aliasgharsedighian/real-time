@@ -91,7 +91,7 @@ function ChatLayoutContent() {
       className="h-dvh min-h-0 overflow-hidden"
     >
       <ChatSidebar />
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         <header className="flex min-h-18 shrink-0 items-center gap-3 border-b border-border bg-card/50 px-3 pt-[env(safe-area-inset-top)] sm:px-5">
           {(match || profile || calls) && (
             <Button
@@ -156,7 +156,9 @@ function ChatLayoutContent() {
             <ThemeToggle />
           </div>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div
+          className={`flex min-h-0 flex-1 flex-col ${match ? "overflow-hidden" : "overflow-y-auto"}`}
+        >
           <Outlet />
         </div>
       </SidebarInset>

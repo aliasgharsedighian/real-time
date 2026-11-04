@@ -19,9 +19,7 @@ export class PrsimaPollingRepository {
       where: {
         chatId: chatId,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip,
       take: limit,
       include: {
@@ -61,21 +59,23 @@ export class PrsimaPollingRepository {
         },
       },
     });
-    const unreadMessages = await this.prisma.message.findMany({
-      where: {
-        chatId,
-        kind: 'TEXT',
-        senderId: { not: userId },
-        NOT: [
-          {
-            readStatuses: {
-              some: {
-                userId,
-              },
+    const unreadWhere = {
+      chatId,
+      kind: 'TEXT' as const,
+      senderId: { not: userId },
+      NOT: [
+        {
+          readStatuses: {
+            some: {
+              userId,
             },
           },
-        ],
-      },
+        },
+      ],
+    };
+    const unreadCount = await this.prisma.message.count({ where: unreadWhere });
+    const unreadMessages = await this.prisma.message.findMany({
+      where: { ...unreadWhere, id: { in: chat.map((message) => message.id) } },
       include: {
         attachments: { select: fileSelect },
         sender: {
@@ -99,7 +99,7 @@ export class PrsimaPollingRepository {
     });
 
     return {
-      unreadCount: unreadMessages.length,
+      unreadCount,
       users: users?.participants.filter((p) => p.userId !== userId),
       chat: users,
       chats: chat.reverse(),

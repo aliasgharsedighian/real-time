@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
@@ -16,7 +22,7 @@ vi.mock("@/features/auth/session-context", () => ({
 }));
 vi.mock("./api", () => ({
   chatKeys: { history: () => ["history"] },
-  getHistory: () => mocks.history(),
+  getHistory: (...args: unknown[]) => mocks.history(...args),
 }));
 vi.mock("./hooks/use-chat-room", () => ({
   useChatRoom: () => ({
@@ -45,6 +51,7 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
   uploadFile: mocks.upload,
 }));
 vi.mock("@/features/uploads/Media", () => ({
+  useFileUrl: () => ({}),
   LocalPreview: ({ file }: { file: File }) => <p>Preview: {file.name}</p>,
   Media: () => <p>Sent attachment</p>,
 }));
@@ -87,7 +94,67 @@ describe("chat attachments", () => {
     mocks.upload.mockResolvedValue({ id: "attachment-id", kind: "VIDEO" });
     mocks.send.mockResolvedValue(undefined);
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  it("prefetches at the tenth oldest row, shows the existing compact loader and stops at the end", async () => {
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(500);
+    vi.spyOn(Element.prototype, "scrollHeight", "get").mockReturnValue(5000);
+    let intersect!: (entries: { isIntersecting: boolean }[]) => void;
+    const observe = vi.fn();
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: typeof intersect) {
+          intersect = callback;
+        }
+        observe = observe;
+        disconnect = vi.fn();
+      },
+    );
+    const messages = Array.from({ length: 50 }, (_, index) => ({
+      id: index + 51,
+      chatId: 3,
+      senderId: 2,
+      content: `Message ${index + 51}`,
+      createdAt: "2026-11-04T10:00:00Z",
+    }));
+    let finish!: (value: unknown) => void;
+    mocks.history
+      .mockResolvedValueOnce({
+        messages,
+        users: [],
+        unreadIds: [],
+        nextPage: 2,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    setup();
+    await screen.findByText("Message 100");
+    await waitFor(() => expect(observe).toHaveBeenCalled());
+    expect(observe.mock.calls[0][0].dataset.messageId).toBe("60");
+    act(() => intersect([{ isIntersecting: true }]));
+    expect(mocks.history).toHaveBeenCalledTimes(1);
+    fireEvent.scroll(screen.getByRole("log"), { target: { scrollTop: 300 } });
+    act(() => intersect([{ isIntersecting: true }]));
+    await screen.findByText("Loading earlier messages…");
+    expect(mocks.history.mock.calls[1][2]).toBe(2);
+    await act(async () =>
+      finish({ messages: [], users: [], unreadIds: [], nextPage: null }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Loading earlier messages…")).toBeNull(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Load earlier messages" }),
+    ).toBeNull();
+    expect(screen.getByText("Message 100")).toBeTruthy();
+  });
   it("renders departure and removal as group activity instead of sender bubbles", async () => {
     mocks.history.mockResolvedValue({
       users: [],

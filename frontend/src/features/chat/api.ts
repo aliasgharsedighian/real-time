@@ -25,12 +25,22 @@ export async function getChats(userId: number): Promise<Chat[]> {
   );
 }
 
-export async function getHistory(chatId: number, signal?: AbortSignal) {
+export const HISTORY_PAGE_SIZE = 50;
+
+export async function getHistory(
+  chatId: number,
+  signal?: AbortSignal,
+  page = 1,
+) {
   const { data } = await api.get<ApiResponse<HistoryResponse>>(
     `realtime/polling/${chatId}`,
-    { params: { page: 1, limit: 100 }, signal },
+    { params: { page, limit: HISTORY_PAGE_SIZE }, signal },
   );
-  return normalizeHistory(unwrap(data));
+  const response = unwrap(data);
+  return {
+    ...normalizeHistory(response),
+    nextPage: response.chats.length === HISTORY_PAGE_SIZE ? page + 1 : null,
+  };
 }
 
 export async function searchUsers(search: string, signal?: AbortSignal) {
