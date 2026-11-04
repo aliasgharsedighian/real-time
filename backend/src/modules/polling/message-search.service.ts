@@ -8,7 +8,11 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
 import { ChatService } from '../../gateway/chat/chat.service';
 import { fileSelect } from '../files-upload/upload.policy';
-import { MessageWindowDto, SearchMessagesDto } from './message-search.dto';
+import {
+  MessageDaysDto,
+  MessageWindowDto,
+  SearchMessagesDto,
+} from './message-search.dto';
 
 @Injectable()
 export class MessageSearchService {
@@ -20,6 +24,43 @@ export class MessageSearchService {
   private async authorize(chatId: number, userId: number) {
     if (!(await this.chats.ensureParticipant(chatId, userId)))
       throw new ForbiddenException('User is not a participant of this chat.');
+  }
+
+  async days(chatId: number, userId: number, query: MessageDaysDto) {
+    await this.authorize(chatId, userId);
+    const from = new Date(query.from);
+    const to = new Date(query.to);
+    if (
+      !Number.isFinite(from.getTime()) ||
+      !Number.isFinite(to.getTime()) ||
+      to <= from ||
+      to.getTime() - from.getTime() > 32 * 86400000
+    )
+      throw new BadRequestException(
+        'Provide a date range of at most one month.',
+      );
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: query.timeZone }).format(from);
+    } catch {
+      throw new BadRequestException('Invalid time zone.');
+    }
+    const days = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL statement_timeout = '2500ms'`;
+        return tx.$queryRaw<{ date: string; messageId: number }[]>`
+        SELECT DISTINCT ON ("date")
+          to_char("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${query.timeZone}, 'YYYY-MM-DD') AS "date",
+          "id" AS "messageId"
+        FROM "Message"
+        WHERE "chatId" = ${chatId}
+          AND "createdAt" >= (${from.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+          AND "createdAt" < (${to.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+        ORDER BY "date", "createdAt", "id"
+      `;
+      },
+      { timeout: 4000 },
+    );
+    return { statusCode: 200, message: 'Message days loaded', data: { days } };
   }
 
   async search(chatId: number, userId: number, query: SearchMessagesDto) {

@@ -227,6 +227,71 @@ describe('message search with PostgreSQL and authenticated HTTP', () => {
       `Search fixture: 6,152 messages, 5 hits, HTTP ${Math.round(performance.now() - started)} ms`,
     );
   });
+  it('groups calendar dates in the requested timezone and returns the first message of each day', async () => {
+    const chat = await prisma.chat.create({
+      data: {
+        isGroup: true,
+        name: 'Calendar fixture',
+        participants: { create: { userId: users[0] } },
+      },
+    });
+    chats.push(chat.id);
+    const timestamps = [
+      '2026-10-31T20:29:59Z',
+      '2026-10-31T20:30:00Z',
+      '2026-11-03T20:29:59Z',
+      '2026-11-03T20:30:00Z',
+      '2026-11-03T21:00:00Z',
+    ];
+    const ids: number[] = [];
+    for (const timestamp of timestamps)
+      ids.push(
+        (
+          await prisma.message.create({
+            data: {
+              chatId: chat.id,
+              senderId: users[0],
+              content: 'Calendar boundary',
+              createdAt: new Date(timestamp),
+            },
+          })
+        ).id,
+      );
+    const range = new URLSearchParams({
+      from: '2026-10-31T20:30:00Z',
+      to: '2026-11-30T20:30:00Z',
+      timeZone: 'Asia/Tehran',
+    });
+    const result = await get(chat.id, `days?${range}`).expect(200);
+    expect(result.body.data.days).toEqual([
+      { date: '2026-11-01', messageId: ids[1] },
+      { date: '2026-11-03', messageId: ids[2] },
+      { date: '2026-11-04', messageId: ids[3] },
+    ]);
+    const context = await get(chat.id, `window?aroundId=${ids[3]}`).expect(200);
+    expect(context.body.data.messages.some((m) => m.id === ids[3])).toBe(true);
+    await get(chat.id, `days?${range}`, 2).expect(403);
+    const plan = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
+      return tx.$queryRaw<
+        any[]
+      >`EXPLAIN (FORMAT JSON) SELECT "id" FROM "Message" WHERE "chatId" = ${chat.id} AND "createdAt" >= '2026-11-01'::timestamp ORDER BY "createdAt", "id" LIMIT 1`;
+    });
+    expect(JSON.stringify(plan)).toContain('Message_chatId_createdAt_id_idx');
+  });
+  it('rejects invalid calendar ranges and time zones', async () => {
+    const range = new URLSearchParams({
+      from: '2026-11-01T00:00:00Z',
+      to: '2026-12-01T00:00:00Z',
+      timeZone: 'Not/AZone',
+    });
+    await get(chats[0], `days?${range}`).expect(400);
+    range.set('timeZone', 'UTC');
+    range.set('to', '2027-01-01T00:00:00Z');
+    await get(chats[0], `days?${range}`).expect(400);
+    range.set('to', '2026-10-01T00:00:00Z');
+    await get(chats[0], `days?${range}`).expect(400);
+  });
   it('revokes search and context access immediately when group membership is removed', async () => {
     await prisma.chatParticipant.delete({
       where: { userId_chatId: { userId: users[1], chatId: chats[1] } },

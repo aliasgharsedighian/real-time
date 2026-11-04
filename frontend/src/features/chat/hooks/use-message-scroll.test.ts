@@ -5,8 +5,96 @@ import { useMessageScroll } from "./use-message-scroll";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("shows the date only for scrolling and hides it after scrolling stops", () => {
+  vi.useFakeTimers();
+  try {
+    const items = messages(1, 2);
+    const { result, rerender, unmount } = renderHook(
+      ({ items }) =>
+        useMessageScroll({
+          messages: items,
+          loadingOlder: false,
+          canLoadOlder: false,
+          loadOlder: async () => {},
+        }),
+      { initialProps: { items } },
+    );
+    const element = document.createElement("div");
+    Object.defineProperties(element, {
+      clientHeight: { get: () => 300 },
+      scrollHeight: { get: () => 1000 },
+    });
+    result.current.container.current = element;
+    rerender({ items: [...items] });
+    act(() => result.current.handleScroll());
+    expect(result.current.scrolling).toBe(false);
+    element.scrollTop = 400;
+    act(() => result.current.handleScroll());
+    expect(result.current.scrolling).toBe(true);
+    act(() => vi.advanceTimersByTime(1000));
+    element.scrollTop = 300;
+    act(() => result.current.handleScroll());
+    act(() => vi.advanceTimersByTime(1000));
+    expect(result.current.scrolling).toBe(true);
+    act(() => vi.advanceTimersByTime(400));
+    expect(result.current.scrolling).toBe(false);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("updates the pinned day when scrolling in either direction across midnight", () => {
+  const items = messages(1, 2);
+  const { result, rerender } = renderHook(
+    ({ items }) =>
+      useMessageScroll({
+        messages: items,
+        loadingOlder: false,
+        canLoadOlder: false,
+        loadOlder: async () => {},
+      }),
+    { initialProps: { items } },
+  );
+  const element = document.createElement("div");
+  let top = 0;
+  Object.defineProperties(element, {
+    clientHeight: { get: () => 300 },
+    scrollHeight: { get: () => 1000 },
+    scrollTop: {
+      get: () => top,
+      set: (value: number) => {
+        top = Math.max(0, Math.min(value, 700));
+      },
+    },
+  });
+  element.querySelectorAll = (() =>
+    [0, 1].map((index) => ({
+      dataset: {
+        messageId: String(index + 1),
+        messageDay: index ? "2026-11-04" : "2026-11-03",
+      },
+      getBoundingClientRect: () => ({
+        top: index * 500 - top,
+        bottom: (index + 1) * 500 - top,
+      }),
+    }))) as unknown as typeof element.querySelectorAll;
+  result.current.container.current = element;
+  rerender({ items: [...items] });
+  expect(result.current.visibleDay).toBe("2026-11-04");
+  element.scrollTop = 100;
+  act(() => result.current.rememberPosition());
+  expect(result.current.visibleDay).toBe("2026-11-03");
+  element.scrollTop = 600;
+  act(() => result.current.rememberPosition());
+  expect(result.current.visibleDay).toBe("2026-11-04");
+});
+
 it("centers a selected search message and keeps it in view across list updates", () => {
-  type Focus = { id: number; requestId: number } | undefined;
+  type Focus =
+    | { id: number; requestId: number; align?: "start" | "center" }
+    | undefined;
   const { result, rerender } = renderHook(
     ({ focus, items }: { focus: Focus; items: Message[] }) =>
       useMessageScroll({
@@ -51,6 +139,11 @@ it("centers a selected search message and keeps it in view across list updates",
   expect(top).toBe(800);
   rerender({ focus, items: messages(1, 51) });
   expect(top).toBe(800);
+  rerender({
+    focus: { id: 10, requestId: 2, align: "start" },
+    items: messages(1, 51),
+  });
+  expect(top).toBe(888);
 });
 
 const messages = (start: number, end: number): Message[] =>

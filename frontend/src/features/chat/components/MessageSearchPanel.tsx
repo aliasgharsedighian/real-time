@@ -8,7 +8,11 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { displayName } from "@/shared/lib/types";
 import { errorMessage } from "@/shared/lib/api";
-import { formatDateBasedOnToday } from "@/shared/lib/date";
+import {
+  formatMessageDay,
+  formatMessageTime,
+  localDateKey,
+} from "@/shared/lib/date";
 import { searchMessages } from "../api";
 import { useMessageSearch } from "../message-search-context";
 
@@ -226,7 +230,12 @@ export function MessageSearchPanel({
                       dateTime={message.createdAt}
                       className="shrink-0 text-[10px] text-muted-foreground"
                     >
-                      {formatDateBasedOnToday(message.createdAt)}
+                      <span className="block text-right">
+                        {formatMessageDay(localDateKey(message.createdAt))}
+                      </span>
+                      <span className="mt-0.5 block text-right">
+                        {formatMessageTime(message.createdAt)}
+                      </span>
                     </time>
                   </div>
                   <p

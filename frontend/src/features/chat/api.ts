@@ -91,6 +91,20 @@ export async function getMessageWindow(
   );
 }
 
+export async function getMessageDays(
+  chatId: number,
+  range: { from: string; to: string; timeZone: string },
+  signal?: AbortSignal,
+) {
+  return unwrap(
+    (
+      await api.get<
+        ApiResponse<{ days: { date: string; messageId: number }[] }>
+      >(`realtime/polling/${chatId}/days`, { params: range, signal })
+    ).data,
+  );
+}
+
 export async function createChat(
   participants: number[],
   firstMessage = "",

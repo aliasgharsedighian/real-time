@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { Message } from "../types";
 
 export function useMessageScroll({
@@ -12,7 +18,7 @@ export function useMessageScroll({
   loadingOlder: boolean;
   canLoadOlder: boolean;
   loadOlder: () => Promise<void>;
-  focusMessage?: { id: number; requestId: number };
+  focusMessage?: { id: number; requestId: number; align?: "start" | "center" };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -23,6 +29,15 @@ export function useMessageScroll({
   const anchor = useRef<{ id: string; offset: number } | null>(null);
   const prefetch = useRef<HTMLDivElement>(null);
   const appliedFocus = useRef<typeof focusMessage>(undefined);
+  const [visibleDay, setVisibleDay] = useState("");
+  const [scrolling, setScrolling] = useState(false);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    },
+    [],
+  );
 
   const rememberPosition = useCallback(() => {
     const element = container.current;
@@ -47,7 +62,20 @@ export function useMessageScroll({
           offset: visible.getBoundingClientRect().top - top,
         }
       : null;
+    if (visible?.dataset.messageDay) setVisibleDay(visible.dataset.messageDay);
   }, []);
+
+  const handleScroll = useCallback(() => {
+    const element = container.current;
+    const moved =
+      element && Math.abs(element.scrollTop - previousScrollTop.current) > 1;
+    rememberPosition();
+    // Layout corrections record their position before the browser emits scroll.
+    if (!moved) return;
+    setScrolling(true);
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => setScrolling(false), 1400);
+  }, [rememberPosition]);
 
   const syncPosition = useCallback(() => {
     const element = container.current;
@@ -87,10 +115,12 @@ export function useMessageScroll({
         element.scrollTop +=
           row.getBoundingClientRect().top -
           element.getBoundingClientRect().top -
-          Math.max(
-            0,
-            (element.clientHeight - row.getBoundingClientRect().height) / 2,
-          );
+          (focusMessage.align === "start"
+            ? 12
+            : Math.max(
+                0,
+                (element.clientHeight - row.getBoundingClientRect().height) / 2,
+              ));
         appliedFocus.current = focusMessage;
         rememberPosition();
         return;
@@ -140,5 +170,15 @@ export function useMessageScroll({
     return () => observer.disconnect();
   }, [messages, canLoadOlder, loadingOlder, loadOlder]);
 
-  return { container, content, bottom, nearBottom, prefetch, rememberPosition };
+  return {
+    container,
+    content,
+    bottom,
+    nearBottom,
+    prefetch,
+    rememberPosition,
+    visibleDay,
+    scrolling,
+    handleScroll,
+  };
 }

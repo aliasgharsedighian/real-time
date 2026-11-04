@@ -6,7 +6,7 @@ import {
   validateUpload,
   type MediaFile,
 } from "@/features/uploads/api";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Check,
@@ -20,7 +20,7 @@ import {
 import { useSession } from "@/features/auth/session-context";
 import { Button } from "@/shared/ui/button";
 import { BrandLoading } from "@/shared/components/BrandLoading";
-import { formatDateBasedOnToday } from "@/shared/lib/date";
+import { formatMessageTime, localDateKey } from "@/shared/lib/date";
 import { errorMessage } from "@/shared/lib/api";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { displayName } from "@/shared/lib/types";
@@ -29,6 +29,10 @@ import { useChatHistory } from "./hooks/use-chat-history";
 import { useMessageScroll } from "./hooks/use-message-scroll";
 import { useMessageSearch } from "./message-search-context";
 import { MessageSearchPanel } from "./components/MessageSearchPanel";
+import {
+  ChatDateNavigation,
+  DaySeparator,
+} from "./components/ChatDateNavigation";
 import { useChatRoom } from "./hooks/use-chat-room";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
@@ -77,19 +81,28 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [focusedMessage, setFocusedMessage] = useState<{
     id: number;
     requestId: number;
+    align?: "start" | "center";
   }>();
-  const { container, content, bottom, nearBottom, prefetch, rememberPosition } =
-    useMessageScroll({
-      messages,
-      loadingOlder: history.loadingOlder,
-      canLoadOlder:
-        !!(history.data?.window?.beforeId ?? history.data?.nextPage) &&
-        !history.olderError &&
-        !history.isFetching &&
-        !history.navigating,
-      loadOlder: history.loadOlder,
-      focusMessage: focusedMessage,
-    });
+  const {
+    container,
+    content,
+    bottom,
+    nearBottom,
+    prefetch,
+    visibleDay,
+    scrolling,
+    handleScroll,
+  } = useMessageScroll({
+    messages,
+    loadingOlder: history.loadingOlder,
+    canLoadOlder:
+      !!(history.data?.window?.beforeId ?? history.data?.nextPage) &&
+      !history.olderError &&
+      !history.isFetching &&
+      !history.navigating,
+    loadOlder: history.loadOlder,
+    focusMessage: focusedMessage,
+  });
   const firstUnread = messages?.find(
     (message) =>
       message.senderId !== user?.id &&
@@ -208,201 +221,232 @@ function ChatRoom({ chatId }: { chatId: number }) {
               ? `${room.typing.length} people are typing…`
               : ""}
         </div>
-        <div
-          ref={container}
-          onScroll={rememberPosition}
-          className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 [overflow-anchor:none]"
-          role="log"
-          aria-label="Messages"
-          aria-live="polite"
-        >
-          <div ref={content}>
-            {history.loadingOlder ? (
-              <BrandLoading compact message="Loading earlier messages…" />
-            ) : (history.data?.window?.beforeId ?? history.data?.nextPage) ? (
-              <div className="flex flex-col items-center gap-1 py-2">
-                {!!history.olderError && (
-                  <p
-                    role="alert"
-                    className="text-center text-xs text-muted-foreground"
-                  >
-                    Could not load earlier messages.{" "}
-                    {errorMessage(history.olderError)}
-                  </p>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={
-                    history.isFetching ||
-                    history.navigating ||
-                    history.loadingNewer
-                  }
-                  onClick={() => void history.loadOlder()}
-                >
-                  {history.olderError ? "Try again" : "Load earlier messages"}
-                </Button>
-              </div>
-            ) : null}
-            {messages?.length === 0 && (
-              <p className="py-12 text-center text-muted-foreground">
-                Start the conversation with a message.
-              </p>
-            )}
-            {messages?.map((message, index) => {
-              if (
-                message.kind === "MEMBER_LEFT" ||
-                message.kind === "MEMBER_REMOVED"
-              )
-                return (
-                  <div
-                    key={message.id}
-                    data-message-id={message.id}
-                    ref={
-                      index === Math.min(9, messages.length - 1)
-                        ? prefetch
-                        : undefined
-                    }
-                    className="my-4 flex justify-center"
-                    aria-label="Group activity"
-                  >
-                    <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
-                      <p
-                        dir="auto"
-                        className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                      >
-                        {message.content}
-                      </p>
-                      <time
-                        dateTime={message.createdAt}
-                        className="block text-[10px] opacity-75"
-                      >
-                        {formatDateBasedOnToday(message.createdAt)}
-                      </time>
-                    </div>
-                  </div>
-                );
-              const own = message.senderId === user?.id;
-              const read = message.readStatuses?.some(
-                (receipt) => receipt.userId !== user?.id,
-              );
-              return (
-                <div
-                  key={message.id}
-                  data-message-id={message.id}
-                  ref={
-                    index === Math.min(9, messages.length - 1)
-                      ? prefetch
-                      : undefined
-                  }
-                >
-                  {message.id === firstUnread && (
-                    <p className="my-4 border-t pt-2 text-center text-xs text-muted-foreground">
-                      Unread messages
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {!!messages?.length && (
+            <ChatDateNavigation
+              chatId={chatId}
+              day={visibleDay || localDateKey(messages.at(-1)!.createdAt)}
+              disabled={history.navigating}
+              visible={scrolling}
+              onSelect={async (id) => {
+                await history.openMessage(id);
+                setFocusedMessage((current) => ({
+                  id,
+                  requestId: (current?.requestId ?? 0) + 1,
+                  align: "start",
+                }));
+              }}
+            />
+          )}
+          <div
+            ref={container}
+            onScroll={handleScroll}
+            tabIndex={0}
+            className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 [overflow-anchor:none]"
+            role="log"
+            aria-label="Messages"
+            aria-live="polite"
+          >
+            <div ref={content}>
+              {history.loadingOlder ? (
+                <BrandLoading compact message="Loading earlier messages…" />
+              ) : (history.data?.window?.beforeId ?? history.data?.nextPage) ? (
+                <div className="flex flex-col items-center gap-1 py-2">
+                  {!!history.olderError && (
+                    <p
+                      role="alert"
+                      className="text-center text-xs text-muted-foreground"
+                    >
+                      Could not load earlier messages.{" "}
+                      {errorMessage(history.olderError)}
                     </p>
                   )}
-                  <div
-                    className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      history.isFetching ||
+                      history.navigating ||
+                      history.loadingNewer
+                    }
+                    onClick={() => void history.loadOlder()}
                   >
-                    <div
-                      className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
-                    >
-                      <IdentityAvatar
-                        avatarId={
-                          (own
-                            ? user
-                            : (message.sender ??
-                              history.data?.users.find(
-                                (p) => p.userId === message.senderId,
-                              )?.user)
-                          )?.profile?.avatarId
-                        }
-                        name={displayName(
-                          own
-                            ? user
-                            : (message.sender ??
-                                history.data?.users.find(
-                                  (participant) =>
-                                    participant.userId === message.senderId,
-                                )?.user),
-                        )}
-                        className="hidden size-7 text-[10px] sm:inline-flex"
-                      />
+                    {history.olderError ? "Try again" : "Load earlier messages"}
+                  </Button>
+                </div>
+              ) : null}
+              {messages?.length === 0 && (
+                <p className="py-12 text-center text-muted-foreground">
+                  Start the conversation with a message.
+                </p>
+              )}
+              {messages?.map((message, index) => {
+                const day = localDateKey(message.createdAt);
+                const separator =
+                  index === 0 ||
+                  localDateKey(messages[index - 1].createdAt) !== day ? (
+                    <DaySeparator day={day} />
+                  ) : null;
+                if (
+                  message.kind === "MEMBER_LEFT" ||
+                  message.kind === "MEMBER_REMOVED"
+                )
+                  return (
+                    <Fragment key={message.id}>
+                      {separator}
                       <div
-                        className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
+                        data-message-id={message.id}
+                        data-message-day={day}
+                        ref={
+                          index === Math.min(9, messages.length - 1)
+                            ? prefetch
+                            : undefined
+                        }
+                        className="my-4 flex justify-center"
+                        aria-label="Group activity"
                       >
-                        {history.data?.chat?.isGroup && !own && (
-                          <span className="text-xs font-semibold text-brand">
-                            {displayName(
-                              message.sender ??
-                                history.data.users.find(
-                                  (p) => p.userId === message.senderId,
-                                )?.user,
-                            )}
-                          </span>
-                        )}
-                        <time
-                          className="text-[11px] text-muted-foreground"
-                          dateTime={message.createdAt}
-                        >
-                          {formatDateBasedOnToday(message.createdAt)}
-                        </time>
-                        <div
-                          className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
-                        >
-                          {message.attachments?.map((attachment) => (
-                            <Media key={attachment.id} file={attachment} />
-                          ))}
-                          <span
-                            className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                        <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
+                          <p
                             dir="auto"
+                            className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                           >
                             {message.content}
-                          </span>
-                          {own && (
-                            <span
-                              aria-label={
-                                read
-                                  ? history.data?.chat?.isGroup
-                                    ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
-                                    : "Read"
-                                  : "Sent"
-                              }
-                              title={
-                                history.data?.chat?.isGroup
-                                  ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
-                                  : undefined
-                              }
+                          </p>
+                          <time
+                            dateTime={message.createdAt}
+                            className="block text-[10px] opacity-75"
+                          >
+                            {formatMessageTime(message.createdAt)}
+                          </time>
+                        </div>
+                      </div>
+                    </Fragment>
+                  );
+                const own = message.senderId === user?.id;
+                const read = message.readStatuses?.some(
+                  (receipt) => receipt.userId !== user?.id,
+                );
+                return (
+                  <Fragment key={message.id}>
+                    {separator}
+                    <div
+                      data-message-id={message.id}
+                      data-message-day={day}
+                      ref={
+                        index === Math.min(9, messages.length - 1)
+                          ? prefetch
+                          : undefined
+                      }
+                    >
+                      {message.id === firstUnread && (
+                        <p className="my-4 border-t pt-2 text-center text-xs text-muted-foreground">
+                          Unread messages
+                        </p>
+                      )}
+                      <div
+                        className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
+                        >
+                          <IdentityAvatar
+                            avatarId={
+                              (own
+                                ? user
+                                : (message.sender ??
+                                  history.data?.users.find(
+                                    (p) => p.userId === message.senderId,
+                                  )?.user)
+                              )?.profile?.avatarId
+                            }
+                            name={displayName(
+                              own
+                                ? user
+                                : (message.sender ??
+                                    history.data?.users.find(
+                                      (participant) =>
+                                        participant.userId === message.senderId,
+                                    )?.user),
+                            )}
+                            className="hidden size-7 text-[10px] sm:inline-flex"
+                          />
+                          <div
+                            className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
+                          >
+                            {history.data?.chat?.isGroup && !own && (
+                              <span className="text-xs font-semibold text-brand">
+                                {displayName(
+                                  message.sender ??
+                                    history.data.users.find(
+                                      (p) => p.userId === message.senderId,
+                                    )?.user,
+                                )}
+                              </span>
+                            )}
+                            <time
+                              className="text-[11px] text-muted-foreground"
+                              dateTime={message.createdAt}
                             >
-                              {read ? (
-                                <CheckCheck className="size-3" />
-                              ) : (
-                                <Check className="size-3" />
+                              {formatMessageTime(message.createdAt)}
+                            </time>
+                            <div
+                              className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
+                            >
+                              {message.attachments?.map((attachment) => (
+                                <Media key={attachment.id} file={attachment} />
+                              ))}
+                              <span
+                                className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                                dir="auto"
+                              >
+                                {message.content}
+                              </span>
+                              {own && (
+                                <span
+                                  aria-label={
+                                    read
+                                      ? history.data?.chat?.isGroup
+                                        ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
+                                        : "Read"
+                                      : "Sent"
+                                  }
+                                  title={
+                                    history.data?.chat?.isGroup
+                                      ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
+                                      : undefined
+                                  }
+                                >
+                                  {read ? (
+                                    <CheckCheck className="size-3" />
+                                  ) : (
+                                    <Check className="size-3" />
+                                  )}
+                                </span>
                               )}
-                            </span>
-                          )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </Fragment>
+                );
+              })}
+              {history.loadingNewer ? (
+                <BrandLoading compact message="Loading newer messages…" />
+              ) : history.data?.window?.afterId ? (
+                <div className="py-3 text-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={history.navigating || history.loadingOlder}
+                    onClick={() => void history.loadNewer()}
+                  >
+                    Load newer messages
+                  </Button>
                 </div>
-              );
-            })}
-            {history.loadingNewer ? (
-              <BrandLoading compact message="Loading newer messages…" />
-            ) : history.data?.window?.afterId ? (
-              <div className="py-3 text-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={history.navigating || history.loadingOlder}
-                  onClick={() => void history.loadNewer()}
-                >
-                  Load newer messages
-                </Button>
-              </div>
-            ) : null}
-            <div ref={bottom} />
+              ) : null}
+              <div ref={bottom} />
+            </div>
           </div>
         </div>
         <form

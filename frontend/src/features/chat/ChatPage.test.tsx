@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
 import ChatPage from "./ChatPage";
+import { formatMessageDay, formatMessageTime } from "@/shared/lib/date";
 import {
   MessageSearchProvider,
   useMessageSearch,
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   history: vi.fn(),
   search: vi.fn(),
   window: vi.fn(),
+  days: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -31,6 +33,7 @@ vi.mock("./api", () => ({
   getHistory: (...args: unknown[]) => mocks.history(...args),
   searchMessages: (...args: unknown[]) => mocks.search(...args),
   getMessageWindow: (...args: unknown[]) => mocks.window(...args),
+  getMessageDays: (...args: unknown[]) => mocks.days(...args),
 }));
 vi.mock("./hooks/use-chat-room", () => ({
   useChatRoom: () => ({
@@ -106,6 +109,57 @@ async function select(type = "video/mp4") {
   });
 }
 describe("chat attachments", () => {
+  it("separates local calendar days, shows only message times, and jumps to an unloaded date", async () => {
+    const message = (id: number, content: string, date: Date) => ({
+      id,
+      chatId: 3,
+      senderId: 2,
+      content,
+      createdAt: date.toISOString(),
+    });
+    const before = message(
+      99,
+      "Before midnight",
+      new Date(2026, 10, 3, 23, 59),
+    );
+    const after = message(100, "After midnight", new Date(2026, 10, 4, 0, 1));
+    mocks.history.mockResolvedValue({
+      messages: [before, after],
+      users: [],
+      unreadIds: [],
+      nextPage: null,
+    });
+    mocks.days.mockResolvedValue({
+      days: [{ date: "2026-11-01", messageId: 30 }],
+    });
+    mocks.window.mockResolvedValue({
+      messages: [
+        message(30, "First message of November", new Date(2026, 10, 1, 9, 0)),
+      ],
+      beforeId: null,
+      afterId: 30,
+    });
+    setup();
+    await screen.findByText("After midnight");
+    expect(
+      screen.getByRole("separator", { name: formatMessageDay("2026-11-03") }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("separator", { name: formatMessageDay("2026-11-04") }),
+    ).toBeTruthy();
+    const time = document.querySelector('[data-message-id="99"] time');
+    expect(time?.textContent).toBe(formatMessageTime(before.createdAt));
+    fireEvent.scroll(screen.getByRole("log"), { target: { scrollTop: 100 } });
+    fireEvent.click(screen.getByRole("button", { name: /Jump to date/ }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: formatMessageDay("2026-11-01"),
+      }),
+    );
+    await screen.findByText("First message of November");
+    expect(mocks.window.mock.calls[0][1]).toEqual({ aroundId: 30 });
+    expect(screen.queryByText("After midnight")).toBeNull();
+  });
   it.each([false, true])(
     "opens an old server search result in a %s group chat and returns to latest messages",
     async (isGroup) => {
