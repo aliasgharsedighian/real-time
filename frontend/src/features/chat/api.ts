@@ -42,15 +42,54 @@ export async function searchUsers(search: string, signal?: AbortSignal) {
   return unwrap(data);
 }
 
-export async function createChat(participants: number[], firstMessage: string) {
+export async function createChat(
+  participants: number[],
+  firstMessage = "",
+  group?: { name: string },
+) {
   const { data } = await api.post<ApiResponse<Chat>>(
     "realtime/polling/create-chat",
-    { participant: participants, firstMessage },
+    {
+      participant: participants,
+      firstMessage,
+      ...(group ? { isGroup: true, name: group.name } : {}),
+    },
   );
   const chat = unwrap(data);
   if (!chat || typeof chat.id !== "number")
     throw new Error(
-      "The server could not create this chat. Group chats are not yet supported by the current backend.",
+      "The server could not create this conversation. Please try again.",
     );
   return chat;
+}
+
+export async function renameGroup(id: number, name: string) {
+  return unwrap(
+    (await api.patch<ApiResponse<Chat>>(`realtime/groups/${id}`, { name }))
+      .data,
+  );
+}
+export async function addGroupMembers(id: number, participant: number[]) {
+  return unwrap(
+    (
+      await api.post<ApiResponse<Chat>>(`realtime/groups/${id}/members`, {
+        participant,
+      })
+    ).data,
+  );
+}
+export async function removeGroupMember(id: number, userId: number) {
+  return unwrap(
+    (
+      await api.delete<ApiResponse<null>>(
+        `realtime/groups/${id}/members/${userId}`,
+      )
+    ).data,
+  );
+}
+export async function transferGroupOwner(id: number, userId: number) {
+  return unwrap(
+    (await api.post<ApiResponse<Chat>>(`realtime/groups/${id}/owner/${userId}`))
+      .data,
+  );
 }

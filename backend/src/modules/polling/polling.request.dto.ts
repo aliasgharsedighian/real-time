@@ -1,6 +1,9 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -27,28 +30,58 @@ export class SendMessageRequestDto {
 }
 
 export class CreateChatRequestDto {
-  @IsNotEmpty({ message: 'content is required' })
+  @IsOptional()
   @IsString()
-  readonly firstMessage: string;
+  @MaxLength(10000)
+  readonly firstMessage?: string;
 
-  @Transform(({ value }) => {
-    try {
-      if (typeof value === 'string') {
-        return JSON.parse(value);
-      }
-      return value;
-    } catch {
-      return [];
-    }
-  })
+  @IsOptional()
+  @IsBoolean()
+  readonly isGroup?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  readonly name?: string;
+
   @IsArray()
-  @IsNumber({}, { each: true }) // validate that every item is a number
+  @ArrayMinSize(1)
+  @ArrayMaxSize(99)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(2147483647, { each: true })
+  participant: number[];
+}
+
+export class UpdateGroupRequestDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
+}
+
+export class AddGroupMembersRequestDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(99)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(2147483647, { each: true })
   participant: number[];
 }
 
 export class GetChatByIdParamsDto {
   @Type(() => Number)
   @IsInt()
+  @Min(1)
+  @Max(2147483647)
   id: number;
 }
 
@@ -66,4 +99,12 @@ export class PaginatedQueryRequestDto {
   @Max(99999)
   @Type(() => Number)
   readonly page?: number;
+}
+
+export class GroupMemberParamsDto extends GetChatByIdParamsDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  userId: number;
 }

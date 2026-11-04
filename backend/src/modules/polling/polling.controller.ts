@@ -1,5 +1,7 @@
 import {
   Body,
+  Patch,
+  Delete,
   Controller,
   Get,
   Param,
@@ -8,12 +10,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { routesV1 } from 'src/config/app.routes';
+import { GroupsService } from './groups.service';
 import { GetMessagesService } from './polling.service';
 import { JwtGuard } from 'src/libs/guard';
 import { GetUser } from 'src/libs/decorators';
 import { User } from '@prisma/client';
 import {
   CreateChatRequestDto,
+  UpdateGroupRequestDto,
+  AddGroupMembersRequestDto,
+  GroupMemberParamsDto,
   GetChatByIdParamsDto,
   PaginatedQueryRequestDto,
   SendMessageRequestDto,
@@ -22,7 +28,10 @@ import {
 @Controller(routesV1.version)
 @UseGuards(JwtGuard)
 export class PollingController {
-  constructor(private messageService: GetMessagesService) {}
+  constructor(
+    private messageService: GetMessagesService,
+    private groups: GroupsService,
+  ) {}
 
   @Get(routesV1.polling.message)
   async getMessage(@GetUser() user: User) {
@@ -67,7 +76,35 @@ export class PollingController {
 
   @Post(routesV1.polling.createChat)
   async createChat(@GetUser() user: User, @Body() body: CreateChatRequestDto) {
-    const result = await this.messageService.createChat(user.id, body);
+    const result = await this.groups.create(user.id, body);
     return result;
+  }
+
+  @Patch('realtime/groups/:id')
+  renameGroup(
+    @GetUser() user: User,
+    @Param() params: GetChatByIdParamsDto,
+    @Body() body: UpdateGroupRequestDto,
+  ) {
+    return this.groups.rename(params.id, user.id, body.name);
+  }
+
+  @Post('realtime/groups/:id/members')
+  addMembers(
+    @GetUser() user: User,
+    @Param() params: GetChatByIdParamsDto,
+    @Body() body: AddGroupMembersRequestDto,
+  ) {
+    return this.groups.add(params.id, user.id, body.participant);
+  }
+
+  @Delete('realtime/groups/:id/members/:userId')
+  removeMember(@GetUser() user: User, @Param() params: GroupMemberParamsDto) {
+    return this.groups.remove(params.id, user.id, params.userId);
+  }
+
+  @Post('realtime/groups/:id/owner/:userId')
+  transferOwner(@GetUser() user: User, @Param() params: GroupMemberParamsDto) {
+    return this.groups.transfer(params.id, user.id, params.userId);
   }
 }

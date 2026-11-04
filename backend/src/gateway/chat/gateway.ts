@@ -49,6 +49,7 @@ export class ChatGateway implements OnGatewayInit {
     const data = client.data as { userId: number; expiresAt: number };
     data.userId = payload.sub;
     data.expiresAt = payload.exp * 1000;
+    await client.join(`user:${payload.sub}`);
   }
   private userId(client: Socket): number {
     const data = client.data as { userId?: number; expiresAt?: number };
@@ -109,6 +110,15 @@ export class ChatGateway implements OnGatewayInit {
   }
   broadcast(message: { chatId: number }) {
     this.server.to(`chat:${message.chatId}`).emit('message:new', message);
+  }
+  notifyChatChanged(chatId: number, userIds: number[]) {
+    for (const userId of userIds)
+      this.server?.to(`user:${userId}`).emit('chat:updated', { chatId });
+  }
+  removeChatMember(chatId: number, userId: number) {
+    if (!this.server) return;
+    this.server.to(`user:${userId}`).emit('chat:removed', { chatId });
+    this.server.in(`user:${userId}`).socketsLeave(`chat:${chatId}`);
   }
   @SubscribeMessage('message:send')
   async onSend(

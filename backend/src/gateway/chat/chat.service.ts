@@ -25,6 +25,7 @@ export class ChatService {
           select: {
             messages: {
               where: {
+                senderId: { not: userId },
                 NOT: [
                   {
                     readStatuses: {
@@ -75,6 +76,13 @@ export class ChatService {
     )
       throw new BadRequestException('Invalid attachment.');
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
+      if (
+        !(await tx.chatParticipant.findUnique({
+          where: { userId_chatId: { userId: senderId, chatId } },
+        }))
+      )
+        throw new BadRequestException('Conversation unavailable.');
       const message = await tx.message.create({
         data: { content, chatId, senderId },
       });
@@ -85,6 +93,7 @@ export class ChatService {
             ownerId: senderId,
             chatId,
             messageId: null,
+            groupAvatar: null,
             createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
           },
           data: { messageId: message.id },
@@ -119,35 +128,6 @@ export class ChatService {
         create: { messageId, userId, readAt: now },
       }),
     );
-
-    // Mark as read when someone views the chat
-
-    const unreadMessages = await this.prisma.message.findMany({
-      where: {
-        chatId,
-        NOT: [
-          // { senderId: userId },
-          {
-            readStatuses: {
-              some: {
-                userId,
-              },
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    await this.prisma.messageReadStatus.createMany({
-      data: unreadMessages.map((msg) => ({
-        userId,
-        messageId: msg.id,
-      })),
-      skipDuplicates: true,
-    });
 
     return Promise.all(ops);
   }

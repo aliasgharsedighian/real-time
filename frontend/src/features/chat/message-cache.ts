@@ -25,6 +25,7 @@ export function mergeMessages(...groups: Message[][]): Message[] {
 // The existing API returns overlapping history/unread arrays. Normalize once at the boundary.
 export function normalizeHistory(data: HistoryResponse): History {
   return {
+    chat: data.chat,
     messages: mergeMessages(data.chats ?? [], data.unreadMessages ?? []),
     users: data.users ?? [],
     unreadIds: (data.unreadMessages ?? []).map((message) => message.id),

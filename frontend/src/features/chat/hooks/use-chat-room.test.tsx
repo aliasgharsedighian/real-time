@@ -114,4 +114,33 @@ describe("chat room events", () => {
       queryKey: chatKeys.history("refresh", 7),
     });
   });
+  it("reads newly fetched history after reconnect, splitting large histories into allowed batches", async () => {
+    const { cache, key } = mount();
+    const messages: Message[] = Array.from({ length: 1001 }, (_, index) => ({
+      id: index + 10,
+      chatId: 7,
+      senderId: 2,
+      content: "Missed message",
+      createdAt: "2026-11-04T10:00:00.000Z",
+    }));
+    await act(async () => {
+      fake.handlers.get("disconnect")!();
+      fake.handlers.get("connect")!();
+      await cache.fetchQuery({
+        queryKey: key,
+        queryFn: async () => ({
+          messages,
+          users: [],
+          unreadIds: messages.map((m) => m.id),
+        }),
+      });
+    });
+    const reads = fake.emit.mock.calls.filter(
+      ([event]) => event === "message:read",
+    );
+    expect(reads.map(([, payload]) => payload.messageIds.length)).toEqual([
+      1000, 1,
+    ]);
+    expect(reads[1][1].messageIds).toEqual([1010]);
+  });
 });

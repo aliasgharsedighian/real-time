@@ -1,14 +1,15 @@
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
-import { Link, Outlet, useMatch } from "react-router-dom";
+import { Link, Outlet, useMatch, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { skipToken, useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/shared/ui/sidebar";
 import { Separator } from "@/shared/ui/separator";
+import { GroupInfoDialog } from "@/features/chat/components/GroupInfoDialog";
 import { ChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { getSocket } from "@/features/chat/socket";
 import { chatKeys } from "@/features/chat/api";
@@ -29,14 +30,38 @@ export default function ChatLayout() {
     queryFn: skipToken,
     enabled: false,
   });
+  const cache = useQueryClient();
+  const navigate = useNavigate();
+  const group = history.data?.chat?.isGroup ? history.data.chat : undefined;
   const participants = history.data?.users ?? [];
   const title = profile
     ? "Profile"
     : match
-      ? participants.length > 1
-        ? "Group Chat"
+      ? group
+        ? group.name || "Group"
         : displayName(participants[0]?.user)
       : "BatGram";
+  useEffect(() => {
+    const socket = getSocket();
+    const updated = ({ chatId }: { chatId: number }) => {
+      void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+      void cache.invalidateQueries({
+        queryKey: chatKeys.history(identity, chatId),
+      });
+    };
+    const removed = ({ chatId }: { chatId: number }) => {
+      cache.removeQueries({ queryKey: chatKeys.history(identity, chatId) });
+      void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+      if (Number(match?.params.chatId) === chatId)
+        navigate("/dashboard", { replace: true });
+    };
+    socket.on("chat:updated", updated);
+    socket.on("chat:removed", removed);
+    return () => {
+      socket.off("chat:updated", updated);
+      socket.off("chat:removed", removed);
+    };
+  }, [cache, identity, match?.params.chatId, navigate]);
   useEffect(() => {
     const socket = getSocket();
     socket.connect();
@@ -74,27 +99,46 @@ export default function ChatLayout() {
           />
           <Separator orientation="vertical" className="hidden h-6 md:block" />
           {match ? (
-            <>
-              <IdentityAvatar
-                avatarId={
-                  participants.length === 1
-                    ? participants[0]?.user.profile?.avatarId
-                    : undefined
+            group ? (
+              <GroupInfoDialog
+                chat={group}
+                trigger={
+                  <>
+                    <IdentityAvatar
+                      avatarId={group.avatarId}
+                      name={title}
+                      className="size-10"
+                    />
+                    <div className="min-w-0">
+                      <h1 className="truncate text-sm font-semibold">
+                        {title}
+                      </h1>
+                      <p className="mt-0.5 truncate text-xs text-brand">
+                        {group.participants.length} members · Group info
+                      </p>
+                    </div>
+                  </>
                 }
-                name={title}
-                className="size-10"
               />
-              <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold">{title}</h1>
-                <p className="mt-0.5 text-xs text-brand">Conversation</p>
-              </div>
-            </>
+            ) : (
+              <>
+                <IdentityAvatar
+                  avatarId={participants[0]?.user.profile?.avatarId}
+                  name={title}
+                  className="size-10"
+                />
+                <div className="min-w-0">
+                  <h1 className="truncate text-sm font-semibold">{title}</h1>
+                  <p className="mt-0.5 text-xs text-brand">Conversation</p>
+                </div>
+              </>
+            )
           ) : profile ? (
             <h1 className="font-semibold">My profile</h1>
           ) : (
             <Brand className="w-36" />
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <ThemeToggle />
           </div>
         </header>

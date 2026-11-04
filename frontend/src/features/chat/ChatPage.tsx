@@ -252,6 +252,16 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   <div
                     className={`flex min-w-0 flex-col gap-1 ${own ? "items-end" : "items-start"}`}
                   >
+                    {history.data?.chat?.isGroup && !own && (
+                      <span className="text-xs font-semibold text-brand">
+                        {displayName(
+                          message.sender ??
+                            history.data.users.find(
+                              (p) => p.userId === message.senderId,
+                            )?.user,
+                        )}
+                      </span>
+                    )}
                     <time
                       className="text-[11px] text-muted-foreground"
                       dateTime={message.createdAt}
@@ -271,7 +281,20 @@ function ChatRoom({ chatId }: { chatId: number }) {
                         {message.content}
                       </span>
                       {own && (
-                        <span aria-label={read ? "Read" : "Sent"}>
+                        <span
+                          aria-label={
+                            read
+                              ? history.data?.chat?.isGroup
+                                ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
+                                : "Read"
+                              : "Sent"
+                          }
+                          title={
+                            history.data?.chat?.isGroup
+                              ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
+                              : undefined
+                          }
+                        >
                           {read ? (
                             <CheckCheck className="size-3" />
                           ) : (

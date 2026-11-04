@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { MessageCircle, Users, ArrowLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,13 +11,12 @@ import {
 } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { Checkbox } from "@/shared/ui/checkbox";
 import { Button } from "@/shared/ui/button";
-import { displayName } from "@/shared/lib/types";
+import { displayName, type User } from "@/shared/lib/types";
 import { errorMessage } from "@/shared/lib/api";
-import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
-import { chatKeys, createChat, searchUsers } from "../api";
+import { chatKeys, createChat } from "../api";
+import { ContactPicker } from "./ContactPicker";
 
 export function NewChatDialog({
   open,
@@ -26,107 +25,154 @@ export function NewChatDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [selected, setSelected] = useState<number[]>([]);
-  const { user } = useSession();
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <NewConversation
+          key={String(open)}
+          onClose={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewConversation({ onClose }: { onClose: () => void }) {
+  const [mode, setMode] = useState<"direct" | "group">("direct");
+  const [step, setStep] = useState<"people" | "details">("people");
+  const [selected, setSelected] = useState<User[]>([]);
+  const [name, setName] = useState("");
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
   const cache = useQueryClient();
   const navigate = useNavigate();
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(search.trim()), 400);
-    return () => clearTimeout(timer);
-  }, [search]);
-  const results = useQuery({
-    queryKey: ["contacts", identity, debounced],
-    queryFn: ({ signal }) => searchUsers(debounced, signal),
-    enabled: open && !!debounced,
-    retry: false,
-  });
   const creation = useMutation({
     mutationFn: () =>
-      createChat(selected, `${displayName(user)} create this chat`),
-  });
-  async function submit() {
-    try {
-      const chat = await creation.mutateAsync();
+      createChat(
+        selected.map((u) => u.id),
+        "",
+        mode === "group" ? { name: name.trim() } : undefined,
+      ),
+    onSuccess: (chat) => {
       void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
-      onOpenChange(false);
-      setSearch("");
-      setSelected([]);
+      onClose();
       navigate(`/dashboard/websocket/${chat.id}`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
+    },
+  });
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add chat</DialogTitle>
-          <DialogDescription>
-            Search other users by email, select contacts and press Add chat.
-          </DialogDescription>
-        </DialogHeader>
-        <Label htmlFor="contact-search">Email</Label>
-        <Input
-          id="contact-search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search user email…"
-        />
-        <div className="max-h-72 overflow-y-auto">
-          {results.isFetching && (
-            <p role="status" className="py-4 text-sm">
-              Searching…
-            </p>
-          )}
-          {results.isError && (
-            <p role="alert" className="py-4 text-sm text-destructive">
-              {errorMessage(results.error)}
-            </p>
-          )}
-          {debounced && !results.isFetching && results.data?.length === 0 && (
-            <p className="py-4 text-sm text-muted-foreground">
-              No users found.
-            </p>
-          )}
-          {search.trim() === debounced &&
-            results.data?.map((contact) => (
-              <label
-                key={contact.id}
-                className="flex cursor-pointer items-center gap-3 border-b py-3"
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          {step === "details" ? "Name your group" : "New conversation"}
+        </DialogTitle>
+        <DialogDescription>
+          {step === "details"
+            ? "Choose a name everyone will recognize. You can change it later."
+            : "Start a private chat or bring your people together in a group."}
+        </DialogDescription>
+      </DialogHeader>
+      {step === "people" ? (
+        <>
+          <div
+            className="grid grid-cols-2 gap-2"
+            aria-label="Conversation type"
+          >
+            {(["direct", "group"] as const).map((value) => (
+              <Button
+                key={value}
+                variant={mode === value ? "default" : "outline"}
+                aria-pressed={mode === value}
+                onClick={() => {
+                  setMode(value);
+                  setSelected([]);
+                  creation.reset();
+                }}
+                disabled={creation.isPending}
               >
-                <Checkbox
-                  checked={selected.includes(contact.id)}
-                  onCheckedChange={(checked) =>
-                    setSelected((old) =>
-                      checked
-                        ? [...old, contact.id]
-                        : old.filter((id) => id !== contact.id),
-                    )
-                  }
-                />
-                <span>
-                  <span className="block text-sm font-medium">
-                    {displayName(contact)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {contact.email}
-                  </span>
-                </span>
-              </label>
+                {value === "direct" ? <MessageCircle /> : <Users />}
+                {value === "direct" ? "Direct message" : "New group"}
+              </Button>
             ))}
-        </div>
-        <Button
-          onClick={() => void submit()}
-          disabled={selected.length === 0 || creation.isPending}
+          </div>
+          <ContactPicker
+            selected={selected}
+            onChange={setSelected}
+            limit={mode === "direct" ? 1 : 99}
+            disabled={creation.isPending}
+          />
+          <Button
+            disabled={!selected.length || creation.isPending}
+            onClick={() =>
+              mode === "group" ? setStep("details") : creation.mutate()
+            }
+          >
+            {creation.isPending
+              ? "Opening…"
+              : mode === "group"
+                ? `Next · ${selected.length} selected`
+                : "Start conversation"}
+          </Button>
+        </>
+      ) : (
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim() && !creation.isPending) creation.mutate();
+          }}
         >
-          {creation.isPending
-            ? "Creating…"
-            : `Add chat${selected.length ? ` (${selected.length})` : ""}`}
-        </Button>
-      </DialogContent>
-    </Dialog>
+          <div className="space-y-2">
+            <Label htmlFor="group-name">Group name</Label>
+            <Input
+              id="group-name"
+              autoFocus
+              maxLength={100}
+              dir="auto"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Design team"
+              disabled={creation.isPending}
+            />
+            <p className="text-right text-xs text-muted-foreground">
+              {name.length}/100
+            </p>
+          </div>
+          <div className="rounded-xl bg-muted/50 p-3">
+            <p className="mb-1 text-sm font-medium">
+              {selected.length + 1} members, including you
+            </p>
+            <p className="break-words text-sm text-muted-foreground">
+              {selected.map(displayName).join(", ")}
+            </p>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            You’ll be the group owner. Members can see the group’s message
+            history. You can add or remove people from group info.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={creation.isPending}
+              onClick={() => setStep("people")}
+            >
+              <ArrowLeft />
+              Back
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={!name.trim() || creation.isPending}
+            >
+              {creation.isPending ? "Creating group…" : "Create group"}
+            </Button>
+          </div>
+        </form>
+      )}
+      {creation.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(creation.error)}
+        </p>
+      )}
+    </>
   );
 }

@@ -1,15 +1,7 @@
-import { get } from 'env-var';
-// import '../libs/utils/dotenv';
+import { ConfigService } from '@nestjs/config';
 
-// https://github.com/Sairyss/backend-best-practices#configuration
-
-export const databaseConfig = {
-  type: 'postgres',
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  username: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-};
-
-export const postgresConnectionUri = `postgresql://${databaseConfig.username}:${databaseConfig.password}@${databaseConfig.host}:${databaseConfig.port}/${databaseConfig.database}`;
+// Read after ConfigModule has loaded and validated the environment. Use the
+// same connection string as Prisma migrations, including URL-encoded credentials.
+export function getPostgresConnectionUri(config: ConfigService): string {
+  return config.getOrThrow<string>('POSTGRES_DATABASE_URL');
+}

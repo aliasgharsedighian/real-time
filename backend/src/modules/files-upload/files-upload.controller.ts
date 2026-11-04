@@ -57,6 +57,23 @@ export class FilesUploadController {
     return this.files.removeAvatar(user.id);
   }
 
+  @Post('groups/:chatId/avatar')
+  @UseInterceptors(interceptor(uploadPolicy.avatarMaxBytes))
+  groupAvatar(
+    @Param('chatId', ParseIntPipe) chatId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @GetUser() user: { id: number },
+  ) {
+    return this.files.upload(file, user.id, chatId, true);
+  }
+  @Delete('groups/:chatId/avatar')
+  removeGroupAvatar(
+    @Param('chatId', ParseIntPipe) chatId: number,
+    @GetUser() user: { id: number },
+  ) {
+    return this.files.removeGroupAvatar(chatId, user.id);
+  }
+
   @Post('chats/:chatId')
   @UseInterceptors(interceptor(uploadPolicy.videoMaxBytes))
   chat(

@@ -222,6 +222,8 @@ describe('private media uploads', () => {
   });
   it('rejects an attachment inside the send transaction when it belongs to someone else, another room, or is already used', async () => {
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      chatParticipant: { findUnique: jest.fn().mockResolvedValue({ id: 1 }) },
       message: {
         create: jest.fn().mockResolvedValue({ id: 5 }),
         findUniqueOrThrow: jest.fn(),

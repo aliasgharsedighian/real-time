@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Users, MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -19,10 +19,9 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
   const visible = useMemo(
     () =>
       chats.data?.filter((chat) => {
-        const title =
-          chat.isGroup || chat.participants.length > 1
-            ? "Group"
-            : displayName(chat.participants[0]?.user);
+        const title = chat.isGroup
+          ? chat.name || "Group"
+          : displayName(chat.participants[0]?.user);
         return (
           title
             .toLocaleLowerCase()
@@ -141,10 +140,9 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
         )}
         <nav aria-label="Conversations" className="flex flex-col gap-1">
           {visible.map((chat) => {
-            const title =
-              chat.isGroup || chat.participants.length > 1
-                ? "Group"
-                : displayName(chat.participants[0]?.user);
+            const title = chat.isGroup
+              ? chat.name || "Group"
+              : displayName(chat.participants[0]?.user);
             const lastMessage = chat.messages?.[0];
             return (
               <NavLink
@@ -157,15 +155,18 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
               >
                 <IdentityAvatar
                   avatarId={
-                    !chat.isGroup
-                      ? chat.participants[0]?.user.profile?.avatarId
-                      : undefined
+                    chat.isGroup
+                      ? chat.avatarId
+                      : chat.participants[0]?.user.profile?.avatarId
                   }
                   name={title}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold">
+                      {chat.isGroup && (
+                        <Users className="mr-1 inline size-3.5" />
+                      )}
                       {title}
                     </span>
                     {lastMessage && (

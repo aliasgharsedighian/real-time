@@ -8,6 +8,8 @@ import {
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { ChatGateway } from '../../gateway/chat/gateway';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -23,6 +25,7 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly processor: MediaProcessorService,
+    private readonly gateway: ChatGateway,
   ) {}
   async onModuleInit() {
     await mkdir(join(uploadRoot(), 'media'), { recursive: true });
@@ -51,14 +54,17 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     file: Express.Multer.File | undefined,
     ownerId: number,
     chatId?: number,
+    groupAvatar = false,
   ) {
     if (!file) throw new BadRequestException('Choose a file to upload.');
-    const avatar = chatId === undefined;
+    const avatar = chatId === undefined || groupAvatar;
     let output: string | undefined;
     let saved = false;
     let acquired = false;
     try {
-      if (!avatar) await this.ensureParticipant(chatId, ownerId);
+      if (groupAvatar)
+        await this.ensureGroupOwner(this.prisma, chatId!, ownerId);
+      else if (!avatar) await this.ensureParticipant(chatId, ownerId);
       const image = uploadPolicy.imageMimeTypes.includes(file.mimetype);
       const video = uploadPolicy.videoMimeTypes.includes(file.mimetype);
       const audio = uploadPolicy.audioMimeTypes.includes(file.mimetype);
@@ -96,6 +102,25 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
         saved = true;
         return record;
       }
+      if (groupAvatar) {
+        const { chat, oldId } = await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId!} FOR UPDATE`;
+          const old = await this.ensureGroupOwner(tx, chatId!, ownerId);
+          const record = await tx.uploadFile.create({
+            data: { ...metadata, storageKey, ownerId, chatId },
+          });
+          const chat = await tx.chat.update({
+            where: { id: chatId },
+            data: { avatarId: record.id },
+          });
+          return { chat, oldId: old.avatarId };
+        });
+        saved = true;
+        if (oldId)
+          await this.removeUnused(oldId).catch((e) => this.logger.error(e));
+        await this.notifyGroup(chat.id);
+        return chat;
+      }
       const result = await this.prisma.$transaction(async (tx) => {
         // Serialize replacements, including requests from different browser tabs/processes.
         await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${ownerId} FOR UPDATE`;
@@ -127,6 +152,49 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async ensureGroupOwner(
+    tx: Prisma.TransactionClient,
+    chatId: number,
+    userId: number,
+  ) {
+    const chat = await tx.chat.findUnique({
+      where: { id: chatId },
+      include: { participants: { where: { userId }, select: { role: true } } },
+    });
+    if (!chat?.isGroup || chat.participants[0]?.role !== 'OWNER')
+      throw new ForbiddenException(
+        'Only the group owner can change the group photo.',
+      );
+    return chat;
+  }
+
+  private async notifyGroup(chatId: number) {
+    const members = await this.prisma.chatParticipant.findMany({
+      where: { chatId },
+      select: { userId: true },
+    });
+    this.gateway.notifyChatChanged(
+      chatId,
+      members.map((p) => p.userId),
+    );
+  }
+
+  async removeGroupAvatar(chatId: number, userId: number) {
+    const { chat, oldId } = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
+      const old = await this.ensureGroupOwner(tx, chatId, userId);
+      const chat = await tx.chat.update({
+        where: { id: chatId },
+        data: { avatarId: null },
+      });
+      return { chat, oldId: old.avatarId };
+    });
+    if (oldId)
+      await this.removeUnused(oldId).catch((e) => this.logger.error(e));
+    await this.notifyGroup(chatId);
+    return chat;
+  }
+
   async removeAvatar(userId: number) {
     const { profile, oldId } = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
@@ -156,7 +224,7 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     const file = await this.prisma.uploadFile.findUnique({ where: { id } });
     if (!file) return;
     const result = await this.prisma.uploadFile.deleteMany({
-      where: { id, messageId: null, avatar: null },
+      where: { id, messageId: null, avatar: null, groupAvatar: null },
     });
     if (result.count)
       await rm(join(uploadRoot(), file.storageKey), { force: true });
@@ -165,10 +233,15 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
   async readable(id: string, userId: number) {
     const file = await this.prisma.uploadFile.findUnique({
       where: { id },
-      include: { avatar: { select: { id: true } } },
+      include: {
+        avatar: { select: { id: true } },
+        groupAvatar: { select: { id: true } },
+      },
     });
     if (!file) throw new NotFoundException('File not found.');
-    if (!file.avatar) {
+    if (file.groupAvatar) {
+      await this.ensureParticipant(file.groupAvatar.id, userId);
+    } else if (!file.avatar) {
       if (!file.chatId) throw new NotFoundException('File not found.');
       await this.ensureParticipant(file.chatId, userId);
       if (!file.messageId && file.ownerId !== userId)
@@ -183,7 +256,12 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
   async cleanup() {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const unused = await this.prisma.uploadFile.findMany({
-      where: { createdAt: { lt: cutoff }, messageId: null, avatar: null },
+      where: {
+        createdAt: { lt: cutoff },
+        messageId: null,
+        avatar: null,
+        groupAvatar: null,
+      },
       select: { id: true },
       take: 500,
     });

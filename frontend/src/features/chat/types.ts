@@ -21,22 +21,30 @@ export interface Participant {
   userId: number;
   chatId: number;
   user: User;
+  role?: "OWNER" | "MEMBER";
+  joinedAt?: string;
 }
 export interface Chat {
   id: number;
   isGroup: boolean;
+  name?: string | null;
+  avatarId?: string | null;
   createdAt: string;
   participants: Participant[];
   messages: Message[];
   _count?: { messages: number };
 }
+export type ChatDetails = Omit<Chat, "messages" | "_count">;
+
 export interface HistoryResponse {
+  chat?: ChatDetails;
   chats: Message[];
   unreadMessages: Message[];
   unreadCount: number;
   users: Participant[];
 }
 export interface History {
+  chat?: ChatDetails;
   messages: Message[];
   users: Participant[];
   unreadIds: number[];

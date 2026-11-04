@@ -60,10 +60,18 @@ model Profile {
   userId    Int     @unique
 }
 
+enum ChatMemberRole {
+  OWNER
+  MEMBER
+}
+
 model Chat {
   id            Int            @id @default(autoincrement())
   files UploadFile[]
   isGroup      Boolean           @default(false)
+  name         String?           @db.VarChar(100)
+  avatarId     String?           @unique
+  avatar       UploadFile?       @relation("GroupAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
   participants  ChatParticipant[]
   messages      Message[]
   createdAt     DateTime          @default(now())
@@ -75,7 +83,10 @@ model ChatParticipant {
   userId   Int
   chat     Chat     @relation(fields: [chatId], references: [id])
   chatId   Int
+  role     ChatMemberRole @default(MEMBER)
+  joinedAt DateTime @default(now())
 
+  @@index([chatId])
   @@unique([userId, chatId]) // Prevent duplicate participation
 }
 
@@ -120,6 +131,7 @@ model UploadFile {
   messageId Int?
   message Message? @relation(fields: [messageId], references: [id])
   avatar Profile? @relation("Avatar")
+  groupAvatar Chat? @relation("GroupAvatar")
   createdAt DateTime @default(now())
   @@index([ownerId, createdAt])
   @@index([chatId])

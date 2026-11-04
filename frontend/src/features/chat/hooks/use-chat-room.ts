@@ -30,8 +30,14 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         document.visibilityState === "visible" &&
         socket.connected &&
         ids.length
-      )
-        socket.emit("message:read", { chatId, userId, messageIds: ids });
+      ) {
+        for (let offset = 0; offset < ids.length; offset += 1000)
+          socket.emit("message:read", {
+            chatId,
+            userId,
+            messageIds: ids.slice(offset, offset + 1000),
+          });
+      }
     };
     const readLoaded = () => {
       const data = cache.getQueryData<History>(key);
@@ -97,6 +103,19 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     socket.on("typing:start", onStart);
     socket.on("typing:stop", onStop);
     socket.on("error", onError);
+    // A reconnect can finish joining before refreshed history arrives.
+    const unsubscribe = cache.getQueryCache().subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        event.action.type === "success" &&
+        !event.action.manual &&
+        event.query.queryKey.every(
+          (part: unknown, index: number) => part === key[index],
+        ) &&
+        event.query.queryKey.length === key.length
+      )
+        readLoaded();
+    });
     document.addEventListener("visibilitychange", readLoaded);
     if (socket.connected) join();
     else socket.connect();
@@ -115,6 +134,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       socket.off("typing:start", onStart);
       socket.off("typing:stop", onStop);
       socket.off("error", onError);
+      unsubscribe();
       document.removeEventListener("visibilitychange", readLoaded);
     };
   }, [chatId, userId, username, identity, enabled, cache]);
@@ -140,14 +160,12 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       throw new Error("You are offline. Your message has not been sent.");
     let message: Message;
     try {
-      message = await socket
-        .timeout(8000)
-        .emitWithAck("message:send", {
-          chatId,
-          senderId: userId,
-          content,
-          ...(attachmentId ? { attachmentId } : {}),
-        });
+      message = await socket.timeout(8000).emitWithAck("message:send", {
+        chatId,
+        senderId: userId,
+        content,
+        ...(attachmentId ? { attachmentId } : {}),
+      });
     } catch {
       throw new Error(
         "No delivery confirmation received. Check the conversation before sending again.",

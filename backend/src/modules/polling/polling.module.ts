@@ -1,3 +1,4 @@
+import { GroupsService } from './groups.service';
 import { Logger, Module, Provider } from '@nestjs/common';
 import { ChatModule } from '../../gateway/chat/chat.module';
 import { CqrsModule } from '@nestjs/cqrs';
@@ -16,6 +17,12 @@ const repositories: Provider[] = [PrsimaPollingRepository];
 @Module({
   imports: [CqrsModule, ChatModule],
   controllers: [...httpControllers],
-  providers: [Logger, ...repositories, ...commandHandlers, ...queryHandlers],
+  providers: [
+    GroupsService,
+    Logger,
+    ...repositories,
+    ...commandHandlers,
+    ...queryHandlers,
+  ],
 })
 export class PollingModule {}
