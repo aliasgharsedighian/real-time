@@ -267,6 +267,22 @@ export class ChatGateway implements OnGatewayInit {
     await client.leave(`chat:${payload?.chatId}`);
     return { ok: true };
   }
+  @SubscribeMessage('typing:list')
+  async typingList(@ConnectedSocket() client: Socket) {
+    try {
+      const members = await this.prisma.chatParticipant.findMany({
+        where: { userId: this.userId(client) },
+        select: { chatId: true },
+      });
+      const entries = members.flatMap(({ chatId }) =>
+        this.chatTyping.snapshot(chatId),
+      );
+      client.emit('typing:list', entries);
+      return entries;
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
   @SubscribeMessage('chat:presence')
   async onPresence(
     @ConnectedSocket() client: Socket,
@@ -286,6 +302,7 @@ export class ChatGateway implements OnGatewayInit {
     this.notifications.dispatch(this.server, message);
   }
   notifyChatChanged(chatId: number, userIds: number[]) {
+    this.chatTyping.updateAudience(chatId, userIds);
     for (const userId of userIds)
       this.server?.to(`user:${userId}`).emit('chat:updated', { chatId });
   }
@@ -383,6 +400,10 @@ export class ChatGateway implements OnGatewayInit {
             profile: { select: { firstname: true, lastname: true } },
           },
         });
+        const members = await this.prisma.chatParticipant.findMany({
+          where: { chatId: payload.chatId },
+          select: { userId: true },
+        });
         if (
           !client.connected ||
           !client.rooms.has(`chat:${payload.chatId}`) ||
@@ -395,7 +416,13 @@ export class ChatGateway implements OnGatewayInit {
             .join(' ') ||
           user.email ||
           'Someone';
-        this.chatTyping.start(client.id, payload.chatId, userId, username);
+        this.chatTyping.start(
+          client.id,
+          payload.chatId,
+          userId,
+          username,
+          members.map((member) => member.userId),
+        );
       }
       return { ok: true };
     } catch (error) {

@@ -125,6 +125,7 @@ describe('last seen and typing over authenticated sockets', () => {
     observer.on('typing:start', (data: any) => starts.push(data));
     observer.on('typing:stop', (data: any) => stops.push(data));
     observer.on('chat:presence', (data: any) => changes.push(...data.users));
+    await ack(observer, 'chat:leave', { chatId });
     await ack(member, 'typing:start', {
       chatId,
       userId: ids[0],
@@ -135,6 +136,10 @@ describe('last seen and typing over authenticated sockets', () => {
       userId: ids[1],
       username: 'Member1',
     });
+    expect(await ack(outsider, 'typing:list', {})).toEqual([]);
+    expect(await ack(observer, 'typing:list', {})).toEqual([
+      { chatId, userId: ids[1], username: 'Member1' },
+    ]);
     // An observer arriving after typing began still sees the existing draft.
     await ack(observer, 'chat:leave', { chatId });
     starts.length = 0;

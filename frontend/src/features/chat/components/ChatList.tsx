@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Users, MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -10,12 +10,16 @@ import { formatDateBasedOnToday } from "@/shared/lib/date";
 import { errorMessage } from "@/shared/lib/api";
 import { useChatList } from "../hooks/use-chat-list";
 import { NewChatDialog } from "./NewChatDialog";
+import { useInboxTyping } from "../hooks/use-inbox-typing";
 
 export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchButton = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const chats = useChatList();
+  const typing = useInboxTyping();
   const visible = useMemo(
     () =>
       chats.data?.filter((chat) => {
@@ -37,39 +41,66 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <NewChatDialog open={open} onOpenChange={setOpen} />
-      <div className="space-y-4 px-4 pt-3 pb-1">
+      <div className="shrink-0 space-y-2 px-4 pt-2 pb-1">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold tracking-tight">Chats</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-11 text-brand"
-            aria-label="Start new chat"
-            onClick={() => setOpen(true)}
-          >
-            <Plus />
-          </Button>
-        </div>
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
-          <Input
-            className="h-11 rounded-xl border-border bg-background/60 pr-10 pl-9"
-            aria-label="Search conversations"
-            placeholder="Search conversations"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          {search && (
-            <button
-              type="button"
-              className="absolute top-0 right-0 grid size-11 place-items-center text-muted-foreground"
-              aria-label="Clear search"
-              onClick={() => setSearch("")}
+          <div className="flex items-center gap-1">
+            <Button
+              ref={searchButton}
+              variant="ghost"
+              size="icon"
+              className="size-11 text-brand"
+              aria-label="Search conversations"
+              aria-expanded={searchOpen}
+              aria-controls="conversation-search"
+              onClick={() => {
+                setSearchOpen((previous) => !previous);
+                setSearch("");
+              }}
             >
-              <X className="size-4" />
-            </button>
-          )}
+              <Search />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-11 text-brand"
+              aria-label="Start new chat"
+              onClick={() => setOpen(true)}
+            >
+              <Plus />
+            </Button>
+          </div>
         </div>
+        {searchOpen && (
+          <div className="relative" id="conversation-search">
+            <Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setSearchOpen(false);
+                  setSearch("");
+                  searchButton.current?.focus();
+                }
+              }}
+              className="h-11 rounded-xl border-border bg-background/60 pr-10 pl-9"
+              aria-label="Search conversations"
+              placeholder="Search conversations"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                className="absolute top-0 right-0 grid size-11 place-items-center text-muted-foreground"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+        )}
         <div
           className="flex gap-2 border-b border-border pb-3"
           aria-label="Conversation filters"
@@ -144,6 +175,12 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
               ? chat.name || "Group"
               : displayName(chat.participants[0]?.user);
             const lastMessage = chat.messages?.[0];
+            const typists = typing.filter((entry) => entry.chatId === chat.id);
+            const typingText = typists.length
+              ? chat.isGroup
+                ? `${typists.map((entry) => entry.username || "Someone").join(", ")} is typing`
+                : "is typing"
+              : "";
             return (
               <NavLink
                 key={chat.id}
@@ -180,10 +217,13 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p
-                      className="truncate text-xs leading-5 text-muted-foreground"
+                      className={`truncate text-xs leading-5 ${typingText ? "text-brand" : "text-muted-foreground"}`}
+                      title={typingText || undefined}
+                      aria-live="polite"
                       dir="auto"
                     >
-                      {lastMessage?.content ||
+                      {typingText ||
+                        lastMessage?.content ||
                         (lastMessage?.attachments?.length
                           ? lastMessage.attachments[0].kind === "VIDEO"
                             ? "Video"

@@ -382,12 +382,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 )}
                               </span>
                             )}
-                            <time
-                              className="text-[11px] text-muted-foreground"
-                              dateTime={message.createdAt}
-                            >
-                              {formatMessageTime(message.createdAt)}
-                            </time>
                             <div
                               className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
                             >
@@ -400,28 +394,33 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               >
                                 {message.content}
                               </span>
-                              {own && (
-                                <span
-                                  aria-label={
-                                    read
-                                      ? history.data?.chat?.isGroup
-                                        ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
-                                        : "Read"
-                                      : "Sent"
-                                  }
-                                  title={
-                                    history.data?.chat?.isGroup
-                                      ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
-                                      : undefined
-                                  }
-                                >
-                                  {read ? (
-                                    <CheckCheck className="size-3" />
-                                  ) : (
-                                    <Check className="size-3" />
-                                  )}
-                                </span>
-                              )}
+                              <div className="flex items-center justify-end gap-1 self-end text-[10px] leading-4 text-muted-foreground">
+                                <time dateTime={message.createdAt}>
+                                  {formatMessageTime(message.createdAt)}
+                                </time>
+                                {own && (
+                                  <span
+                                    aria-label={
+                                      read
+                                        ? history.data?.chat?.isGroup
+                                          ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
+                                          : "Read"
+                                        : "Sent"
+                                    }
+                                    title={
+                                      history.data?.chat?.isGroup
+                                        ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
+                                        : undefined
+                                    }
+                                  >
+                                    {read ? (
+                                      <CheckCheck className="size-3" />
+                                    ) : (
+                                      <Check className="size-3" />
+                                    )}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -566,92 +565,94 @@ function ChatRoom({ chatId }: { chatId: number }) {
               type="button"
               variant="ghost"
               size="icon"
-              className="size-12 shrink-0"
+              className="size-11 shrink-0 rounded-full border border-input bg-background/80 text-brand"
               aria-label="Attach photo, video or audio"
               disabled={pending || voice.active || !policy.data}
               onClick={() => picker.current?.click()}
             >
               <Paperclip />
             </Button>
-            <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-12 shrink-0"
-                  aria-label="Choose emoji"
-                  disabled={pending || voice.active}
-                >
-                  <Smile />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                side="top"
-                align="start"
-                className="w-[min(350px,calc(100vw-24px))] overflow-hidden p-0"
-                onCloseAutoFocus={(event) => {
-                  event.preventDefault();
-                  textarea.current?.focus();
-                }}
-              >
-                <Suspense
-                  fallback={
-                    <p role="status" className="p-4">
-                      Loading emojis…
-                    </p>
+            <div className="flex min-w-0 flex-1 items-end rounded-full border border-input bg-background/80 pr-1 shadow-inner focus-within:ring-2 focus-within:ring-ring">
+              <textarea
+                ref={textarea}
+                id="message-input"
+                rows={1}
+                maxLength={10000}
+                disabled={pending || voice.active}
+                className="block min-h-11 max-h-36 min-w-0 w-full flex-1 resize-none bg-transparent px-4 py-2.5 text-base outline-none placeholder:text-muted-foreground"
+                dir="auto"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    void submit();
                   }
+                }}
+                placeholder="Write your message…"
+              />
+              <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-10 shrink-0 rounded-full text-brand"
+                    aria-label="Choose emoji"
+                    disabled={pending || voice.active}
+                  >
+                    <Smile />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  className="w-[min(350px,calc(100vw-24px))] overflow-hidden p-0"
+                  onCloseAutoFocus={(event) => {
+                    event.preventDefault();
+                    textarea.current?.focus();
+                  }}
                 >
-                  {emojiOpen && (
-                    <EmojiPicker
-                      onSelect={(emoji) => {
-                        const element = textarea.current;
-                        const start = element?.selectionStart ?? input.length;
-                        const end = element?.selectionEnd ?? input.length;
-                        const next =
-                          input.slice(0, start) + emoji + input.slice(end);
-                        if (next.length > 10000) return;
-                        setInput(next);
-                        requestAnimationFrame(() => {
-                          element?.focus();
-                          element?.setSelectionRange(
-                            start + emoji.length,
-                            start + emoji.length,
-                          );
-                        });
-                      }}
-                    />
-                  )}
-                </Suspense>
-              </PopoverContent>
-            </Popover>
-            <textarea
-              ref={textarea}
-              id="message-input"
-              rows={1}
-              maxLength={10000}
-              disabled={pending || voice.active}
-              className="block min-h-12 max-h-36 min-w-0 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              dir="auto"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  void submit();
-                }
-              }}
-              placeholder="Write your message…"
-            />
+                  <Suspense
+                    fallback={
+                      <p role="status" className="p-4">
+                        Loading emojis…
+                      </p>
+                    }
+                  >
+                    {emojiOpen && (
+                      <EmojiPicker
+                        onSelect={(emoji) => {
+                          const element = textarea.current;
+                          const start = element?.selectionStart ?? input.length;
+                          const end = element?.selectionEnd ?? input.length;
+                          const next =
+                            input.slice(0, start) + emoji + input.slice(end);
+                          if (next.length > 10000) return;
+                          setInput(next);
+                          requestAnimationFrame(() => {
+                            element?.focus();
+                            element?.setSelectionRange(
+                              start + emoji.length,
+                              start + emoji.length,
+                            );
+                          });
+                        }}
+                      />
+                    )}
+                  </Suspense>
+                </PopoverContent>
+              </Popover>
+            </div>
             {hasMessage ? (
               <Button
                 type="submit"
                 size="icon"
-                className="brand-cta size-12 shrink-0 rounded-full"
+                className="brand-cta size-11 shrink-0 rounded-full"
                 aria-label="Send message"
                 disabled={pending || voice.active || !room.connected}
               >
@@ -665,7 +666,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               <Button
                 type="button"
                 size="icon"
-                className="brand-cta size-12 shrink-0 touch-none select-none rounded-full"
+                className="brand-cta size-11 shrink-0 touch-none select-none rounded-full"
                 aria-label="Hold to record voice message"
                 title="Hold to record, release to preview"
                 aria-pressed={voice.active}

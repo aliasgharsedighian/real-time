@@ -16,7 +16,7 @@ import { ThemePicker } from "@/shared/components/ThemePicker";
 import { Brand } from "@/shared/components/Brand";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
-import { Checkbox } from "@/shared/ui/checkbox";
+import { Switch } from "@/shared/ui/switch";
 import {
   Card,
   CardContent,
@@ -129,16 +129,14 @@ export default function ProfilePage() {
                 name="showLastSeen"
                 render={({ field }) => (
                   <FormItem className="rounded-2xl border border-border p-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <FormLabel>Show my last seen</FormLabel>
                       <FormControl>
-                        <Checkbox
+                        <Switch
                           checked={field.value}
-                          onCheckedChange={(checked) =>
-                            field.onChange(checked === true)
-                          }
+                          onCheckedChange={field.onChange}
                         />
                       </FormControl>
-                      <FormLabel>Show my last seen</FormLabel>
                     </div>
                     <p className="mt-2 text-xs leading-5 text-muted-foreground">
                       When off, others see only recently, within a week or

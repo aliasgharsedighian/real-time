@@ -36,3 +36,5 @@ npm test
 ```
 
 Restart the backend after generating Prisma Client. The integration suite uses disposable PostgreSQL accounts and real HTTP/JWT/Socket.IO to verify authorization, typing identity, room exit/disconnect, joining observers, multiple tabs, persisted preferences, private buckets and live privacy updates. Unit/UI tests cover formatting, header precedence, group names, draft persistence through idle/blur, clearing/sending and reconnects. Automated UI tests do not replace visual checks on target devices.
+
+The sidebar replaces each conversation’s message preview with typing text while peers have drafts, including on other pages. Events also target authenticated member user rooms. `typing:list` restores current typists only for the caller’s memberships after reconnects. The last-seen control is presented as a switch, preserving its saved preference. Message times and delivery marks sit inside the bubble at the lower right. The composer places attachments on the left, emoji inside the right of the input, and voice/send on the far right.
