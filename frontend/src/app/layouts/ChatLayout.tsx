@@ -84,6 +84,7 @@ function ChatLayoutContent() {
         predicate: (query) =>
           [
             "messages",
+            "message-readers",
             "message-search",
             "message-days",
             "shared-content",

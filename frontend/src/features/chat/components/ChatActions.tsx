@@ -78,10 +78,12 @@ export function ActionMenu({
   position,
   actions,
   onClose,
+  footer,
 }: {
   position: { x: number; y: number };
   actions: MenuAction[];
   onClose: () => void;
+  footer?: ReactNode;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -91,6 +93,7 @@ export function ActionMenu({
   }, []);
   return createPortal(
     <div
+      data-message-menu
       className="fixed inset-0 z-50"
       onPointerDown={onClose}
       onContextMenu={(event) => {
@@ -106,10 +109,13 @@ export function ActionMenu({
           left: Math.max(8, Math.min(position.x, window.innerWidth - 224)),
           top: Math.max(
             8,
-            Math.min(position.y, window.innerHeight - actions.length * 44 - 20),
+            Math.min(
+              position.y,
+              window.innerHeight - actions.length * 44 - (footer ? 64 : 0) - 20,
+            ),
           ),
         }}
-        className="absolute w-52 rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+        className="absolute max-h-[calc(100dvh-16px)] w-52 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape" || event.key === "Tab") {
@@ -144,6 +150,9 @@ export function ActionMenu({
             {action.label}
           </button>
         ))}
+        {footer && (
+          <div className="mt-1 border-t border-border pt-1">{footer}</div>
+        )}
       </div>
     </div>,
     document.body,

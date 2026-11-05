@@ -1,7 +1,11 @@
 import { replyInclude } from '../../modules/polling/message-include';
 import { fileSelect } from '../../modules/files-upload/upload.policy';
 // src/chat/chat.service.ts
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 
 @Injectable()
@@ -133,25 +137,46 @@ export class ChatService {
   }
 
   async markMessagesRead(userId: number, messageIds: number[], chatId: number) {
-    const now = new Date();
-    // Upsert each read status (unique by messageId+userId)
-    const allowed = await this.prisma.message.findMany({
-      where: {
-        id: { in: messageIds },
-        chatId,
-        kind: 'TEXT',
-        senderId: { not: userId },
-      },
-      select: { id: true },
+    if (
+      !Array.isArray(messageIds) ||
+      messageIds.length > 1000 ||
+      messageIds.some(
+        (id) => !Number.isSafeInteger(id) || id <= 0 || id > 2147483647,
+      )
+    )
+      throw new BadRequestException('Invalid message IDs');
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize with departures and deletion; a stale socket cannot create receipts after removal.
+      await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
+      if (
+        !(await tx.chatParticipant.findUnique({
+          where: { userId_chatId: { userId, chatId } },
+        }))
+      )
+        throw new ForbiddenException('Conversation unavailable.');
+      const allowed = await tx.message.findMany({
+        where: {
+          id: { in: messageIds },
+          chatId,
+          kind: 'TEXT',
+          senderId: { not: userId },
+        },
+        select: { id: true },
+      });
+      const now = new Date();
+      await tx.messageReadStatus.createMany({
+        data: allowed.map(({ id: messageId }) => ({
+          messageId,
+          userId,
+          readAt: now,
+        })),
+        skipDuplicates: true,
+      });
+      // First read time is immutable, including concurrent/repeated acknowledgements.
+      return tx.messageReadStatus.findMany({
+        where: { userId, messageId: { in: allowed.map((m) => m.id) } },
+        orderBy: { messageId: 'asc' },
+      });
     });
-    const ops = allowed.map(({ id: messageId }) =>
-      this.prisma.messageReadStatus.upsert({
-        where: { messageId_userId: { messageId, userId } },
-        update: { readAt: now },
-        create: { messageId, userId, readAt: now },
-      }),
-    );
-
-    return Promise.all(ops);
   }
 }

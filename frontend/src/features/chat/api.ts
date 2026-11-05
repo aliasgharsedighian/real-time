@@ -10,6 +10,8 @@ import type {
 } from "./types";
 
 export const chatKeys = {
+  readers: (identity: string | undefined, chatId: number, messageId: number) =>
+    ["message-readers", identity, chatId, messageId] as const,
   list: (identity?: string) => ["chats", identity] as const,
   history: (identity: string | undefined, id: number) =>
     ["messages", identity, id] as const,
@@ -241,6 +243,21 @@ export async function getSharedContent(
       await api.get<ApiResponse<SharedContent>>(
         `realtime/polling/${id}/shared`,
         { params: { kind, beforeId }, signal },
+      )
+    ).data,
+  );
+}
+
+export async function getMessageReaders(
+  chatId: number,
+  messageId: number,
+  signal?: AbortSignal,
+) {
+  return unwrap(
+    (
+      await api.get<ApiResponse<import("./types").MessageReader[]>>(
+        `realtime/chats/${chatId}/messages/${messageId}/readers`,
+        { signal },
       )
     ).data,
   );

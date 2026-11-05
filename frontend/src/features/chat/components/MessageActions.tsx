@@ -9,6 +9,7 @@ import {
   Copy,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MessageReaders } from "./MessageReaders";
 import { ActionMenu } from "./ChatActions";
 import { Button } from "@/shared/ui/button";
 import {
@@ -107,6 +108,8 @@ export function MessageInteraction({
       onPointerUp={cancel}
       onPointerCancel={cancel}
       onClickCapture={(event) => {
+        if ((event.target as HTMLElement).closest("[data-message-menu]"))
+          return;
         if (held.current || selecting) {
           event.preventDefault();
           event.stopPropagation();
@@ -142,6 +145,7 @@ export function MessageInteraction({
         <ActionMenu
           position={position}
           onClose={() => setPosition(undefined)}
+          footer={own ? <MessageReaders message={message} /> : undefined}
           actions={[
             {
               label: "Reply",

@@ -37,7 +37,16 @@ vi.mock("@/features/auth/session-context", () => ({
   }),
 }));
 vi.mock("./api", () => ({
-  chatKeys: { history: () => ["history"], list: () => ["chats"] },
+  chatKeys: {
+    history: () => ["history"],
+    list: () => ["chats"],
+    readers: (_: unknown, chatId: number, id: number) => [
+      "message-readers",
+      chatId,
+      id,
+    ],
+  },
+  getMessageReaders: async () => [],
   getHistory: (...args: unknown[]) => mocks.history(...args),
   syncMessages: (...args: unknown[]) => mocks.sync(...args),
   editMessage: (...args: unknown[]) => mocks.edit(...args),

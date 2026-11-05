@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
 import { displayName } from "@/shared/lib/types";
+import { observeVisibleMessages } from "./observe-visible-messages";
 import { chatKeys } from "../api";
 import { getSocket } from "../socket";
 import {
@@ -50,12 +51,19 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         data?.messages
           .filter(
             (message) =>
+              visibility.ids.has(message.id) &&
               message.senderId !== userId &&
               (!message.kind || message.kind === "TEXT"),
           )
           .map((message) => message.id) ?? [],
       );
     };
+    const visibility = observeVisibleMessages(
+      document.querySelector<HTMLElement>(
+        '[role="log"][aria-label="Messages"]',
+      ),
+      readLoaded,
+    );
     const join = () => {
       acknowledged.clear();
       setConnected(true);
@@ -79,12 +87,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
           ? { ...old, messages: mergeMessages(old.messages, [message]) }
           : old,
       );
-      if (
-        !cache.getQueryData<History>(key)?.window?.afterId &&
-        message.senderId !== userId &&
-        (!message.kind || message.kind === "TEXT")
-      )
-        markRead([message.id]);
     };
     const updated = (message: Message) => {
       if (message.chatId !== chatId) return;
@@ -110,6 +112,9 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       );
     };
     const onReceipt = (receipt: ReadReceipt) => {
+      void cache.invalidateQueries({
+        queryKey: chatKeys.readers(identity, chatId, receipt.messageId),
+      });
       cache.setQueryData<History>(key, (old) =>
         old ? { ...old, messages: applyReceipt(old.messages, receipt) } : old,
       );
@@ -153,6 +158,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       socket.off("message:read", onReceipt);
       socket.off("error", onError);
       unsubscribe();
+      visibility.stop();
       document.removeEventListener("visibilitychange", readLoaded);
     };
   }, [chatId, userId, username, identity, enabled, cache]);

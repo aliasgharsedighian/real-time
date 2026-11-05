@@ -11,6 +11,9 @@ import type { History, Message } from "../types";
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (...args: never[]) => void>(),
   emit: vi.fn(),
+  intersect: (entries: unknown[]) => {
+    void entries;
+  },
 }));
 vi.mock("../socket", () => ({
   getSocket: () => ({
@@ -38,6 +41,9 @@ function mount() {
         }}
       >
         {children}
+        <div role="log" aria-label="Messages">
+          <div data-message-id="8" />
+        </div>
       </SessionContext.Provider>
     </QueryClientProvider>
   );
@@ -46,7 +52,10 @@ function mount() {
 }
 
 describe("chat room events", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
   it("keeps a nonempty draft typing through idle, restores it after rejoin and stops explicitly", () => {
     vi.useFakeTimers();
     const { result, unmount } = mount();
@@ -112,6 +121,17 @@ describe("chat room events", () => {
     ).toBe(false);
   });
   beforeEach(() => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: (entries: unknown[]) => void) {
+          fake.intersect = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     fake.handlers.clear();
     fake.emit.mockClear();
     useSessionStore
@@ -133,6 +153,15 @@ describe("chat room events", () => {
     };
     act(() => {
       fake.handlers.get("message:new")!(message as never);
+      expect(
+        fake.emit.mock.calls.some(([event]) => event === "message:read"),
+      ).toBe(false);
+      fake.intersect([
+        {
+          target: document.querySelector('[data-message-id="8"]'),
+          isIntersecting: true,
+        },
+      ]);
     });
     expect(
       cache.getQueryData<History>(key)?.messages.map((entry) => entry.id),
@@ -158,10 +187,73 @@ describe("chat room events", () => {
     };
     act(() => {
       fake.handlers.get("message:new")!(message as never);
+      fake.intersect([
+        {
+          target: document.querySelector('[data-message-id="8"]'),
+          isIntersecting: true,
+        },
+      ]);
     });
     expect(
       fake.emit.mock.calls.some(([event]) => event === "message:read"),
     ).toBe(false);
+  });
+  it("marks a visible message after returning to the tab and never reads offscreen messages", () => {
+    const { cache, key } = mount();
+    act(() =>
+      cache.setQueryData<History>(key, {
+        users: [],
+        unreadIds: [],
+        messages: [
+          {
+            id: 8,
+            chatId: 7,
+            senderId: 2,
+            content: "Visible",
+            createdAt: "2026-11-05T10:00:00Z",
+          },
+          {
+            id: 9,
+            chatId: 7,
+            senderId: 2,
+            content: "Offscreen",
+            createdAt: "2026-11-05T10:01:00Z",
+          },
+        ],
+      }),
+    );
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    act(() =>
+      fake.intersect([
+        {
+          target: document.querySelector('[data-message-id="8"]'),
+          isIntersecting: true,
+        },
+      ]),
+    );
+    expect(
+      fake.emit.mock.calls.filter(([event]) => event === "message:read"),
+    ).toHaveLength(0);
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(fake.emit).toHaveBeenCalledWith("message:read", {
+      chatId: 7,
+      userId: 1,
+      messageIds: [8],
+    });
+    expect(
+      fake.emit.mock.calls.filter(([event]) => event === "message:read"),
+    ).toHaveLength(1);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(
+      fake.emit.mock.calls.filter(([event]) => event === "message:read"),
+    ).toHaveLength(1);
   });
   it("rejoins the room and requests missed history after reconnect", () => {
     const { cache } = mount();
@@ -179,7 +271,7 @@ describe("chat room events", () => {
       queryKey: chatKeys.history("refresh", 7),
     });
   });
-  it("reads newly fetched history after reconnect, splitting large histories into allowed batches", async () => {
+  it("reads only intersecting history after reconnect, splitting large visible batches", async () => {
     const { cache, key } = mount();
     const messages: Message[] = Array.from({ length: 1001 }, (_, index) => ({
       id: index + 10,
@@ -200,6 +292,14 @@ describe("chat room events", () => {
         }),
       });
     });
+    const root = document.querySelector('[role="log"]')!;
+    const entries = messages.map((message) => {
+      const target = document.createElement("div");
+      target.setAttribute("data-message-id", String(message.id));
+      root.append(target);
+      return { target, isIntersecting: true };
+    });
+    act(() => fake.intersect(entries));
     const reads = fake.emit.mock.calls.filter(
       ([event]) => event === "message:read",
     );

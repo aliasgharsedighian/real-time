@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import request = require('supertest');
 import sharp = require('sharp');
 import { FilesUploadService } from '../src/modules/files-upload/files-upload.service';
+import { ChatService } from '../src/gateway/chat/chat.service';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/libs/db/prisma/prisma.service';
 import { mkdtemp, rm, access, readdir } from 'node:fs/promises';
@@ -298,6 +299,103 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     await read(0, third.body.avatarId).expect(403);
     await read(1, third.body.avatarId).expect(200);
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+  });
+
+  it('protects named message readers, preserves first-seen times and rejects forged or cross-chat receipts', async () => {
+    const group = await create({
+      participant: [ids[1], ids[2]],
+      isGroup: true,
+      name: 'Readers',
+    });
+    const other = await create({
+      participant: [ids[1]],
+      isGroup: true,
+      name: 'Other readers',
+    });
+    const message = (
+      await http()
+        .post('polling')
+        .send({ chatId: group.id, content: 'Read me' })
+        .expect(201)
+    ).body.data;
+    const elsewhere = (
+      await http()
+        .post('polling')
+        .send({ chatId: other.id, content: 'Other room' })
+        .expect(201)
+    ).body.data;
+    const url = `chats/${group.id}/messages/${message.id}/readers`;
+    await request(base).get(`/api/v1/realtime/${url}`).expect(401);
+    expect((await http().get(url).expect(200)).body.data).toEqual([]);
+    await http(1).get(url).expect(404);
+    await http(3).get(url).expect(404);
+    await http()
+      .get(`chats/${other.id}/messages/${message.id}/readers`)
+      .expect(404);
+    await http().get(`chats/${group.id}/messages/invalid/readers`).expect(400);
+    const reader = await socket(1),
+      second = await socket(2),
+      outsider = await socket(3);
+    const read = (client: any, messageIds: number[], extra: object = {}) =>
+      client
+        .timeout(5000)
+        .emitWithAck('message:read', {
+          chatId: group.id,
+          messageIds,
+          ...extra,
+        });
+    await read(outsider, [message.id], { userId: ids[1] });
+    expect(
+      await prisma.messageReadStatus.count({
+        where: { messageId: message.id },
+      }),
+    ).toBe(0);
+    const receipts = await read(
+      reader,
+      [message.id, message.id, elsewhere.id],
+      { userId: ids[2], readAt: '2000-01-01' },
+    );
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].userId).toBe(ids[1]);
+    expect(
+      await prisma.messageReadStatus.count({
+        where: { messageId: elsewhere.id },
+      }),
+    ).toBe(0);
+    const firstSeen = new Date('2026-01-01T12:34:56.000Z');
+    await prisma.messageReadStatus.update({
+      where: { messageId_userId: { messageId: message.id, userId: ids[1] } },
+      data: { readAt: firstSeen },
+    });
+    const repeated = await read(reader, [message.id]);
+    expect(repeated[0].readAt).toBe(firstSeen.toISOString());
+    await read(second, [message.id]);
+    const readers = (await http().get(url).expect(200)).body.data;
+    expect(readers.map((r: any) => r.userId)).toEqual([ids[1], ids[2]]);
+    expect(readers[0].readAt).toBe(firstSeen.toISOString());
+    expect(readers[0].user.profile.firstname).toBe('Member 1');
+    expect(JSON.stringify(readers)).not.toMatch(/password|address|phoneNumber/);
+    await http(1).delete(`groups/${group.id}/members/${ids[1]}`).expect(200);
+    await expect(
+      app.get(ChatService).markMessagesRead(ids[1], [message.id], group.id),
+    ).rejects.toThrow('Conversation unavailable');
+    await read(reader, [message.id]);
+    expect((await http().get(url).expect(200)).body.data).toHaveLength(2);
+    const self = await socket(0);
+    expect(await read(self, [message.id])).toEqual([]);
+    await expect(
+      app.get(ChatService).markMessagesRead(ids[2], [2147483648], group.id),
+    ).rejects.toThrow('Invalid message IDs');
+    await http()
+      .delete(`chats/${group.id}/messages`)
+      .send({ messageIds: [message.id] })
+      .expect(200);
+    await http().get(url).expect(404);
+    expect(
+      await prisma.messageReadStatus.count({
+        where: { messageId: message.id },
+      }),
+    ).toBe(0);
   });
 
   it('records each newly added member once, broadcasts immediately and preserves activity after reload', async () => {

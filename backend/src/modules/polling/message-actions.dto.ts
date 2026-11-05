@@ -1,3 +1,5 @@
+import { Type } from 'class-transformer';
+import { GetChatByIdParamsDto } from './polling.request.dto';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -46,4 +48,12 @@ export class SyncMessagesDto {
   @Min(1, { each: true })
   @Max(2147483647, { each: true })
   messageIds: number[];
+}
+
+export class MessageReadersParamsDto extends GetChatByIdParamsDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  messageId: number;
 }

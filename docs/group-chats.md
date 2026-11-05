@@ -33,7 +33,7 @@ All paths below are under `/api/v1/realtime`, protected by JWT. User identity al
 
 History retains `chats`, `users` (other members), and `unreadMessages` for compatibility, and adds `chat` with metadata and all current participants/roles. Both inbox transports include `name` and `isGroup`.
 
-GET history and unread endpoints no longer mark messages read. Socket `message:read` writes receipts only for the supplied message IDs belonging to that conversation, excludes the reader’s own messages, and broadcasts those receipts. Unread counts exclude messages sent by the current user and are independent for each member. The frontend requests receipts for loaded messages while the document is visible; this does not establish that every bubble was scrolled into view.
+GET history and unread endpoints no longer mark messages read. Socket `message:read` writes receipts only for the supplied message IDs belonging to that conversation, excludes the reader’s own messages, and broadcasts those receipts. Unread counts exclude messages sent by the current user and are independent for each member. The frontend now requests receipts only for rendered incoming bubbles intersecting the message scroller while the document is visible. Downloading history alone does not imply Seen. [Named receipts](read-receipts.md) documents the first-seen timestamp and sender-only details endpoint.
 
 ## Socket events
 

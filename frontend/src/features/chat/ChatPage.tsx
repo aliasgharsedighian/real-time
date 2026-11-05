@@ -1,3 +1,4 @@
+import { MessageReaders } from "./components/MessageReaders";
 import { UserInfoDialog } from "./components/UserInfoDialog";
 import { removeMessagesFromHistory } from "./message-cache";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,15 +24,7 @@ import {
 } from "@/features/uploads/api";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Check,
-  CheckCheck,
-  SendIcon,
-  Paperclip,
-  X,
-  Mic,
-  Smile,
-} from "lucide-react";
+import { SendIcon, Paperclip, X, Mic, Smile } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { Button } from "@/shared/ui/button";
 import { BrandLoading } from "@/shared/components/BrandLoading";
@@ -450,9 +443,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
                     </Fragment>
                   );
                 const own = message.senderId === user?.id;
-                const read = message.readStatuses?.some(
-                  (receipt) => receipt.userId !== user?.id,
-                );
                 return (
                   <Fragment key={message.id}>
                     {separator}
@@ -599,26 +589,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                     {formatMessageTime(message.createdAt)}
                                   </time>
                                   {own && (
-                                    <span
-                                      aria-label={
-                                        read
-                                          ? history.data?.chat?.isGroup
-                                            ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
-                                            : "Read"
-                                          : "Sent"
-                                      }
-                                      title={
-                                        history.data?.chat?.isGroup
-                                          ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
-                                          : undefined
-                                      }
-                                    >
-                                      {read ? (
-                                        <CheckCheck className="size-3" />
-                                      ) : (
-                                        <Check className="size-3" />
-                                      )}
-                                    </span>
+                                    <MessageReaders message={message} compact />
                                   )}
                                 </div>
                               </div>

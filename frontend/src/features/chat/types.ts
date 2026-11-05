@@ -6,6 +6,17 @@ export interface ReadReceipt {
   userId: number;
   readAt: string;
 }
+export interface MessageReader extends ReadReceipt {
+  user: {
+    id: number;
+    email: string | null;
+    profile: {
+      firstname: string | null;
+      lastname: string | null;
+      avatarId?: string | null;
+    } | null;
+  };
+}
 export interface Message {
   kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED" | "MEMBER_ADDED";
   id: number;

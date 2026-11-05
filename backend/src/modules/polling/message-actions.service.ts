@@ -47,6 +47,36 @@ export class MessageActionsService {
       ),
     );
   }
+  async readers(chatId: number, userId: number, messageId: number) {
+    const readers = await this.prisma.$transaction(async (tx) => {
+      await this.member(tx, chatId, userId);
+      const message = await tx.message.findFirst({
+        where: { id: messageId, chatId, senderId: userId, kind: 'TEXT' },
+        select: { id: true },
+      });
+      if (!message) throw new NotFoundException('Message unavailable.');
+      return tx.messageReadStatus.findMany({
+        where: { messageId, userId: { not: userId } },
+        select: {
+          messageId: true,
+          userId: true,
+          readAt: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: {
+                select: { firstname: true, lastname: true, avatarId: true },
+              },
+            },
+          },
+        },
+        orderBy: [{ readAt: 'asc' }, { userId: 'asc' }],
+      });
+    });
+    return { data: readers, message: 'Message readers loaded' };
+  }
+
   async sync(chatId: number, userId: number, ids: number[]) {
     const messages = await this.prisma.$transaction(async (tx) => {
       await this.member(tx, chatId, userId);
