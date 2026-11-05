@@ -288,7 +288,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   ) : null;
                 if (
                   message.kind === "MEMBER_LEFT" ||
-                  message.kind === "MEMBER_REMOVED"
+                  message.kind === "MEMBER_REMOVED" ||
+                  message.kind === "MEMBER_ADDED"
                 )
                   return (
                     <Fragment key={message.id}>

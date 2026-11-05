@@ -7,7 +7,7 @@ export interface ReadReceipt {
   readAt: string;
 }
 export interface Message {
-  kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED";
+  kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED" | "MEMBER_ADDED";
   id: number;
   chatId: number;
   senderId: number;

@@ -300,6 +300,69 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
   });
 
+  it('records each newly added member once, broadcasts immediately and preserves activity after reload', async () => {
+    const chat = await create({
+      participant: [ids[1]],
+      isGroup: true,
+      name: 'Invitations',
+    });
+    const owner = await socket(0);
+    await owner.timeout(5000).emitWithAck('chat:join', { chatId: chat.id });
+    await http(1)
+      .post(`groups/${chat.id}/members`)
+      .send({ participant: [ids[2]] })
+      .expect(403);
+    const delivered: any[] = [];
+    owner.on('message:new', (message: any) => {
+      if (message.chatId === chat.id) delivered.push(message);
+    });
+    await http()
+      .post(`groups/${chat.id}/members`)
+      .send({ participant: [ids[2], ids[2], ids[1], ids[3]] })
+      .expect(201);
+    await owner.timeout(5000).emitWithAck('chat:list');
+    expect(delivered.map((m) => m.content)).toEqual([
+      'Member 2 was added to the group.',
+      'Member 3 was added to the group.',
+    ]);
+    expect(delivered.every((m) => m.kind === 'MEMBER_ADDED')).toBe(true);
+    await http()
+      .post(`groups/${chat.id}/members`)
+      .send({ participant: [ids[2], ids[3]] })
+      .expect(201);
+    expect(
+      await prisma.message.count({
+        where: { chatId: chat.id, kind: 'MEMBER_ADDED' },
+      }),
+    ).toBe(2);
+    const history = await http(2).get(`polling/${chat.id}`).expect(200);
+    expect(
+      history.body.data.chats.filter((m: any) => m.kind === 'MEMBER_ADDED'),
+    ).toHaveLength(2);
+    expect(history.body.data.unreadCount).toBe(0);
+    const inbox = await owner.timeout(5000).emitWithAck('chat:list');
+    expect(inbox.find((c: any) => c.id === chat.id)._count.messages).toBe(0);
+    await http()
+      .post(`groups/${chat.id}/members`)
+      .send({ participant: [2147483647] })
+      .expect(400);
+    expect(
+      await prisma.message.count({
+        where: { chatId: chat.id, kind: 'MEMBER_ADDED' },
+      }),
+    ).toBe(2);
+    await http(2).delete(`groups/${chat.id}/members/${ids[2]}`).expect(200);
+    await http()
+      .post(`groups/${chat.id}/members`)
+      .send({ participant: [ids[2]] })
+      .expect(201);
+    expect(
+      await prisma.message.count({
+        where: { chatId: chat.id, kind: 'MEMBER_ADDED' },
+      }),
+    ).toBe(3);
+  });
+
   it('persists and broadcasts named departure events without unread counts or client-forged event types', async () => {
     const chat = await create({
       participant: [ids[1], ids[2]],
@@ -341,13 +404,11 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     expect(
       await prisma.messageReadStatus.count({ where: { messageId: event.id } }),
     ).toBe(0);
-    const forged = await owner
-      .timeout(5000)
-      .emitWithAck('message:send', {
-        chatId: chat.id,
-        content: 'Regular text',
-        kind: 'MEMBER_LEFT',
-      });
+    const forged = await owner.timeout(5000).emitWithAck('message:send', {
+      chatId: chat.id,
+      content: 'Regular text',
+      kind: 'MEMBER_LEFT',
+    });
     expect(forged.kind).toBe('TEXT');
     await http()
       .post('polling')

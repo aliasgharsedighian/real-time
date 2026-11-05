@@ -116,6 +116,7 @@ enum MessageKind {
   TEXT
   MEMBER_LEFT
   MEMBER_REMOVED
+  MEMBER_ADDED
 }
 
 model Message {

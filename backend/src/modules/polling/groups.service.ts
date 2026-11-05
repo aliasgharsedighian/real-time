@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Message } from '@prisma/client';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 import { ChatGateway } from '../../gateway/chat/gateway';
 import { CreateChatRequestDto } from './polling.request.dto';
@@ -14,6 +14,20 @@ const includeMembers = {
     include: { user: { select: { id: true, email: true, profile: true } } },
   },
 } satisfies Prisma.ChatInclude;
+
+function memberName(user: {
+  id: number;
+  email: string | null;
+  profile: { firstname: string | null; lastname: string | null } | null;
+}) {
+  return (
+    [user.profile?.firstname, user.profile?.lastname]
+      .filter(Boolean)
+      .join(' ') ||
+    user.email ||
+    `User #${user.id}`
+  );
+}
 
 @Injectable()
 export class GroupsService {
@@ -109,7 +123,7 @@ export class GroupsService {
   }
 
   async add(chatId: number, userId: number, participants: number[]) {
-    const chat = await this.prisma.$transaction(async (tx) => {
+    const { chat, events } = await this.prisma.$transaction(async (tx) => {
       const group = await this.group(tx, chatId, userId);
       const added = [...new Set(participants)].filter(
         (id) => !group.participants.some((p) => p.userId === id),
@@ -120,11 +134,32 @@ export class GroupsService {
       await tx.chatParticipant.createMany({
         data: added.map((id) => ({ chatId, userId: id })),
       });
-      return tx.chat.findUniqueOrThrow({
+      const chat = await tx.chat.findUniqueOrThrow({
         where: { id: chatId },
         include: includeMembers,
       });
+      const events: Message[] = [];
+      for (const id of added) {
+        const member = chat.participants.find((p) => p.userId === id)!;
+        events.push(
+          await tx.message.create({
+            data: {
+              chatId,
+              senderId: userId,
+              kind: 'MEMBER_ADDED',
+              content: `${memberName(member.user)} was added to the group.`,
+            },
+            include: {
+              sender: { select: { id: true, email: true, profile: true } },
+              attachments: true,
+              readStatuses: true,
+            },
+          }),
+        );
+      }
+      return { chat, events };
     });
+    for (const event of events) this.gateway.broadcast(event);
     this.gateway.notifyChatChanged(
       chatId,
       chat.participants.map((p) => p.userId),
@@ -150,12 +185,6 @@ export class GroupsService {
       }
       await tx.chatParticipant.delete({ where: { id: target.id } });
       const actor = group.participants.find((p) => p.userId === userId)!;
-      const name = (user: typeof target.user) =>
-        [user.profile?.firstname, user.profile?.lastname]
-          .filter(Boolean)
-          .join(' ') ||
-        user.email ||
-        `User #${user.id}`;
       const left = userId === targetId;
       const event = await tx.message.create({
         data: {
@@ -163,8 +192,8 @@ export class GroupsService {
           senderId: userId,
           kind: left ? 'MEMBER_LEFT' : 'MEMBER_REMOVED',
           content: left
-            ? `${name(target.user)} left the group.`
-            : `${name(actor.user)} removed ${name(target.user)} from the group.`,
+            ? `${memberName(target.user)} left the group.`
+            : `${memberName(actor.user)} removed ${memberName(target.user)} from the group.`,
         },
         include: {
           sender: { select: { id: true, email: true, profile: true } },

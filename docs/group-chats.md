@@ -84,3 +84,11 @@ Leaving/removal and the associated activity message are saved in the same locked
 The frontend renders activity as a centered notice with a timestamp and no sender bubble or delivery checks. Inbox previews include the notice; unread counts and read receipts include only `TEXT`. Clients cannot create system kinds through message sending: REST rejects extra fields and socket sends always create `TEXT`.
 
 Verification: 45 frontend tests, 14 backend unit tests, five group integration scenarios and the media integration scenario passed. New checks cover persistent/live departure names, removal vs voluntary leaving, rejected/duplicate departures, event types that cannot be forged by clients, independent unread semantics and activity rendering.
+
+## Member-added activity (2026-11-05)
+
+Migration `20261105100000_member_added_activity` adds `MEMBER_ADDED` to `MessageKind` and has been applied to local `test_realtime`. Adding members to an existing group writes one named activity message per new member in the same membership transaction, then broadcasts it through `message:new`. Each notice reads `Name was added to the group.` using the member's display name at that time. It appears centered with the other membership notices and remains in history for current and newly added members.
+
+Duplicate IDs and people who already belong to the group produce no extra notices. Re-adding someone after departure records a new addition. Failed/unauthorized requests create no activity. Initial group creation does not create individual addition notices. Addition events follow the existing activity rules for unread counts, read receipts, inbox previews and suppressed message push notifications.
+
+Validation: frontend production build, backend TypeScript check, frontend lint, changed backend service lint, 98 frontend tests and six real group integration scenarios passed. The new integration scenario covers live delivery, persisted names, multi-member additions, duplicate suppression, rejected requests, re-addition and unread counts. Backend compilation was checked without emitting into `dist` to avoid interference with the running development watcher.

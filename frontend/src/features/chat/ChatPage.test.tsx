@@ -296,7 +296,7 @@ describe("chat attachments", () => {
     ).toBeNull();
     expect(screen.getByText("Message 100")).toBeTruthy();
   });
-  it("renders departure and removal as group activity instead of sender bubbles", async () => {
+  it("renders membership changes as group activity instead of sender bubbles", async () => {
     mocks.history.mockResolvedValue({
       users: [],
       unreadIds: [],
@@ -317,12 +317,21 @@ describe("chat attachments", () => {
           content: "Owner removed Bob from the group.",
           createdAt: "2026-11-04T10:01:00.000Z",
         },
+        {
+          id: 12,
+          chatId: 3,
+          senderId: 1,
+          kind: "MEMBER_ADDED",
+          content: "Charlie was added to the group.",
+          createdAt: "2026-11-04T10:02:00.000Z",
+        },
       ],
     });
     setup();
     await screen.findByText("Alice left the group.");
     expect(screen.getByText("Owner removed Bob from the group.")).toBeTruthy();
-    expect(screen.getAllByLabelText("Group activity")).toHaveLength(2);
+    expect(screen.getByText("Charlie was added to the group.")).toBeTruthy();
+    expect(screen.getAllByLabelText("Group activity")).toHaveLength(3);
     expect(screen.queryByLabelText("Sent")).toBeNull();
   });
   it("keeps typing for a nonempty input even after blur and stops when cleared", async () => {

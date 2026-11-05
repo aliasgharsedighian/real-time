@@ -1,0 +1,1 @@
+ALTER TYPE "MessageKind" ADD VALUE 'MEMBER_ADDED';
