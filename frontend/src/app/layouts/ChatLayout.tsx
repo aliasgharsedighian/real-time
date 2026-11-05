@@ -27,6 +27,7 @@ import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Button } from "@/shared/ui/button";
 import CallProvider from "@/features/calls/CallProvider";
 import { CallButton } from "@/features/calls/CallButton";
+import { ChatStatus } from "@/features/chat/components/ChatStatus";
 
 export default function ChatLayout() {
   return (
@@ -132,9 +133,11 @@ function ChatLayoutContent() {
                         <h1 className="truncate text-sm font-semibold">
                           {title}
                         </h1>
-                        <p className="mt-0.5 truncate text-xs text-brand">
-                          {group.participants.length} members · Group info
-                        </p>
+                        <ChatStatus
+                          key={group.id}
+                          chatId={group.id}
+                          groupLabel={`${group.participants.length} members · Group info`}
+                        />
                       </div>
                     </>
                   }
@@ -148,7 +151,11 @@ function ChatLayoutContent() {
                   />
                   <div className="min-w-0">
                     <h1 className="truncate text-sm font-semibold">{title}</h1>
-                    <p className="mt-0.5 text-xs text-brand">Conversation</p>
+                    <ChatStatus
+                      key={match.params.chatId}
+                      chatId={Number(match.params.chatId)}
+                      peerId={participants[0]?.userId}
+                    />
                   </div>
                 </>
               )

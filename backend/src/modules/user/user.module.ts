@@ -6,6 +6,7 @@ import { UpdateProfileService } from './commands/update-profile/update-profile.s
 import { UpdateProfileHttpController } from './commands/update-profile/update-profile.http.controller';
 import { EditUserService } from './commands/update-user/update-user.service';
 import { EditUserByAdminHttpController } from './commands/update-user/update-user.http.controller';
+import { PresenceModule } from '../presence/presence.module';
 
 const httpControllers = [
   FindUserHttpController,
@@ -17,6 +18,7 @@ const queryHandlers: Provider[] = [FindUserService];
 const repositories: Provider[] = [PrismaUserRepository];
 
 @Module({
+  imports: [PresenceModule],
   controllers: [...httpControllers],
   providers: [...commandHandlers, ...queryHandlers, ...repositories],
 })

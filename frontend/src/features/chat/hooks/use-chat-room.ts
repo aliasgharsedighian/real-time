@@ -7,22 +7,20 @@ import { displayName } from "@/shared/lib/types";
 import { chatKeys } from "../api";
 import { getSocket } from "../socket";
 import { applyReceipt, mergeMessages } from "../message-cache";
-import type { History, Message, ReadReceipt, TypingEvent } from "../types";
+import type { History, Message, ReadReceipt } from "../types";
 
 export function useChatRoom(chatId: number, enabled: boolean) {
   const { user } = useSession();
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
   const cache = useQueryClient();
   const [connected, setConnected] = useState(false);
-  const [typing, setTyping] = useState<Record<number, TypingEvent>>({});
-  const ownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const composing = useRef(false);
   const userId = user?.id;
   const username = displayName(user);
 
   useEffect(() => {
     if (!enabled || !userId) return;
     const socket = getSocket();
-    const timers = new Map<number, ReturnType<typeof setTimeout>>();
     const key = chatKeys.history(identity, chatId);
     let hasJoined = false;
     const acknowledged = new Set<number>();
@@ -62,11 +60,13 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       hasJoined = true;
     };
     const joined = (payload: { chatId: number }) => {
-      if (payload.chatId === chatId) readLoaded();
+      if (payload.chatId !== chatId) return;
+      readLoaded();
+      if (composing.current)
+        socket.emit("typing:start", { chatId, userId, username });
     };
     const disconnected = () => {
       setConnected(false);
-      setTyping({});
     };
     const onMessage = (message: Message) => {
       if (message.chatId !== chatId) return;
@@ -87,25 +87,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         old ? { ...old, messages: applyReceipt(old.messages, receipt) } : old,
       );
     };
-    const onStop = (payload: TypingEvent) => {
-      if (payload.chatId !== chatId) return;
-      clearTimeout(timers.get(payload.userId));
-      timers.delete(payload.userId);
-      setTyping((old) => {
-        const next = { ...old };
-        delete next[payload.userId];
-        return next;
-      });
-    };
-    const onStart = (payload: TypingEvent) => {
-      if (payload.chatId !== chatId || payload.userId === userId) return;
-      clearTimeout(timers.get(payload.userId));
-      setTyping((old) => ({ ...old, [payload.userId]: payload }));
-      timers.set(
-        payload.userId,
-        setTimeout(() => onStop(payload), 6000),
-      );
-    };
     const onError = (payload: { message?: string }) =>
       toast.error(payload.message || "Chat request failed.");
     socket.on("connect", join);
@@ -113,8 +94,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     socket.on("chat:joined", joined);
     socket.on("message:new", onMessage);
     socket.on("message:read", onReceipt);
-    socket.on("typing:start", onStart);
-    socket.on("typing:stop", onStop);
     socket.on("error", onError);
     // A reconnect can finish joining before refreshed history arrives.
     const unsubscribe = cache.getQueryCache().subscribe((event) => {
@@ -132,8 +111,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     if (socket.connected) join();
     else socket.connect();
     return () => {
-      if (ownTimer.current) clearTimeout(ownTimer.current);
-      for (const timer of timers.values()) clearTimeout(timer);
       if (socket.connected) {
         socket.emit("typing:stop", { chatId, userId, username });
         socket.emit("chat:leave", { chatId, userId });
@@ -143,8 +120,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       socket.off("chat:joined", joined);
       socket.off("message:new", onMessage);
       socket.off("message:read", onReceipt);
-      socket.off("typing:start", onStart);
-      socket.off("typing:stop", onStop);
       socket.off("error", onError);
       unsubscribe();
       document.removeEventListener("visibilitychange", readLoaded);
@@ -152,19 +127,20 @@ export function useChatRoom(chatId: number, enabled: boolean) {
   }, [chatId, userId, username, identity, enabled, cache]);
 
   const stopTyping = useCallback(() => {
-    if (ownTimer.current) clearTimeout(ownTimer.current);
+    composing.current = false;
+    if (!enabled || !userId) return;
     const socket = getSocket();
     if (socket.connected)
       socket.emit("typing:stop", { chatId, userId, username });
-  }, [chatId, userId, username]);
+  }, [chatId, userId, username, enabled]);
 
-  function startTyping() {
+  const startTyping = useCallback(() => {
+    composing.current = true;
+    if (!enabled || !userId) return;
     const socket = getSocket();
     if (!socket.connected) return;
     socket.emit("typing:start", { chatId, userId, username });
-    if (ownTimer.current) clearTimeout(ownTimer.current);
-    ownTimer.current = setTimeout(stopTyping, 2000);
-  }
+  }, [chatId, userId, username, enabled]);
 
   async function send(content: string, attachmentId?: string) {
     const socket = getSocket();
@@ -198,7 +174,6 @@ export function useChatRoom(chatId: number, enabled: boolean) {
   }
   return {
     connected,
-    typing: Object.values(typing),
     startTyping,
     stopTyping,
     send,

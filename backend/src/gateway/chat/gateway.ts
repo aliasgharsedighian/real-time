@@ -16,12 +16,15 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 import { CallsService } from './calls.service';
+import { PresenceService } from '../../modules/presence/presence.service';
+import { ChatTypingService } from './chat-typing.service';
 
 @WebSocketGateway({
   cors: { origin: '*', credentials: false },
   namespace: '/chat',
 })
 export class ChatGateway implements OnGatewayInit {
+  private readonly typingSequence = new WeakMap<Socket, Map<number, number>>();
   @WebSocketServer() server: Server;
   constructor(
     private readonly chatService: ChatService,
@@ -30,9 +33,13 @@ export class ChatGateway implements OnGatewayInit {
     private readonly calls: CallsService,
     private readonly notifications: NotificationsService,
     private readonly presence: NotificationPresenceService,
+    private readonly chatPresence: PresenceService,
+    private readonly chatTyping: ChatTypingService,
   ) {}
   afterInit(server: Server) {
     this.calls.server = server;
+    this.chatPresence.server = server;
+    this.chatTyping.server = server;
     server.use((client, next) => {
       void this.authenticate(client).then(
         () => next(),
@@ -40,9 +47,28 @@ export class ChatGateway implements OnGatewayInit {
       );
     });
   }
+  handleConnection(client: Socket) {
+    const data = client.data as {
+      userId: number;
+      expiresAt: number;
+      expiryTimer?: ReturnType<typeof setTimeout>;
+    };
+    data.expiryTimer = setTimeout(
+      () => client.disconnect(true),
+      Math.min(2_147_483_647, Math.max(0, data.expiresAt - Date.now())),
+    );
+    data.expiryTimer.unref();
+    return this.chatPresence.connect(client.id, data.userId);
+  }
   handleDisconnect(client: Socket) {
+    clearTimeout(
+      (client.data as { expiryTimer?: ReturnType<typeof setTimeout> })
+        .expiryTimer,
+    );
+    this.chatTyping.remove(client.id);
     this.calls.disconnect(client);
     this.presence.remove(client.id);
+    return this.chatPresence.disconnect(client.id);
   }
   @SubscribeMessage('call:list')
   async callList(@ConnectedSocket() client: Socket) {
@@ -187,6 +213,7 @@ export class ChatGateway implements OnGatewayInit {
     try {
       const userId = this.userId(client);
       if (typeof payload?.active !== 'boolean') return;
+      this.chatPresence.touch(userId);
       // Only a room joined through participant authorization can be considered open.
       const chatId =
         Number.isSafeInteger(payload.chatId) &&
@@ -224,6 +251,8 @@ export class ChatGateway implements OnGatewayInit {
       const room = `chat:${payload.chatId}`;
       await client.join(room);
       client.emit('chat:joined', { room, chatId: payload.chatId });
+      for (const entry of this.chatTyping.snapshot(payload.chatId))
+        client.emit('typing:start', entry);
       return { chatId: payload.chatId };
     } catch (error) {
       return this.failure(client, error);
@@ -234,7 +263,23 @@ export class ChatGateway implements OnGatewayInit {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { chatId: number },
   ) {
+    this.chatTyping.remove(client.id, payload?.chatId);
     await client.leave(`chat:${payload?.chatId}`);
+    return { ok: true };
+  }
+  @SubscribeMessage('chat:presence')
+  async onPresence(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { chatId: number },
+  ) {
+    try {
+      await this.participant(client, payload?.chatId);
+      const snapshot = await this.chatPresence.snapshot(payload.chatId);
+      client.emit('chat:presence', snapshot);
+      return snapshot;
+    } catch (error) {
+      return this.failure(client, error);
+    }
   }
   broadcast(message: SentMessage) {
     this.server.to(`chat:${message.chatId}`).emit('message:new', message);
@@ -246,6 +291,7 @@ export class ChatGateway implements OnGatewayInit {
   }
   removeChatMember(chatId: number, userId: number) {
     if (!this.server) return;
+    this.chatTyping.removeMember(userId, chatId);
     this.server.to(`user:${userId}`).emit('chat:removed', { chatId });
     this.server.in(`user:${userId}`).socketsLeave(`chat:${chatId}`);
   }
@@ -264,6 +310,7 @@ export class ChatGateway implements OnGatewayInit {
         payload.attachmentId,
       );
       this.broadcast(msg);
+      this.chatTyping.remove(client.id, payload.chatId);
       return msg;
     } catch (error) {
       return this.failure(client, error);
@@ -314,15 +361,43 @@ export class ChatGateway implements OnGatewayInit {
     event: string,
   ) {
     try {
+      const sequence =
+        this.typingSequence.get(client) ?? new Map<number, number>();
+      this.typingSequence.set(client, sequence);
+      const version = (sequence.get(payload?.chatId) ?? 0) + 1;
+      sequence.set(payload?.chatId, version);
       const userId = await this.participant(client, payload?.chatId);
-      client.to(`chat:${payload.chatId}`).emit(event, {
-        chatId: payload.chatId,
-        userId,
-        username:
-          typeof payload.username === 'string'
-            ? payload.username.slice(0, 100)
-            : '',
-      });
+      if (
+        !client.connected ||
+        !client.rooms.has(`chat:${payload.chatId}`) ||
+        sequence.get(payload.chatId) !== version
+      )
+        return;
+      if (event === 'typing:stop')
+        this.chatTyping.stop(client.id, payload.chatId);
+      else {
+        const user = await this.prisma.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: {
+            email: true,
+            profile: { select: { firstname: true, lastname: true } },
+          },
+        });
+        if (
+          !client.connected ||
+          !client.rooms.has(`chat:${payload.chatId}`) ||
+          sequence.get(payload.chatId) !== version
+        )
+          return;
+        const username =
+          [user.profile?.firstname, user.profile?.lastname]
+            .filter(Boolean)
+            .join(' ') ||
+          user.email ||
+          'Someone';
+        this.chatTyping.start(client.id, payload.chatId, userId, username);
+      }
+      return { ok: true };
     } catch (error) {
       return this.failure(client, error);
     }

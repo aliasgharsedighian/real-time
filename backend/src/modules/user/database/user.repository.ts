@@ -28,6 +28,7 @@ export class PrismaUserRepository {
               lastname: true,
               address: true,
               avatarId: true,
+              showLastSeen: true,
             },
           },
         },
@@ -85,34 +86,18 @@ export class PrismaUserRepository {
   }
 
   async updateProfile(profile: UpdateUserRequestDto, id: number) {
-    let updateData: any = [];
+    const updateData: UpdateUserRequestDto = {};
     if (profile.firstname !== undefined)
       updateData.firstname = profile.firstname;
     if (profile.lastname !== undefined) updateData.lastname = profile.lastname;
     if (profile.address !== undefined) updateData.address = profile.address;
+    if (profile.showLastSeen !== undefined) updateData.showLastSeen = profile.showLastSeen;
 
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          id,
-        },
-        include: {
-          profile: true,
-        },
-      });
-      const updatedProfile = await this.prisma.profile.update({
-        where: {
-          id: user?.profile?.id,
-        },
-        data: {
-          ...updateData,
-        },
-      });
-
-      return updatedProfile;
-    } catch (error) {
-      throw error;
-    }
+    return this.prisma.profile.upsert({
+      where: { userId: id },
+      create: { ...updateData, userId: id },
+      update: updateData,
+    });
   }
 
   async editUser(user: EditUserRequestDto, userId: number) {

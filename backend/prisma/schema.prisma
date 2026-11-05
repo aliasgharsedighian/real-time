@@ -43,6 +43,7 @@ model User {
   messageReadStatuses MessageReadStatus[] 
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  lastSeenAt  DateTime?
 
   pushSubscriptions PushSubscription[]
 
@@ -58,6 +59,7 @@ model Profile {
   firstname String?
   lastname  String?
   address   String?
+  showLastSeen Boolean @default(true)
   user      User    @relation(fields: [userId], references: [id])
   userId    Int     @unique
 }

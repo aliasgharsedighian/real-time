@@ -1,4 +1,5 @@
 export interface Profile {
+  showLastSeen?: boolean;
   id: number;
   firstname: string | null;
   lastname: string | null;

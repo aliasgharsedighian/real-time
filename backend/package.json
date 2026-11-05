@@ -22,7 +22,8 @@
     "test:calls:integration": "jest --config test/jest-calls.json --runInBand",
     "test:media:integration": "jest --config test/jest-media.json --runInBand",
     "test:search:integration": "jest --config test/jest-message-search.json --runInBand",
-    "test:notifications:integration": "jest --config test/jest-notifications.json --runInBand"
+    "test:notifications:integration": "jest --config test/jest-notifications.json --runInBand",
+    "test:presence:integration": "jest --config test/jest-presence.json --runInBand"
   },
   "dependencies": {
     "@ffprobe-installer/ffprobe": "^2.1.2",

@@ -16,6 +16,8 @@ import {
   useMessageSearch,
 } from "./message-search-context";
 const mocks = vi.hoisted(() => ({
+  startTyping: vi.fn(),
+  stopTyping: vi.fn(),
   send: vi.fn(),
   upload: vi.fn(),
   history: vi.fn(),
@@ -40,8 +42,8 @@ vi.mock("./hooks/use-chat-room", () => ({
     connected: true,
     typing: [],
     send: mocks.send,
-    startTyping: vi.fn(),
-    stopTyping: vi.fn(),
+    startTyping: mocks.startTyping,
+    stopTyping: mocks.stopTyping,
   }),
 }));
 vi.mock("@/features/uploads/api", async (importOriginal) => ({
@@ -322,6 +324,31 @@ describe("chat attachments", () => {
     expect(screen.getByText("Owner removed Bob from the group.")).toBeTruthy();
     expect(screen.getAllByLabelText("Group activity")).toHaveLength(2);
     expect(screen.queryByLabelText("Sent")).toBeNull();
+  });
+  it("keeps typing for a nonempty input even after blur and stops when cleared", async () => {
+    setup();
+    const input = await screen.findByLabelText("Message");
+    mocks.stopTyping.mockClear();
+    fireEvent.change(input, { target: { value: "hello" } });
+    await waitFor(() => expect(mocks.startTyping).toHaveBeenCalled());
+    fireEvent.blur(input);
+    expect(mocks.stopTyping).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "hello again" } });
+    expect(mocks.stopTyping).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "" } });
+    await waitFor(() => expect(mocks.stopTyping).toHaveBeenCalled());
+  });
+  it("publishes typing for restored drafts and clears it after sending", async () => {
+    sessionStorage.setItem("beam-draft:1:3", "restored draft");
+    setup();
+    await screen.findByRole("button", { name: "Send message" });
+    await waitFor(() => expect(mocks.startTyping).toHaveBeenCalled());
+    mocks.stopTyping.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.stopTyping).toHaveBeenCalled());
+    expect(
+      (screen.getByLabelText("Message") as HTMLTextAreaElement).value,
+    ).toBe("");
   });
   it("switches between microphone and send as text is entered and cleared", async () => {
     setup();

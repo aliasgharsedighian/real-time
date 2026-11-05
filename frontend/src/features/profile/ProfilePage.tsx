@@ -16,6 +16,7 @@ import { ThemePicker } from "@/shared/components/ThemePicker";
 import { Brand } from "@/shared/components/Brand";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { Checkbox } from "@/shared/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -32,7 +33,11 @@ import {
   FormMessage,
 } from "@/shared/ui/form";
 
-const schema = z.object({ firstname: z.string(), lastname: z.string() });
+const schema = z.object({
+  firstname: z.string(),
+  lastname: z.string(),
+  showLastSeen: z.boolean(),
+});
 type Values = z.infer<typeof schema>;
 
 export default function ProfilePage() {
@@ -42,13 +47,14 @@ export default function ProfilePage() {
   const [pending, setPending] = useState(false);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { firstname: "", lastname: "" },
+    defaultValues: { firstname: "", lastname: "", showLastSeen: true },
   });
   const { reset } = form;
   useEffect(() => {
     reset({
       firstname: user?.profile?.firstname ?? "",
       lastname: user?.profile?.lastname ?? "",
+      showLastSeen: user?.profile?.showLastSeen ?? true,
     });
   }, [user, reset]);
   async function submit(values: Values) {
@@ -118,6 +124,30 @@ export default function ProfilePage() {
                   )}
                 />
               ))}
+              <FormField
+                control={form.control}
+                name="showLastSeen"
+                render={({ field }) => (
+                  <FormItem className="rounded-2xl border border-border p-4">
+                    <div className="flex items-center gap-3">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={(checked) =>
+                            field.onChange(checked === true)
+                          }
+                        />
+                      </FormControl>
+                      <FormLabel>Show my last seen</FormLabel>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      When off, others see only recently, within a week or
+                      within a month. Online and typing are still visible. Save
+                      with Update.
+                    </p>
+                  </FormItem>
+                )}
+              />
               <Button disabled={pending} type="submit" className="w-full">
                 {pending ? "Saving…" : "Update"}
               </Button>

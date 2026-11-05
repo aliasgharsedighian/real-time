@@ -53,6 +53,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
+  const hasDraft = input.length > 0;
+  const { startTyping, stopTyping } = room;
+  useEffect(() => {
+    if (hasDraft) startTyping();
+    else stopTyping();
+  }, [hasDraft, startTyping, stopTyping]);
   const policy = useUploadPolicy();
   const [file, setFile] = useState<File>();
   const [uploaded, setUploaded] = useState<MediaFile>();
@@ -214,13 +220,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
             Connecting… Your draft is saved on this device.
           </p>
         )}
-        <div className="min-h-6 px-4 text-sm text-brand" aria-live="polite">
-          {room.typing.length === 1
-            ? `${room.typing[0].username || "Someone"} is typing…`
-            : room.typing.length > 1
-              ? `${room.typing.length} people are typing…`
-              : ""}
-        </div>
         <div className="relative flex min-h-0 flex-1 flex-col">
           {!!messages?.length && (
             <ChatDateNavigation
@@ -613,7 +612,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
                           input.slice(0, start) + emoji + input.slice(end);
                         if (next.length > 10000) return;
                         setInput(next);
-                        room.startTyping();
                         requestAnimationFrame(() => {
                           element?.focus();
                           element?.setSelectionRange(
@@ -636,11 +634,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               className="block min-h-12 max-h-36 min-w-0 w-full flex-1 resize-y rounded-2xl border border-input bg-background/80 px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
               dir="auto"
               value={input}
-              onChange={(event) => {
-                setInput(event.target.value);
-                room.startTyping();
-              }}
-              onBlur={room.stopTyping}
+              onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&

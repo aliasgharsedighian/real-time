@@ -1,10 +1,14 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class UpdateUserRequestDto {
   @IsOptional()
+  @IsBoolean()
+  showLastSeen?: boolean;
+
+  @IsOptional()
   @IsString()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string'
       ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
       : value,
@@ -13,7 +17,7 @@ export class UpdateUserRequestDto {
 
   @IsOptional()
   @IsString()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string'
       ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
       : value,

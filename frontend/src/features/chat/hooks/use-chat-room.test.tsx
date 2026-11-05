@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -46,6 +46,46 @@ function mount() {
 }
 
 describe("chat room events", () => {
+  afterEach(() => vi.useRealTimers());
+  it("keeps a nonempty draft typing through idle, restores it after rejoin and stops explicitly", () => {
+    vi.useFakeTimers();
+    const { result, unmount } = mount();
+    act(() => result.current.startTyping());
+    fake.emit.mockClear();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(fake.emit).not.toHaveBeenCalledWith(
+      "typing:stop",
+      expect.anything(),
+    );
+    act(() => {
+      fake.handlers.get("disconnect")!();
+      fake.handlers.get("connect")!();
+      fake.handlers.get("chat:joined")!({ chatId: 7 } as never);
+    });
+    expect(fake.emit).toHaveBeenCalledWith(
+      "typing:start",
+      expect.objectContaining({ chatId: 7 }),
+    );
+    fake.emit.mockClear();
+    act(() => result.current.stopTyping());
+    expect(fake.emit).toHaveBeenCalledWith(
+      "typing:stop",
+      expect.objectContaining({ chatId: 7 }),
+    );
+    fake.emit.mockClear();
+    act(() => fake.handlers.get("chat:joined")!({ chatId: 7 } as never));
+    expect(fake.emit).not.toHaveBeenCalledWith(
+      "typing:start",
+      expect.anything(),
+    );
+    act(() => result.current.startTyping());
+    fake.emit.mockClear();
+    unmount();
+    expect(fake.emit).toHaveBeenCalledWith(
+      "typing:stop",
+      expect.objectContaining({ chatId: 7 }),
+    );
+  });
   it("keeps new live messages out of a search window with a gap and does not mark them read", () => {
     const { cache, key } = mount();
     act(() =>
