@@ -240,7 +240,7 @@ describe("chat attachments", () => {
       expect(screen.queryByText("Latest message")).toBeNull();
       expect(mocks.window.mock.calls[0][1]).toEqual({ aroundId: 30 });
       fireEvent.click(
-        screen.getByRole("button", { name: "Back to latest messages" }),
+        screen.getByRole("button", { name: "Go to latest messages" }),
       );
       await screen.findByText("Latest message");
       expect(document.querySelector('[data-message-id="30"]')).toBeNull();
@@ -665,5 +665,99 @@ describe("chat attachments", () => {
     expect(screen.getByText("+123456789")).toBeTruthy();
     expect(screen.getByText("Profile address")).toBeTruthy();
     expect(screen.queryByText("Username")).toBeNull();
+  });
+  it("opens reply preview by swiping left and preserves the draft until it is sent", async () => {
+    const text =
+      "A long original message\nwith several lines\nand more content to preview";
+    mocks.history.mockResolvedValue({
+      messages: [
+        {
+          id: 77,
+          chatId: 3,
+          senderId: 2,
+          content: text,
+          createdAt: "2026-11-05T08:00:00Z",
+          sender: { id: 2, email: "peer@test.invalid", profile: null },
+        },
+      ],
+      users: [],
+      unreadIds: [],
+    });
+    setup();
+    const message = await screen.findByText(text, {
+      normalizer: (value) => value,
+    });
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "My draft reply" },
+    });
+    for (const [type, x] of [
+      ["pointerdown", 100],
+      ["pointermove", 20],
+      ["pointerup", 20],
+    ] as const) {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, {
+        pointerType: "touch",
+        pointerId: 1,
+        clientX: x,
+        clientY: 100,
+      });
+      fireEvent(message, event);
+    }
+    expect(screen.getByLabelText("Reply preview").textContent).toContain(
+      "Reply to peer@test.invalid",
+    );
+    expect(
+      (screen.getByLabelText("Message") as HTMLTextAreaElement).value,
+    ).toBe("My draft reply");
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith("My draft reply", undefined, 77),
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Reply preview")).toBeNull(),
+    );
+  });
+  it("shows the jump button above the bottom, scrolls to the end and hides it again", async () => {
+    mocks.history.mockResolvedValue({
+      messages: [
+        {
+          id: 1,
+          chatId: 3,
+          senderId: 2,
+          content: "Latest content",
+          createdAt: "2026-11-05T08:00:00Z",
+        },
+      ],
+      users: [],
+      unreadIds: [],
+    });
+    setup();
+    await screen.findByText("Latest content");
+    const log = screen.getByRole("log", { name: "Messages" });
+    Object.defineProperties(log, {
+      clientHeight: { value: 300 },
+      scrollHeight: { value: 1000 },
+    });
+    log.scrollTop = 700;
+    fireEvent.scroll(log);
+    expect(
+      screen.queryByRole("button", { name: "Go to latest messages" }),
+    ).toBeNull();
+    log.scrollTop = 300;
+    fireEvent.scroll(log);
+    const jump = screen.getByRole("button", { name: "Go to latest messages" });
+    const scroll = vi.fn(() => {
+      log.scrollTop = 700;
+    });
+    Object.defineProperty(log, "scrollTo", { value: scroll });
+    fireEvent.click(jump);
+    expect(scroll).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
+    expect(log.scrollTop).toBe(700);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Go to latest messages" }),
+      ).toBeNull(),
+    );
   });
 });

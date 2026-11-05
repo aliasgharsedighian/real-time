@@ -29,6 +29,7 @@ export function useMessageScroll({
   const anchor = useRef<{ id: string; offset: number } | null>(null);
   const prefetch = useRef<HTMLDivElement>(null);
   const appliedFocus = useRef<typeof focusMessage>(undefined);
+  const [atBottom, setAtBottom] = useState(true);
   const [visibleDay, setVisibleDay] = useState("");
   const [scrolling, setScrolling] = useState(false);
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,6 +52,9 @@ export function useMessageScroll({
       nearBottom.current =
         element.scrollHeight - element.scrollTop - element.clientHeight < 100;
     }
+    setAtBottom(
+      element.scrollHeight - element.scrollTop - element.clientHeight <= 24,
+    );
     previousScrollTop.current = element.scrollTop;
     const top = element.getBoundingClientRect().top;
     const visible = Array.from(
@@ -64,6 +68,21 @@ export function useMessageScroll({
       : null;
     if (visible?.dataset.messageDay) setVisibleDay(visible.dataset.messageDay);
   }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const element = container.current;
+    if (!element) return;
+    nearBottom.current = true;
+    anchor.current = null;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)")
+      .matches
+      ? "auto"
+      : "smooth";
+    if (element.scrollTo)
+      element.scrollTo({ top: element.scrollHeight, behavior });
+    else element.scrollTop = element.scrollHeight;
+    rememberPosition();
+  }, [rememberPosition]);
 
   const handleScroll = useCallback(() => {
     const element = container.current;
@@ -126,7 +145,7 @@ export function useMessageScroll({
         return;
       }
     }
-    if (messages?.length) syncPosition();
+    if (messages) syncPosition();
   }, [messages, loadingOlder, focusMessage, syncPosition, rememberPosition]);
 
   useEffect(() => {
@@ -175,6 +194,8 @@ export function useMessageScroll({
     content,
     bottom,
     nearBottom,
+    atBottom,
+    scrollToBottom,
     prefetch,
     rememberPosition,
     visibleDay,

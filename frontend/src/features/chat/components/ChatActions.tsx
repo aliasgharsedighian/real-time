@@ -1,3 +1,4 @@
+import { useHorizontalSwipe } from "../hooks/use-horizontal-swipe";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Bell, BellOff, MoreHorizontal, Trash2 } from "lucide-react";
@@ -170,11 +171,17 @@ export function ConversationActions({
   const [swiped, setSwiped] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const suppressClick = useRef(false);
   const cache = useQueryClient();
   const navigate = useNavigate();
   const canDelete = !chat.isGroup || chat.myRole === "OWNER";
+  const swipe = useHorizontalSwipe({
+    restingOffset: swiped ? -(canDelete ? 144 : 76) : 0,
+    minOffset: -(canDelete ? 144 : 76),
+    maxOffset: 0,
+    threshold: 45,
+    enabled: !position && !confirm,
+    onCommit: (direction) => setSwiped(direction === "left"),
+  });
   async function toggleMute() {
     setBusy(true);
     try {
@@ -195,7 +202,10 @@ export function ConversationActions({
         setPosition({ x: event.clientX, y: event.clientY });
       }}
     >
-      <div className="absolute inset-y-0 right-0 flex items-stretch gap-1 p-1">
+      <div
+        aria-hidden={!swiped}
+        className={`absolute inset-y-0 right-0 flex items-stretch gap-1 p-1 ${swiped ? "" : "pointer-events-none"}`}
+      >
         <Button
           tabIndex={swiped ? 0 : -1}
           className="h-full w-16 flex-col gap-1 bg-amber-500 text-white hover:bg-amber-600"
@@ -218,37 +228,14 @@ export function ConversationActions({
         )}
       </div>
       <div
-        className="relative bg-sidebar transition-transform [touch-action:pan-y]"
-        style={{
-          transform: swiped
-            ? `translateX(-${canDelete ? 144 : 76}px)`
-            : undefined,
-        }}
-        onPointerDown={(event) => {
-          suppressClick.current = false;
-          if (event.pointerType === "touch")
-            start.current = { x: event.clientX, y: event.clientY };
-        }}
-        onPointerUp={(event) => {
-          const origin = start.current;
-          start.current = null;
-          if (
-            origin &&
-            Math.abs(event.clientX - origin.x) > 45 &&
-            Math.abs(event.clientY - origin.y) < 30
-          ) {
-            suppressClick.current = true;
-            setSwiped(event.clientX < origin.x);
-          }
-        }}
-        onPointerCancel={() => {
-          start.current = null;
-        }}
+        className={`relative bg-sidebar [touch-action:pan-y] ${swipe.dragging ? "transition-none" : "transition-transform duration-200 ease-out motion-reduce:transition-none"}`}
+        style={{ transform: `translateX(${swipe.offset}px)` }}
+        {...swipe.handlers}
         onClickCapture={(event) => {
-          if (suppressClick.current || swiped) {
+          if (swipe.suppressClick.current || swiped) {
             event.preventDefault();
             event.stopPropagation();
-            if (!suppressClick.current) setSwiped(false);
+            if (!swipe.suppressClick.current) setSwiped(false);
           }
         }}
       >

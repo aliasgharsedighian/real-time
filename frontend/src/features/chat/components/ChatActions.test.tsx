@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationActions } from "./ChatActions";
 import { muteChat } from "../api";
 vi.mock("../api", () => ({ muteChat: vi.fn(), deleteChat: vi.fn() }));
@@ -31,6 +31,7 @@ function touch(element: HTMLElement, type: string, x: number, y = 100) {
   fireEvent(element, event);
 }
 describe("conversation actions", () => {
+  beforeEach(() => vi.clearAllMocks());
   it("reveals mute and delete after a left swipe and suppresses navigation", async () => {
     vi.mocked(muteChat).mockResolvedValue(undefined);
     mount();
@@ -57,5 +58,38 @@ describe("conversation actions", () => {
     fireEvent.contextMenu(screen.getByText("Conversation"));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete group" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+  it("tracks the finger during opening and closing, then settles to the action width", () => {
+    mount();
+    const link = screen.getByText("Conversation");
+    touch(link, "pointerdown", 200);
+    touch(link, "pointermove", 170);
+    expect(link.parentElement?.style.transform).toBe("translateX(-30px)");
+    touch(link, "pointermove", 120);
+    expect(link.parentElement?.style.transform).toBe("translateX(-80px)");
+    touch(link, "pointerup", 120);
+    expect(link.parentElement?.style.transform).toBe("translateX(-144px)");
+    touch(link, "pointerdown", 100);
+    touch(link, "pointermove", 160);
+    expect(link.parentElement?.style.transform).toBe("translateX(-84px)");
+    touch(link, "pointerup", 160);
+    expect(link.parentElement?.style.transform).toBe("translateX(0px)");
+  });
+  it("snaps back for short drags, vertical scrolling or cancelled gestures", () => {
+    mount();
+    const link = screen.getByText("Conversation");
+    touch(link, "pointerdown", 200);
+    touch(link, "pointermove", 175);
+    touch(link, "pointerup", 175);
+    expect(link.parentElement?.style.transform).toBe("translateX(0px)");
+    touch(link, "pointerdown", 200);
+    touch(link, "pointermove", 198, 130);
+    touch(link, "pointerup", 100, 150);
+    expect(link.parentElement?.style.transform).toBe("translateX(0px)");
+    touch(link, "pointerdown", 200);
+    touch(link, "pointermove", 100);
+    touch(link, "pointercancel", 100);
+    expect(link.parentElement?.style.transform).toBe("translateX(0px)");
+    expect(muteChat).not.toHaveBeenCalled();
   });
 });

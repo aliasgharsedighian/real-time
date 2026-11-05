@@ -24,7 +24,7 @@ import {
 } from "@/features/uploads/api";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { SendIcon, Paperclip, X, Mic, Smile } from "lucide-react";
+import { SendIcon, Paperclip, X, Mic, Smile, ChevronDown } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { Button } from "@/shared/ui/button";
 import { BrandLoading } from "@/shared/components/BrandLoading";
@@ -155,6 +155,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
     content,
     bottom,
     nearBottom,
+    atBottom,
+    scrollToBottom,
     prefetch,
     visibleDay,
     scrolling,
@@ -359,7 +361,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
             ref={container}
             onScroll={handleScroll}
             tabIndex={0}
-            className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 [overflow-anchor:none]"
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 [overflow-anchor:none]"
             role="log"
             aria-label="Messages"
             aria-live="polite"
@@ -564,7 +566,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                       {displayName(message.replyTo.sender)}
                                     </span>
                                     <span
-                                      className="block max-w-64 truncate"
+                                      className="line-clamp-2 max-w-64 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                                       dir="auto"
                                     >
                                       {messageSummary(message.replyTo)}
@@ -618,6 +620,27 @@ function ChatRoom({ chatId }: { chatId: number }) {
               <div ref={bottom} />
             </div>
           </div>
+          {(!atBottom || !!history.data?.window?.afterId) && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              aria-label="Go to latest messages"
+              title="Go to latest messages"
+              className="absolute right-4 bottom-4 z-10 size-12 animate-in rounded-full border border-border bg-card text-brand shadow-lg fade-in zoom-in-90 duration-150 motion-reduce:animate-none sm:right-6"
+              disabled={history.navigating}
+              onClick={async () => {
+                setFocusedMessage(undefined);
+                if (history.data?.window) {
+                  nearBottom.current = true;
+                  await history.returnToLatest();
+                }
+                scrollToBottom();
+              }}
+            >
+              <ChevronDown className="size-6" />
+            </Button>
+          )}
         </div>
         <form
           className="relative shrink-0 border-t border-border bg-card/90 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]"
@@ -627,19 +650,25 @@ function ChatRoom({ chatId }: { chatId: number }) {
           }}
         >
           {(reply || editing) && (
-            <div className="mb-2 flex items-center gap-3 rounded-lg border-l-4 border-primary bg-primary/10 px-3 py-2 text-sm">
+            <div
+              aria-label={editing ? "Edit preview" : "Reply preview"}
+              className="mb-2 flex animate-in items-center gap-3 border-b border-border px-1 py-2 text-sm fade-in slide-in-from-bottom-1 duration-150 motion-reduce:animate-none"
+            >
               {editing ? (
                 <Pencil className="size-4 shrink-0 text-brand" />
               ) : (
                 <Reply className="size-4 shrink-0 text-brand" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-brand">
+                <p className="truncate font-semibold text-brand">
                   {editing
                     ? "Edit message"
                     : `Reply to ${displayName(reply?.sender)}`}
                 </p>
-                <p className="truncate text-xs" dir="auto">
+                <p
+                  className="line-clamp-2 whitespace-pre-wrap break-words text-sm leading-5 [overflow-wrap:anywhere]"
+                  dir="auto"
+                >
                   {messageSummary((editing || reply)!)}
                 </p>
               </div>

@@ -1,3 +1,4 @@
+import { useHorizontalSwipe } from "../hooks/use-horizontal-swipe";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MoreHorizontal,
@@ -64,6 +65,14 @@ export function MessageInteraction({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   const held = useRef(false);
+  const swipe = useHorizontalSwipe({
+    minOffset: -96,
+    maxOffset: 0,
+    threshold: 64,
+    enabled: !selecting && !position,
+    onCommit: () => onReply(),
+  });
+  const replyReady = swipe.offset <= -64;
   function cancel() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
@@ -76,13 +85,15 @@ export function MessageInteraction({
   );
   return (
     <div
-      className={`group relative min-w-0 select-none rounded-2xl sm:select-text ${selected ? "ring-2 ring-primary bg-primary/10" : ""}`}
+      className={`group relative min-w-0 [touch-action:pan-y] select-none rounded-2xl sm:select-text ${selected ? "ring-2 ring-primary bg-primary/10" : ""}`}
       onContextMenu={(event) => {
         event.preventDefault();
-        if (!selecting) setPosition({ x: event.clientX, y: event.clientY });
+        if (!selecting && !swipe.dragging)
+          setPosition({ x: event.clientX, y: event.clientY });
       }}
       onPointerDown={(event) => {
         held.current = false;
+        swipe.handlers.onPointerDown(event);
         if (
           event.pointerType !== "touch" ||
           selecting ||
@@ -96,51 +107,86 @@ export function MessageInteraction({
         }, 1000);
       }}
       onPointerMove={(event) => {
+        swipe.handlers.onPointerMove(event);
         if (
-          origin.current &&
-          Math.hypot(
-            event.clientX - origin.current.x,
-            event.clientY - origin.current.y,
-          ) > 10
+          swipe.suppressClick.current ||
+          (origin.current &&
+            Math.hypot(
+              event.clientX - origin.current.x,
+              event.clientY - origin.current.y,
+            ) > 10)
         )
           cancel();
       }}
-      onPointerUp={cancel}
-      onPointerCancel={cancel}
+      onPointerUp={(event) => {
+        cancel();
+        origin.current = null;
+        swipe.handlers.onPointerUp(event);
+      }}
+      onPointerCancel={(event) => {
+        cancel();
+        origin.current = null;
+        swipe.handlers.onPointerCancel(event);
+      }}
+      onLostPointerCapture={(event) => {
+        cancel();
+        origin.current = null;
+        swipe.handlers.onLostPointerCapture(event);
+      }}
       onClickCapture={(event) => {
         if ((event.target as HTMLElement).closest("[data-message-menu]"))
           return;
-        if (held.current || selecting) {
+        if (held.current || swipe.suppressClick.current || selecting) {
           event.preventDefault();
           event.stopPropagation();
-          if (!held.current) onToggle();
+          if (!held.current && !swipe.suppressClick.current) onToggle();
         }
       }}
     >
-      {selecting && (
-        <button
-          type="button"
-          aria-label={`Select message ${message.id}`}
-          aria-pressed={selected}
-          className="absolute -left-8 top-3 grid size-6 place-items-center rounded-full border border-primary bg-card text-brand"
-        >
-          {selected && <CheckCircle className="size-5" />}
-        </button>
-      )}
-      {children}
-      {!selecting && (
-        <button
-          type="button"
-          aria-label={`Message actions ${message.id}`}
-          className="absolute -right-1 -top-3 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-70"
-          onClick={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            setPosition({ x: rect.left, y: rect.bottom });
-          }}
-        >
-          <MoreHorizontal className="size-4" />
-        </button>
-      )}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute top-1/2 right-0 grid size-8 -translate-y-1/2 place-items-center rounded-full border ${swipe.dragging ? "transition-none" : "transition-[opacity,scale] duration-200 ease-out motion-reduce:transition-none"} ${replyReady ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-brand"}`}
+        style={{
+          opacity: Math.min(-swipe.offset / 48, 1),
+          scale: replyReady ? "1.1" : "1",
+        }}
+      >
+        <Reply className="size-4" />
+      </div>
+      <div
+        data-swipe-content
+        className={
+          swipe.dragging
+            ? "relative transition-none"
+            : "relative transition-transform duration-200 ease-out motion-reduce:transition-none"
+        }
+        style={{ transform: `translateX(${swipe.offset}px)` }}
+      >
+        {selecting && (
+          <button
+            type="button"
+            aria-label={`Select message ${message.id}`}
+            aria-pressed={selected}
+            className="absolute -left-8 top-3 grid size-6 place-items-center rounded-full border border-primary bg-card text-brand"
+          >
+            {selected && <CheckCircle className="size-5" />}
+          </button>
+        )}
+        {children}
+        {!selecting && (
+          <button
+            type="button"
+            aria-label={`Message actions ${message.id}`}
+            className="absolute -right-1 -top-3 rounded-full border border-border bg-card p-1 text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-70"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setPosition({ x: rect.left, y: rect.bottom });
+            }}
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        )}
+      </div>
       {position && (
         <ActionMenu
           position={position}
