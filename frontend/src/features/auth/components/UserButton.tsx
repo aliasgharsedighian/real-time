@@ -1,3 +1,4 @@
+import { clearNotificationSession } from "@/features/notifications/browser-push";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ export default function UserButton() {
   async function logout() {
     setPending(true);
     try {
+      await clearNotificationSession();
       await api.post("auth/logout");
     } catch {
       toast.info("Signed out on this device. The server could not be reached.");

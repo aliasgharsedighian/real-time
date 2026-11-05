@@ -14,6 +14,7 @@ import { MediaProcessorService } from './media-processor.service';
 import { ChatService } from '../../gateway/chat/chat.service';
 
 const prisma = {
+  call: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   chatParticipant: { findUnique: jest.fn() },
   uploadFile: {
     create: jest.fn(),

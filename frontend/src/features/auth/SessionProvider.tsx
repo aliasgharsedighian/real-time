@@ -1,3 +1,4 @@
+import { workerMessage } from "@/features/notifications/browser-push";
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     retry: false,
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    // Tokens and the push installation are browser-wide; logout/account switching
+    // in another tab must also stop this tab from restoring its old push binding.
+    const syncSession = (event: StorageEvent) => {
+      if (event.key !== "beam-session-v1") return;
+      try {
+        const restored = event.newValue ? JSON.parse(event.newValue)?.state?.tokens : null;
+        if (typeof restored?.accessToken === "string" && typeof restored?.refreshToken === "string") {
+          const current = useSessionStore.getState().tokens;
+          if (current?.accessToken !== restored.accessToken || current?.refreshToken !== restored.refreshToken)
+            useSessionStore.getState().setTokens(restored);
+        } else useSessionStore.getState().clear();
+      } catch { useSessionStore.getState().clear(); }
+    };
+    window.addEventListener("storage", syncSession);
+    return () => window.removeEventListener("storage", syncSession);
+  }, []);
+
+  useEffect(() => {
+    if (!tokens) void workerMessage({ type: "notification:bind", userId: null, enabled: false }).catch(() => {});
+  }, [tokens]);
 
   useEffect(() => {
     if (previousSession.current !== tokens?.refreshToken) {

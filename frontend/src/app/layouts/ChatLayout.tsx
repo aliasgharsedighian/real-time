@@ -1,3 +1,4 @@
+import NotificationProvider from "@/features/notifications/NotificationProvider";
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
 import { Link, Outlet, useMatch, useNavigate } from "react-router-dom";
@@ -29,9 +30,11 @@ import { CallButton } from "@/features/calls/CallButton";
 
 export default function ChatLayout() {
   return (
-    <CallProvider>
-      <ChatLayoutContent />
-    </CallProvider>
+    <NotificationProvider>
+      <CallProvider>
+        <ChatLayoutContent />
+      </CallProvider>
+    </NotificationProvider>
   );
 }
 

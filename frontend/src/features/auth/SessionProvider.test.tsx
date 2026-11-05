@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "./SessionProvider";
 import { useSession } from "./session-context";
@@ -59,6 +59,17 @@ describe("restored sessions", () => {
     vi.mocked(getCurrentUser).mockRejectedValue(new ApiError("Expired", 401));
     mount();
     await waitFor(() => expect(useSessionStore.getState().tokens).toBeNull());
+    expect(await screen.findByText("Guest")).toBeTruthy();
+  });
+  it("clears another tab's session on browser-wide logout", async () => {
+    useSessionStore.getState().setTokens({ accessToken: "stored", refreshToken: "refresh" });
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: 9, email: null, profile: null });
+    mount();
+    await screen.findByText("User 9");
+    act(() => window.dispatchEvent(new StorageEvent("storage", {
+      key: "beam-session-v1", newValue: JSON.stringify({ state: { tokens: null }, version: 0 }),
+    })));
+    expect(useSessionStore.getState().tokens).toBeNull();
     expect(await screen.findByText("Guest")).toBeTruthy();
   });
   it("preserves credentials when the server is temporarily unreachable", async () => {

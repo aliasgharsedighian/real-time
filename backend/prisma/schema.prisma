@@ -44,6 +44,8 @@ model User {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
+  pushSubscriptions PushSubscription[]
+
   uploadedFiles UploadFile[]
 
   otps OTP[] @relation("UserOTPs")
@@ -164,4 +166,17 @@ model UploadFile {
   @@index([ownerId, createdAt])
   @@index([chatId])
   @@index([messageId])
+}
+
+// One browser installation belongs to the last authenticated account that enabled push.
+model PushSubscription {
+  id             String   @id @default(uuid())
+  installationId String   @unique @db.VarChar(100)
+  token          String   @unique @db.VarChar(4096)
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@index([userId, updatedAt])
 }

@@ -1,4 +1,9 @@
 import {
+  NotificationsService,
+  SentMessage,
+} from '../../modules/notifications/notifications.service';
+import { NotificationPresenceService } from '../../modules/notifications/notification-presence.service';
+import {
   WebSocketGateway,
   WebSocketServer,
   ConnectedSocket,
@@ -23,6 +28,8 @@ export class ChatGateway implements OnGatewayInit {
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly calls: CallsService,
+    private readonly notifications: NotificationsService,
+    private readonly presence: NotificationPresenceService,
   ) {}
   afterInit(server: Server) {
     this.calls.server = server;
@@ -35,6 +42,7 @@ export class ChatGateway implements OnGatewayInit {
   }
   handleDisconnect(client: Socket) {
     this.calls.disconnect(client);
+    this.presence.remove(client.id);
   }
   @SubscribeMessage('call:list')
   async callList(@ConnectedSocket() client: Socket) {
@@ -171,6 +179,31 @@ export class ChatGateway implements OnGatewayInit {
     client.emit('error', result);
     return result;
   }
+  @SubscribeMessage('notification:presence')
+  notificationPresence(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { active: boolean; chatId: number | null },
+  ) {
+    try {
+      const userId = this.userId(client);
+      if (typeof payload?.active !== 'boolean') return;
+      // Only a room joined through participant authorization can be considered open.
+      const chatId =
+        Number.isSafeInteger(payload.chatId) &&
+        client.rooms.has(`chat:${payload.chatId}`)
+          ? payload.chatId
+          : null;
+      this.presence.update(client.id, {
+        userId,
+        active: payload.active,
+        chatId,
+        expiresAt: (client.data as { expiresAt: number }).expiresAt,
+      });
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  }
   @SubscribeMessage('chat:list')
   async onGetAllChats(@ConnectedSocket() client: Socket) {
     try {
@@ -203,8 +236,9 @@ export class ChatGateway implements OnGatewayInit {
   ) {
     await client.leave(`chat:${payload?.chatId}`);
   }
-  broadcast(message: { chatId: number }) {
+  broadcast(message: SentMessage) {
     this.server.to(`chat:${message.chatId}`).emit('message:new', message);
+    this.notifications.dispatch(this.server, message);
   }
   notifyChatChanged(chatId: number, userIds: number[]) {
     for (const userId of userIds)

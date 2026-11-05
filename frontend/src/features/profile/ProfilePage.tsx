@@ -1,3 +1,4 @@
+import { NotificationSettings } from "@/features/notifications/NotificationSettings";
 import { AvatarEditor } from "./AvatarEditor";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -127,6 +128,7 @@ export default function ProfilePage() {
       <section className="brand-panel mx-auto mt-5 max-w-xl rounded-3xl p-6">
         <ThemePicker />
       </section>
+      <NotificationSettings />
       <Brand className="mx-auto mt-8 w-32 opacity-70" />
     </div>
   );
