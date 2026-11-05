@@ -12,6 +12,10 @@ export interface Message {
   chatId: number;
   senderId: number;
   content: string;
+  editedAt?: string | null;
+  forwarded?: boolean;
+  replyToId?: number | null;
+  replyTo?: Message | null;
   attachments?: MediaFile[];
   createdAt: string;
   sender?: User;
@@ -28,6 +32,8 @@ export interface Participant {
 export interface Chat {
   id: number;
   isGroup: boolean;
+  muted?: boolean;
+  myRole?: "OWNER" | "MEMBER";
   name?: string | null;
   avatarId?: string | null;
   createdAt: string;
@@ -47,6 +53,7 @@ export interface HistoryResponse {
 export interface History {
   window?: Omit<MessageWindow, "messages"> & { focusId: number };
   nextPage?: number | null;
+  olderCursor?: number | null;
   chat?: ChatDetails;
   messages: Message[];
   users: Participant[];

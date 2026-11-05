@@ -1,3 +1,4 @@
+import { MessageActionsService } from './message-actions.service';
 import { GroupsService } from './groups.service';
 import { MessageSearchService } from './message-search.service';
 import { Logger, Module, Provider } from '@nestjs/common';
@@ -20,6 +21,7 @@ const repositories: Provider[] = [PrsimaPollingRepository];
   controllers: [...httpControllers],
   providers: [
     GroupsService,
+    MessageActionsService,
     MessageSearchService,
     Logger,
     ...repositories,

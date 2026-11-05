@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/features/auth/session-store";
-import { chatKeys, getHistory, getMessageWindow } from "../api";
+import { chatKeys, getHistory, getMessageWindow, syncMessages } from "../api";
 import type { History, Message } from "../types";
 import { useChatHistory } from "./use-chat-history";
 vi.mock("../api", async (original) => ({
   ...(await original<object>()),
   getHistory: vi.fn(),
   getMessageWindow: vi.fn(),
+  syncMessages: vi.fn(),
 }));
 const get = vi.mocked(getHistory);
 const getWindow = vi.mocked(getMessageWindow);
@@ -38,6 +39,9 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(syncMessages).mockImplementation(async (_chatId, ids) =>
+    ids.map(message),
+  );
   useSessionStore
     .getState()
     .setTokens({ accessToken: "access", refreshToken: "refresh" });
@@ -186,4 +190,59 @@ describe("incremental chat history", () => {
     unmount();
     expect(signal.aborted).toBe(true);
   });
+});
+
+it("reconciles messages edited or hard deleted while disconnected, including old loaded pages", async () => {
+  get.mockResolvedValue(page([50, 51], null));
+  const { result, cache, key } = mount();
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  act(() =>
+    cache.setQueryData<History>(key, (old) => ({
+      ...old!,
+      messages: [message(1), message(2), ...old!.messages],
+    })),
+  );
+  vi.mocked(syncMessages).mockResolvedValue([
+    {
+      ...message(2),
+      content: "Edited while offline",
+      editedAt: "2026-11-05T00:00:00Z",
+    },
+    message(50),
+    message(51),
+  ]);
+  await act(async () => {
+    await result.current.refetch();
+  });
+  await waitFor(() =>
+    expect(result.current.data?.messages.map((m) => m.id)).toEqual([2, 50, 51]),
+  );
+  expect(result.current.data?.messages[0].content).toBe("Edited while offline");
+});
+
+it("uses a stable cursor after deletion so older messages are not skipped by shifted offsets", async () => {
+  get.mockResolvedValue(page([51, 52], 2));
+  const { result } = mount();
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  vi.mocked(syncMessages).mockResolvedValue([message(52)]);
+  await act(async () => {
+    await result.current.refetch();
+  });
+  await waitFor(() => expect(result.current.data?.olderCursor).toBe(51));
+  getWindow.mockResolvedValue({
+    messages: [message(49), message(50)],
+    beforeId: null,
+    afterId: 50,
+  });
+  await act(() => result.current.loadOlder());
+  expect(getWindow).toHaveBeenCalledWith(
+    7,
+    { beforeId: 51 },
+    expect.any(AbortSignal),
+  );
+  await waitFor(() =>
+    expect(result.current.data?.messages.map((m) => m.id)).toEqual([
+      49, 50, 52,
+    ]),
+  );
 });

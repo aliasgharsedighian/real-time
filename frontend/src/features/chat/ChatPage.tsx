@@ -1,3 +1,17 @@
+import { removeMessagesFromHistory } from "./message-cache";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useSessionStore } from "@/features/auth/session-store";
+import { chatKeys, deleteMessages, editMessage, forwardMessages } from "./api";
+import type { History, Message } from "./types";
+import { ConfirmDelete } from "./components/ChatActions";
+import {
+  MessageInteraction,
+  ForwardDialog,
+  messageSummary,
+} from "./components/MessageActions";
+import { getSocket } from "./socket";
+import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
 import { Media, LocalPreview } from "@/features/uploads/Media";
 import {
   discardFile,
@@ -53,6 +67,59 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
+  const cache = useQueryClient();
+  const identity = useSessionStore((state) => state.tokens?.refreshToken);
+  const [reply, setReply] = useState<Message>();
+  const [editing, setEditing] = useState<Message>();
+  const savedDraft = useRef("");
+  const [selected, setSelected] = useState<number[]>([]);
+  const [deleting, setDeleting] = useState<number[]>([]);
+  const [forwarding, setForwarding] = useState<number[]>([]);
+  const canDeleteSelection =
+    selected.length > 0 &&
+    selected.every((id) =>
+      history.data?.messages.some(
+        (m) => m.id === id && m.senderId === user?.id,
+      ),
+    );
+  const toggleSelected = (id: number) =>
+    setSelected((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : current.length < 100
+          ? [...current, id]
+          : current,
+    );
+  function cancelEdit() {
+    setEditing(undefined);
+    setInput(savedDraft.current);
+  }
+  useEffect(() => {
+    const socket = getSocket();
+    const deleted = (event: { chatId: number; messageIds: number[] }) => {
+      if (event.chatId !== chatId) return;
+      setSelected((current) =>
+        current.filter((id) => !event.messageIds.includes(id)),
+      );
+      setReply((current) =>
+        current && event.messageIds.includes(current.id) ? undefined : current,
+      );
+      if (editing && event.messageIds.includes(editing.id)) {
+        setEditing(undefined);
+        setInput(savedDraft.current);
+      }
+    };
+    const updated = (message: Message) => {
+      if (message.chatId === chatId)
+        setReply((current) => (current?.id === message.id ? message : current));
+    };
+    socket.on("message:updated", updated);
+    socket.on("message:deleted", deleted);
+    return () => {
+      socket.off("message:updated", updated);
+      socket.off("message:deleted", deleted);
+    };
+  }, [chatId, editing]);
   const hasDraft = input.length > 0;
   const { startTyping, stopTyping } = room;
   useEffect(() => {
@@ -102,7 +169,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
     messages,
     loadingOlder: history.loadingOlder,
     canLoadOlder:
-      !!(history.data?.window?.beforeId ?? history.data?.nextPage) &&
+      !!(
+        history.data?.window?.beforeId ??
+        history.data?.olderCursor ??
+        history.data?.nextPage
+      ) &&
       !history.olderError &&
       !history.isFetching &&
       !history.navigating,
@@ -116,13 +187,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
   )?.id;
   useEffect(() => {
     const key = `beam-draft:${user?.id}:${chatId}`;
+    if (editing) return;
     if (input) sessionStorage.setItem(key, input);
     else sessionStorage.removeItem(key);
-  }, [input, chatId, user?.id]);
+  }, [input, chatId, user?.id, editing]);
 
   async function submit() {
     if (
-      (!input.trim() && !file && !uploaded) ||
+      (!input.trim() && !file && !uploaded && !editing?.attachments?.length) ||
       pending ||
       voice.active ||
       !room.connected
@@ -132,6 +204,28 @@ function ChatRoom({ chatId }: { chatId: number }) {
     setPending(true);
     setSendError("");
     try {
+      if (editing) {
+        const updated = await editMessage(chatId, editing.id, text);
+        cache.setQueryData<History>(
+          chatKeys.history(identity, chatId),
+          (old) =>
+            old
+              ? {
+                  ...old,
+                  messages: old.messages.map((m) =>
+                    m.id === updated.id
+                      ? updated
+                      : m.replyToId === updated.id
+                        ? { ...m, replyTo: updated }
+                        : m,
+                  ),
+                }
+              : old,
+        );
+        cancelEdit();
+        void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+        return;
+      }
       let attachment = uploaded;
       const request = new AbortController();
       uploadController.current = request;
@@ -155,7 +249,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
         }
       }
       if (request.signal.aborted) return;
-      await room.send(text, attachment?.id);
+      if (reply) await room.send(text, attachment?.id, reply.id);
+      else await room.send(text, attachment?.id);
+      setReply(undefined);
       if (history.data?.window) {
         setFocusedMessage(undefined);
         void history.returnToLatest();
@@ -190,6 +286,34 @@ function ChatRoom({ chatId }: { chatId: number }) {
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden chat-scene"
         aria-label="Chat room"
       >
+        {!!selected.length && (
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2"
+            aria-label="Selected message actions"
+          >
+            <span className="mr-auto text-sm">{selected.length} selected</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setForwarding(selected)}
+            >
+              <Forward className="size-4" />
+              Forward
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!canDeleteSelection}
+              onClick={() => setDeleting(selected)}
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+              Cancel
+            </Button>
+          </div>
+        )}
         {history.data?.window && (
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/80 px-4 py-2 text-xs text-muted-foreground">
             <span>Viewing message history</span>
@@ -249,7 +373,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
             <div ref={content}>
               {history.loadingOlder ? (
                 <BrandLoading compact message="Loading earlier messages…" />
-              ) : (history.data?.window?.beforeId ?? history.data?.nextPage) ? (
+              ) : (history.data?.window?.beforeId ??
+                history.data?.olderCursor ??
+                history.data?.nextPage) ? (
                 <div className="flex flex-col items-center gap-1 py-2">
                   {!!history.olderError && (
                     <p
@@ -344,7 +470,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                         </p>
                       )}
                       <div
-                        className={`mb-4 flex ${own ? "justify-end" : "justify-start"}`}
+                        className={`mb-4 flex ${selected.length ? "pl-8" : ""} ${own ? "justify-end" : "justify-start"}`}
                       >
                         <div
                           className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
@@ -383,46 +509,109 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 )}
                               </span>
                             )}
-                            <div
-                              className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
+                            <MessageInteraction
+                              message={message}
+                              own={own}
+                              canDelete={own}
+                              selecting={selected.length > 0}
+                              selected={selected.includes(message.id)}
+                              onToggle={() => toggleSelected(message.id)}
+                              onReply={() => {
+                                if (editing) cancelEdit();
+                                setReply(message);
+                                textarea.current?.focus();
+                              }}
+                              onEdit={() => {
+                                if (!editing) savedDraft.current = input;
+                                setReply(undefined);
+                                setEditing(message);
+                                setInput(message.content);
+                                textarea.current?.focus();
+                              }}
+                              onDelete={() => setDeleting([message.id])}
+                              onForward={() => setForwarding([message.id])}
                             >
-                              {message.attachments?.map((attachment) => (
-                                <Media key={attachment.id} file={attachment} />
-                              ))}
-                              <span
-                                className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                                dir="auto"
+                              <div
+                                className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
                               >
-                                {message.content}
-                              </span>
-                              <div className="flex items-center justify-end gap-1 self-end text-[10px] leading-4 text-muted-foreground">
-                                <time dateTime={message.createdAt}>
-                                  {formatMessageTime(message.createdAt)}
-                                </time>
-                                {own && (
-                                  <span
-                                    aria-label={
-                                      read
-                                        ? history.data?.chat?.isGroup
-                                          ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
-                                          : "Read"
-                                        : "Sent"
-                                    }
-                                    title={
-                                      history.data?.chat?.isGroup
-                                        ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
-                                        : undefined
-                                    }
-                                  >
-                                    {read ? (
-                                      <CheckCheck className="size-3" />
-                                    ) : (
-                                      <Check className="size-3" />
-                                    )}
+                                {message.forwarded && (
+                                  <span className="flex items-center gap-1 text-xs text-brand">
+                                    <Forward className="size-3" />
+                                    Forwarded
                                   </span>
                                 )}
+                                {message.replyTo && (
+                                  <button
+                                    type="button"
+                                    className="max-w-full rounded-md border-l-4 border-primary bg-primary/10 px-2 py-1 text-left text-xs"
+                                    onClick={async () => {
+                                      try {
+                                        await history.openMessage(
+                                          message.replyTo!.id,
+                                        );
+                                        setFocusedMessage((current) => ({
+                                          id: message.replyTo!.id,
+                                          requestId:
+                                            (current?.requestId ?? 0) + 1,
+                                        }));
+                                      } catch (error) {
+                                        toast.error(errorMessage(error));
+                                      }
+                                    }}
+                                  >
+                                    <span className="block font-semibold text-brand">
+                                      {displayName(message.replyTo.sender)}
+                                    </span>
+                                    <span
+                                      className="block max-w-64 truncate"
+                                      dir="auto"
+                                    >
+                                      {messageSummary(message.replyTo)}
+                                    </span>
+                                  </button>
+                                )}
+                                {message.attachments?.map((attachment) => (
+                                  <Media
+                                    key={attachment.id}
+                                    file={attachment}
+                                  />
+                                ))}
+                                <span
+                                  className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                                  dir="auto"
+                                >
+                                  {message.content}
+                                </span>
+                                <div className="flex items-center justify-end gap-1 self-end text-[10px] leading-4 text-muted-foreground">
+                                  {message.editedAt && <span>edited</span>}
+                                  <time dateTime={message.createdAt}>
+                                    {formatMessageTime(message.createdAt)}
+                                  </time>
+                                  {own && (
+                                    <span
+                                      aria-label={
+                                        read
+                                          ? history.data?.chat?.isGroup
+                                            ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length} members`
+                                            : "Read"
+                                          : "Sent"
+                                      }
+                                      title={
+                                        history.data?.chat?.isGroup
+                                          ? `Read by ${message.readStatuses?.filter((r) => r.userId !== user?.id).length ?? 0} members`
+                                          : undefined
+                                      }
+                                    >
+                                      {read ? (
+                                        <CheckCheck className="size-3" />
+                                      ) : (
+                                        <Check className="size-3" />
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            </MessageInteraction>
                           </div>
                         </div>
                       </div>
@@ -455,6 +644,35 @@ function ChatRoom({ chatId }: { chatId: number }) {
             void submit();
           }}
         >
+          {(reply || editing) && (
+            <div className="mb-2 flex items-center gap-3 rounded-lg border-l-4 border-primary bg-primary/10 px-3 py-2 text-sm">
+              {editing ? (
+                <Pencil className="size-4 shrink-0 text-brand" />
+              ) : (
+                <Reply className="size-4 shrink-0 text-brand" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-brand">
+                  {editing
+                    ? "Edit message"
+                    : `Reply to ${displayName(reply?.sender)}`}
+                </p>
+                <p className="truncate text-xs" dir="auto">
+                  {messageSummary((editing || reply)!)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label={editing ? "Cancel editing" : "Cancel reply"}
+                disabled={pending}
+                onClick={() => (editing ? cancelEdit() : setReply(undefined))}
+              >
+                <X />
+              </Button>
+            </div>
+          )}
           {(file || uploaded) && (
             <div className="mb-3 flex items-start gap-3 rounded-xl border border-border p-3">
               <div className="min-w-0 flex-1">
@@ -515,7 +733,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
             type="file"
             className="sr-only"
             aria-label="Choose chat photo, video or audio"
-            disabled={pending || voice.active || !policy.data}
+            disabled={pending || voice.active || !!editing || !policy.data}
             accept={
               policy.data
                 ? [
@@ -568,7 +786,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               size="icon"
               className="size-11 shrink-0 rounded-full border border-input bg-background/80 text-brand"
               aria-label="Attach photo, video or audio"
-              disabled={pending || voice.active || !policy.data}
+              disabled={pending || voice.active || !!editing || !policy.data}
               onClick={() => picker.current?.click()}
             >
               <Paperclip />
@@ -649,12 +867,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 </PopoverContent>
               </Popover>
             </div>
-            {hasMessage ? (
+            {hasMessage || editing ? (
               <Button
                 type="submit"
                 size="icon"
                 className="brand-cta size-11 shrink-0 rounded-full"
-                aria-label="Send message"
+                aria-label={editing ? "Save edited message" : "Send message"}
                 disabled={pending || voice.active || !room.connected}
               >
                 {pending ? (
@@ -729,6 +947,43 @@ function ChatRoom({ chatId }: { chatId: number }) {
           )}
         </form>
       </section>
+      <ConfirmDelete
+        open={deleting.length > 0}
+        onClose={() => setDeleting([])}
+        description={`Permanently delete ${deleting.length} message(s) for everyone? This cannot be undone.`}
+        onConfirm={async () => {
+          await deleteMessages(chatId, deleting);
+          await cache.cancelQueries({
+            queryKey: chatKeys.history(identity, chatId),
+          });
+          cache.setQueryData<History>(
+            chatKeys.history(identity, chatId),
+            (old) => (old ? removeMessagesFromHistory(old, deleting) : old),
+          );
+          setSelected((current) =>
+            current.filter((id) => !deleting.includes(id)),
+          );
+          if (reply && deleting.includes(reply.id)) setReply(undefined);
+          if (editing && deleting.includes(editing.id)) cancelEdit();
+          void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+        }}
+      />
+      {forwarding.length > 0 && (
+        <ForwardDialog
+          open={true}
+          count={forwarding.length}
+          onClose={() => setForwarding([])}
+          onForward={async (target) => {
+            await forwardMessages(chatId, forwarding, target);
+            setSelected([]);
+            void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+            void cache.invalidateQueries({
+              queryKey: chatKeys.history(identity, target),
+            });
+            toast.success("Messages forwarded");
+          }}
+        />
+      )}
       {search.open && (
         <MessageSearchPanel
           chatId={chatId}

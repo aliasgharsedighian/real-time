@@ -1,3 +1,4 @@
+import { replyInclude } from '../../modules/polling/message-include';
 import { fileSelect } from '../../modules/files-upload/upload.policy';
 // src/chat/chat.service.ts
 import { BadRequestException, Injectable } from '@nestjs/common';
@@ -8,7 +9,7 @@ export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAllUserChats(userId: number) {
-    return this.prisma.chat.findMany({
+    const chats = await this.prisma.chat.findMany({
       where: {
         participants: {
           some: { userId },
@@ -16,7 +17,6 @@ export class ChatService {
       },
       include: {
         participants: {
-          where: { userId: { not: userId } },
           include: {
             user: { select: { id: true, email: true, profile: true } },
           },
@@ -46,6 +46,12 @@ export class ChatService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return chats.map((chat) => ({
+      ...chat,
+      muted: chat.participants.find((p) => p.userId === userId)?.muted ?? false,
+      myRole: chat.participants.find((p) => p.userId === userId)?.role,
+      participants: chat.participants.filter((p) => p.userId !== userId),
+    }));
   }
 
   async ensureParticipant(chatId: number, userId: number): Promise<boolean> {
@@ -61,6 +67,7 @@ export class ChatService {
     senderId: number,
     content: string,
     attachmentId?: string,
+    replyToId?: number,
   ) {
     if (
       typeof content !== 'string' ||
@@ -84,8 +91,17 @@ export class ChatService {
         }))
       )
         throw new BadRequestException('Conversation unavailable.');
+      if (
+        replyToId !== undefined &&
+        (!Number.isSafeInteger(replyToId) ||
+          replyToId <= 0 ||
+          !(await tx.message.findFirst({
+            where: { id: replyToId, chatId, kind: 'TEXT' },
+          })))
+      )
+        throw new BadRequestException('Reply message unavailable.');
       const message = await tx.message.create({
-        data: { content, chatId, senderId },
+        data: { content, chatId, senderId, replyToId },
       });
       if (attachmentId) {
         const claimed = await tx.uploadFile.updateMany({
@@ -107,6 +123,7 @@ export class ChatService {
       return tx.message.findUniqueOrThrow({
         where: { id: message.id },
         include: {
+          ...replyInclude,
           attachments: { select: fileSelect },
           sender: { select: { id: true, email: true, profile: true } },
           readStatuses: true,

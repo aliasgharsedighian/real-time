@@ -1,3 +1,4 @@
+import { replyInclude } from './message-include';
 import {
   BadRequestException,
   ForbiddenException,
@@ -117,7 +118,9 @@ export class MessageSearchService {
     if (cursors.length !== 1)
       throw new BadRequestException('Provide exactly one message cursor.');
     const cursor = cursors[0]!;
+    // Paging cursors can refer to a message that was just hard deleted.
     if (
+      query.aroundId &&
       !(await this.prisma.message.findFirst({
         where: { id: cursor, chatId },
         select: { id: true },
@@ -125,6 +128,7 @@ export class MessageSearchService {
     )
       throw new NotFoundException('Message not found in this conversation.');
     const include = {
+      ...replyInclude,
       attachments: { select: fileSelect },
       sender: { select: { id: true, email: true, profile: true } },
       readStatuses: { where: { userId: { not: userId } } },

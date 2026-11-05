@@ -126,6 +126,10 @@ export default function NotificationProvider({ children }: { children: ReactNode
         event.data.recipientId === String(userId) && /^[1-9]\d*$/.test(event.data.chatId))
         navigate(`/dashboard/websocket/${event.data.chatId}`);
     };
+    const removed = ({ chatId }: { chatId: number }) => setNotices(old => old.filter(notice => notice.data.chatId !== String(chatId)));
+    const deleted = ({ chatId, messageIds }: { chatId: number; messageIds: number[] }) => setNotices(old => old.filter(notice => notice.data.chatId !== String(chatId) || !messageIds.includes(Number(notice.data.messageId))));
+    socket.on("chat:removed", removed);
+    socket.on("message:deleted", deleted);
     socket.on("connect", presence);
     socket.on("chat:joined", presence);
     socket.on("notification:new", receive);
@@ -140,6 +144,8 @@ export default function NotificationProvider({ children }: { children: ReactNode
     return () => {
       suspended();
       clearInterval(heartbeat); clearInterval(expiry);
+      socket.off("chat:removed", removed);
+      socket.off("message:deleted", deleted);
       socket.off("connect", presence); socket.off("chat:joined", presence); socket.off("notification:new", receive);
       document.removeEventListener("visibilitychange", presence);
       window.removeEventListener("focus", presence); window.removeEventListener("blur", presence); window.removeEventListener("pagehide", suspended);

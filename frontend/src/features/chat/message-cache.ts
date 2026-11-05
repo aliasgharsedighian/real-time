@@ -50,3 +50,27 @@ export function applyReceipt(
         },
   );
 }
+
+// Switch to a stable ID cursor after deletion so offset pagination cannot skip older messages.
+export function removeMessagesFromHistory(
+  history: History,
+  ids: number[],
+): History {
+  const removed = new Set(ids);
+  const before =
+    history.olderCursor ??
+    (history.nextPage ? history.messages[0]?.id : undefined);
+  return {
+    ...history,
+    nextPage: before ? null : history.nextPage,
+    olderCursor: before,
+    messages: history.messages
+      .filter((message) => !removed.has(message.id))
+      .map((message) =>
+        removed.has(message.replyToId ?? 0)
+          ? { ...message, replyToId: null, replyTo: null }
+          : message,
+      ),
+    unreadIds: history.unreadIds.filter((id) => !removed.has(id)),
+  };
+}

@@ -1,6 +1,15 @@
+import { ConversationActions } from "./ChatActions";
 import { useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Users, MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
+import {
+  BellOff,
+  Users,
+  MessageCircle,
+  Plus,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -182,67 +191,74 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                 : "is typing"
               : "";
             return (
-              <NavLink
-                key={chat.id}
-                to={`/dashboard/websocket/${chat.id}`}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  `flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition-colors ${isActive ? "border-primary/25 bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "border-transparent hover:border-border hover:bg-muted/60"}`
-                }
-              >
-                <IdentityAvatar
-                  avatarId={
-                    chat.isGroup
-                      ? chat.avatarId
-                      : chat.participants[0]?.user.profile?.avatarId
+              <ConversationActions key={chat.id} chat={chat}>
+                <NavLink
+                  to={`/dashboard/websocket/${chat.id}`}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition-colors ${isActive ? "border-primary/25 bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "border-transparent hover:border-border hover:bg-muted/60"}`
                   }
-                  name={title}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">
-                      {chat.isGroup && (
-                        <Users className="mr-1 inline size-3.5" />
-                      )}
-                      {title}
-                    </span>
-                    {lastMessage && (
-                      <time
-                        className="shrink-0 text-[10px] text-muted-foreground"
-                        dateTime={lastMessage.createdAt}
-                      >
-                        {formatDateBasedOnToday(lastMessage.createdAt)}
-                      </time>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p
-                      className={`truncate text-xs leading-5 ${typingText ? "text-brand" : "text-muted-foreground"}`}
-                      title={typingText || undefined}
-                      aria-live="polite"
-                      dir="auto"
-                    >
-                      {typingText ||
-                        lastMessage?.content ||
-                        (lastMessage?.attachments?.length
-                          ? lastMessage.attachments[0].kind === "VIDEO"
-                            ? "Video"
-                            : lastMessage.attachments[0].kind === "AUDIO"
-                              ? "Voice message"
-                              : "Photo"
-                          : "Start the conversation")}
-                    </p>
-                    {!!chat._count?.messages && (
-                      <span
-                        aria-label={`${chat._count.messages} unread messages`}
-                        className="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
-                      >
-                        {chat._count.messages}
+                >
+                  <IdentityAvatar
+                    avatarId={
+                      chat.isGroup
+                        ? chat.avatarId
+                        : chat.participants[0]?.user.profile?.avatarId
+                    }
+                    name={title}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold">
+                        {chat.isGroup && (
+                          <Users className="mr-1 inline size-3.5" />
+                        )}
+                        {title}
+                        {chat.muted && (
+                          <BellOff
+                            aria-label="Muted"
+                            className="ml-1 inline size-3 text-muted-foreground"
+                          />
+                        )}
                       </span>
-                    )}
+                      {lastMessage && (
+                        <time
+                          className="shrink-0 text-[10px] text-muted-foreground"
+                          dateTime={lastMessage.createdAt}
+                        >
+                          {formatDateBasedOnToday(lastMessage.createdAt)}
+                        </time>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p
+                        className={`truncate text-xs leading-5 ${typingText ? "text-brand" : "text-muted-foreground"}`}
+                        title={typingText || undefined}
+                        aria-live="polite"
+                        dir="auto"
+                      >
+                        {typingText ||
+                          lastMessage?.content ||
+                          (lastMessage?.attachments?.length
+                            ? lastMessage.attachments[0].kind === "VIDEO"
+                              ? "Video"
+                              : lastMessage.attachments[0].kind === "AUDIO"
+                                ? "Voice message"
+                                : "Photo"
+                            : "Start the conversation")}
+                      </p>
+                      {!!chat._count?.messages && (
+                        <span
+                          aria-label={`${chat._count.messages} unread messages`}
+                          className="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
+                        >
+                          {chat._count.messages}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </NavLink>
+                </NavLink>
+              </ConversationActions>
             );
           })}
         </nav>

@@ -156,3 +156,63 @@ export async function transferGroupOwner(id: number, userId: number) {
       .data,
   );
 }
+
+export async function deleteChat(id: number) {
+  await api.delete(`realtime/chats/${id}`);
+}
+export async function muteChat(id: number, muted: boolean) {
+  await api.patch(`realtime/chats/${id}/mute`, { muted });
+}
+export async function editMessage(
+  id: number,
+  messageId: number,
+  content: string,
+) {
+  return unwrap(
+    (
+      await api.patch<ApiResponse<import("./types").Message>>(
+        `realtime/chats/${id}/messages`,
+        { messageId, content },
+      )
+    ).data,
+  );
+}
+export async function deleteMessages(id: number, messageIds: number[]) {
+  await api.delete(`realtime/chats/${id}/messages`, { data: { messageIds } });
+}
+export async function forwardMessages(
+  id: number,
+  messageIds: number[],
+  targetChatId: number,
+) {
+  return unwrap(
+    (
+      await api.post<ApiResponse<import("./types").Message[]>>(
+        `realtime/chats/${id}/forward`,
+        { messageIds, targetChatId },
+      )
+    ).data,
+  );
+}
+
+export async function syncMessages(
+  chatId: number,
+  messageIds: number[],
+  signal?: AbortSignal,
+) {
+  const messages: import("./types").Message[] = [];
+  for (let offset = 0; offset < messageIds.length; offset += 1000) {
+    messages.push(
+      ...unwrap(
+        (
+          await api.post<ApiResponse<import("./types").Message[]>>(
+            `realtime/chats/${chatId}/messages/sync`,
+            { messageIds: messageIds.slice(offset, offset + 1000) },
+            { signal },
+          )
+        ).data,
+      ),
+    );
+  }
+  return messages;
+}

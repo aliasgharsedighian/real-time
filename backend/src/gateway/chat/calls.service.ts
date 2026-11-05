@@ -73,6 +73,15 @@ export class CallsService implements OnModuleInit, OnModuleDestroy {
       take: 100,
     });
   }
+  discardChat(chatId: number) {
+    for (const [id, call] of this.calls) {
+      if (call.record.chatId !== chatId) continue;
+      clearTimeout(call.timer);
+      this.calls.delete(id);
+      this.busy.delete(call.record.callerId);
+      this.busy.delete(call.record.calleeId);
+    }
+  }
   pending(userId: number) {
     for (const call of this.calls.values()) {
       if (call.record.calleeId === userId && call.record.status === 'RINGING')

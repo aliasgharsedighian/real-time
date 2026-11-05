@@ -63,13 +63,30 @@ function ChatLayoutContent() {
   useEffect(() => {
     const socket = getSocket();
     const updated = ({ chatId }: { chatId: number }) => {
+      void cache.invalidateQueries({
+        queryKey: ["message-search", identity, chatId],
+      });
+      void cache.invalidateQueries({
+        queryKey: ["message-days", identity, chatId],
+      });
       void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
       void cache.invalidateQueries({
         queryKey: chatKeys.history(identity, chatId),
       });
     };
     const removed = ({ chatId }: { chatId: number }) => {
-      cache.removeQueries({ queryKey: chatKeys.history(identity, chatId) });
+      void cache.invalidateQueries({ queryKey: ["calls", identity] });
+      cache.removeQueries({
+        predicate: (query) =>
+          ["messages", "message-search", "message-days"].includes(
+            String(query.queryKey[0]),
+          ) &&
+          query.queryKey[1] === identity &&
+          query.queryKey[2] === chatId,
+      });
+      for (const key of Object.keys(sessionStorage))
+        if (key.startsWith("beam-draft:") && key.endsWith(`:${chatId}`))
+          sessionStorage.removeItem(key);
       void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
       if (Number(match?.params.chatId) === chatId)
         navigate("/dashboard", { replace: true });

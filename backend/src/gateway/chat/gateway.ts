@@ -306,6 +306,20 @@ export class ChatGateway implements OnGatewayInit {
     for (const userId of userIds)
       this.server?.to(`user:${userId}`).emit('chat:updated', { chatId });
   }
+  chatDeleted(chatId: number, userIds: number[]) {
+    this.calls.discardChat(chatId);
+    for (const userId of userIds) this.removeChatMember(chatId, userId);
+  }
+  messagesChanged(
+    chatId: number,
+    userIds: number[],
+    event: string,
+    payload: unknown,
+  ) {
+    for (const userId of userIds)
+      this.server?.to(`user:${userId}`).emit(event, payload);
+    this.notifyChatChanged(chatId, userIds);
+  }
   removeChatMember(chatId: number, userId: number) {
     if (!this.server) return;
     this.chatTyping.removeMember(userId, chatId);
@@ -316,7 +330,12 @@ export class ChatGateway implements OnGatewayInit {
   async onSend(
     @ConnectedSocket() client: Socket,
     @MessageBody()
-    payload: { chatId: number; content: string; attachmentId?: string },
+    payload: {
+      chatId: number;
+      content: string;
+      attachmentId?: string;
+      replyToId?: number;
+    },
   ) {
     try {
       const userId = await this.participant(client, payload?.chatId);
@@ -325,6 +344,7 @@ export class ChatGateway implements OnGatewayInit {
         userId,
         payload.content,
         payload.attachmentId,
+        payload.replyToId,
       );
       this.broadcast(msg);
       this.chatTyping.remove(client.id, payload.chatId);

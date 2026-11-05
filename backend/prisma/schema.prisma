@@ -107,6 +107,7 @@ model ChatParticipant {
   chatId   Int
   role     ChatMemberRole @default(MEMBER)
   joinedAt DateTime @default(now())
+  muted Boolean @default(false)
 
   @@index([chatId])
   @@unique([userId, chatId]) // Prevent duplicate participation
@@ -123,6 +124,11 @@ model Message {
   id        Int   @id @default(autoincrement())
   attachments UploadFile[]
   content   String
+  editedAt DateTime?
+  forwarded Boolean @default(false)
+  replyToId Int?
+  replyTo Message? @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Message[] @relation("Replies")
   kind      MessageKind @default(TEXT)
   chat      Chat     @relation(fields: [chatId], references: [id])
   chatId    Int
@@ -131,6 +137,7 @@ model Message {
   createdAt DateTime @default(now())
   readStatuses MessageReadStatus[]
 
+  @@index([replyToId])
   @@index([chatId, id])
   @@index([chatId, createdAt, id])
 }

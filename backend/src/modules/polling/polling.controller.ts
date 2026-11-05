@@ -1,3 +1,11 @@
+import { MessageActionsService } from './message-actions.service';
+import {
+  SyncMessagesDto,
+  MessageIdsDto,
+  ForwardMessagesDto,
+  EditMessageDto,
+  MuteChatDto,
+} from './message-actions.dto';
 import {
   Body,
   Patch,
@@ -39,7 +47,58 @@ export class PollingController {
     private messageService: GetMessagesService,
     private groups: GroupsService,
     private search: MessageSearchService,
+    private actions: MessageActionsService,
   ) {}
+
+  @Post('realtime/chats/:id/messages/sync')
+  syncMessages(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Body() body: SyncMessagesDto,
+  ) {
+    return this.actions.sync(params.id, user.id, body.messageIds);
+  }
+  @Delete('realtime/chats/:id')
+  deleteChat(@Param() params: GetChatByIdParamsDto, @GetUser() user: User) {
+    return this.actions.deleteChat(params.id, user.id);
+  }
+  @Patch('realtime/chats/:id/mute')
+  muteChat(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Body() body: MuteChatDto,
+  ) {
+    return this.actions.mute(params.id, user.id, body.muted);
+  }
+  @Patch('realtime/chats/:id/messages')
+  editMessage(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Body() body: EditMessageDto,
+  ) {
+    return this.actions.edit(params.id, user.id, body.messageId, body.content);
+  }
+  @Delete('realtime/chats/:id/messages')
+  deleteMessages(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Body() body: MessageIdsDto,
+  ) {
+    return this.actions.deleteMessages(params.id, user.id, body.messageIds);
+  }
+  @Post('realtime/chats/:id/forward')
+  forwardMessages(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Body() body: ForwardMessagesDto,
+  ) {
+    return this.actions.forward(
+      params.id,
+      user.id,
+      body.messageIds,
+      body.targetChatId,
+    );
+  }
 
   @Get('realtime/polling/:id/days')
   messageDays(

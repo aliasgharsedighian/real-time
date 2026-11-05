@@ -55,6 +55,7 @@ export class CallController {
   }
   attach() {
     this.disposed = false;
+    this.socket.on("chat:removed", this.onChatRemoved);
     this.socket.on("call:updated", this.onUpdated);
     this.socket.on("call:accepted", this.onAccepted);
     this.socket.on("call:signal", this.onSignal);
@@ -64,6 +65,7 @@ export class CallController {
   }
   dispose() {
     this.disposed = true;
+    this.socket.off("chat:removed", this.onChatRemoved);
     this.socket.off("call:updated", this.onUpdated);
     this.socket.off("call:accepted", this.onAccepted);
     this.socket.off("call:signal", this.onSignal);
@@ -75,6 +77,13 @@ export class CallController {
     this.cleanup();
     this.view = initial();
   }
+  private onChatRemoved = ({ chatId }: { chatId: number }) => {
+    if (this.view.chatId !== chatId && this.view.incoming?.chatId !== chatId)
+      return;
+    clearTimeout(this.incomingTimer);
+    this.cleanup();
+    this.update(initial());
+  };
   private onConnect = () => {
     void callRequest<CallRecord | null>(this.socket, "call:pending")
       .then((call) => {

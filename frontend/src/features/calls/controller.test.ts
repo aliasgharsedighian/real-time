@@ -27,13 +27,11 @@ describe("call media lifecycle", () => {
     handlers = {};
     audio = { stop: vi.fn(), enabled: true };
     camera = { stop: vi.fn(), enabled: true };
-    media = vi
-      .fn()
-      .mockResolvedValue({
-        getTracks: () => [audio, camera],
-        getAudioTracks: () => [audio],
-        getVideoTracks: () => [camera],
-      });
+    media = vi.fn().mockResolvedValue({
+      getTracks: () => [audio, camera],
+      getAudioTracks: () => [audio],
+      getVideoTracks: () => [camera],
+    });
     vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: media } });
     vi.stubGlobal(
       "MediaStream",
@@ -135,5 +133,12 @@ describe("call media lifecycle", () => {
       record({ callerId: 20, calleeId: 10, status: "CANCELLED" }),
     );
     expect(controller.snapshot().incoming).toBeNull();
+  });
+  it("stops media and clears the current call when the conversation is deleted", async () => {
+    await controller.start(1, "audio");
+    handlers["chat:removed"]({ chatId: 1 });
+    expect(audio.stop).toHaveBeenCalled();
+    expect(controller.snapshot().phase).toBe("idle");
+    expect(controller.snapshot().call).toBeNull();
   });
 });

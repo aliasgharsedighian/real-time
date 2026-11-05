@@ -78,7 +78,7 @@ export class NotificationsService {
       select: {
         isGroup: true,
         name: true,
-        participants: { select: { userId: true } },
+        participants: { select: { userId: true, muted: true } },
       },
     });
     if (!chat) return;
@@ -106,11 +106,11 @@ export class NotificationsService {
       mediaKind: message.attachments?.[0]?.kind || 'TEXT',
       createdAt: message.createdAt.toISOString(),
     });
-    for (const { userId } of chat.participants) {
+    for (const { userId, muted } of chat.participants) {
       server
         .to(`user:${userId}`)
         .emit('chat:updated', { chatId: message.chatId });
-      if (userId === message.senderId) continue;
+      if (userId === message.senderId || muted) continue;
       const destination = this.presence.destination(userId, message.chatId);
       if (destination.mode === 'in-app')
         server

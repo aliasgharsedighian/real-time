@@ -24,6 +24,11 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
   window: vi.fn(),
   days: vi.fn(),
+  sync: vi.fn(),
+  edit: vi.fn(),
+  delete: vi.fn(),
+  forward: vi.fn(),
+  chats: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -31,8 +36,13 @@ vi.mock("@/features/auth/session-context", () => ({
   }),
 }));
 vi.mock("./api", () => ({
-  chatKeys: { history: () => ["history"] },
+  chatKeys: { history: () => ["history"], list: () => ["chats"] },
   getHistory: (...args: unknown[]) => mocks.history(...args),
+  syncMessages: (...args: unknown[]) => mocks.sync(...args),
+  editMessage: (...args: unknown[]) => mocks.edit(...args),
+  deleteMessages: (...args: unknown[]) => mocks.delete(...args),
+  forwardMessages: (...args: unknown[]) => mocks.forward(...args),
+  getChats: (...args: unknown[]) => mocks.chats(...args),
   searchMessages: (...args: unknown[]) => mocks.search(...args),
   getMessageWindow: (...args: unknown[]) => mocks.window(...args),
   getMessageDays: (...args: unknown[]) => mocks.days(...args),
@@ -486,5 +496,124 @@ describe("chat attachments", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+  it("replies to any message, edits only own messages, restores drafts and displays edited beside the time", async () => {
+    const incoming = {
+      id: 1,
+      chatId: 3,
+      senderId: 2,
+      content: "Incoming",
+      createdAt: "2026-11-05T08:00:00Z",
+      sender: { id: 2, email: "peer@test.invalid", profile: null },
+    };
+    const own = { ...incoming, id: 2, senderId: 1, content: "My text" };
+    mocks.history.mockResolvedValue({
+      messages: [incoming, own],
+      users: [],
+      unreadIds: [],
+    });
+    mocks.edit.mockResolvedValue({
+      ...own,
+      content: "Corrected",
+      editedAt: "2026-11-05T09:00:00Z",
+    });
+    setup();
+    await screen.findByText("Incoming");
+    fireEvent.click(screen.getByRole("button", { name: "Message actions 1" }));
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reply" }));
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Answer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith("Answer", undefined, 1),
+    );
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Unsent draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Message actions 2" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(
+      (screen.getByLabelText("Message") as HTMLTextAreaElement).value,
+    ).toBe("My text");
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Corrected" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save edited message" }),
+    );
+    await screen.findByText("edited");
+    expect(mocks.edit).toHaveBeenCalledWith(3, 2, "Corrected");
+    expect(
+      (screen.getByLabelText("Message") as HTMLTextAreaElement).value,
+    ).toBe("Unsent draft");
+  });
+  it("selects multiple own messages and deletes the selection with confirmation", async () => {
+    mocks.history.mockResolvedValue({
+      messages: [1, 2].map((id) => ({
+        id,
+        chatId: 3,
+        senderId: 1,
+        content: `Selected ${id}`,
+        createdAt: "2026-11-05T08:00:00Z",
+      })),
+      users: [],
+      unreadIds: [],
+    });
+    mocks.delete.mockResolvedValue(undefined);
+    setup();
+    await screen.findByText("Selected 1");
+    fireEvent.click(screen.getByRole("button", { name: "Message actions 1" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select message 2" }));
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      [...dialog.querySelectorAll("button")].find(
+        (button) => button.textContent === "Delete",
+      )!,
+    );
+    await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith(3, [1, 2]));
+    await waitFor(() => expect(screen.queryByText("Selected 1")).toBeNull());
+    expect(screen.queryByText("Selected 2")).toBeNull();
+  });
+
+  it("forwards a multiple-message selection to a chosen conversation", async () => {
+    mocks.history.mockResolvedValue({
+      messages: [1, 2].map((id) => ({
+        id,
+        chatId: 3,
+        senderId: 1,
+        content: `Forward ${id}`,
+        createdAt: "2026-11-05T08:00:00Z",
+      })),
+      users: [],
+      unreadIds: [],
+    });
+    mocks.chats.mockResolvedValue([
+      {
+        id: 9,
+        isGroup: true,
+        name: "Destination",
+        participants: [],
+        messages: [],
+        createdAt: "2026-11-05T08:00:00Z",
+      },
+    ]);
+    mocks.forward.mockResolvedValue([]);
+    setup();
+    await screen.findByText("Forward 1");
+    fireEvent.click(screen.getByRole("button", { name: "Message actions 1" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select message 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Destination" }));
+    await waitFor(() =>
+      expect(mocks.forward).toHaveBeenCalledWith(3, [1, 2], 9),
+    );
+    await waitFor(() => expect(screen.queryByText("2 selected")).toBeNull());
   });
 });

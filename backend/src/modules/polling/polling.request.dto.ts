@@ -24,6 +24,12 @@ export class SendMessageRequestDto {
   @IsUUID()
   readonly attachmentId?: string;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  readonly replyToId?: number;
+
   @IsNotEmpty({ message: 'chatId is required' })
   @IsNumber()
   readonly chatId: number;

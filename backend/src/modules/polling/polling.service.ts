@@ -61,6 +61,7 @@ export class GetMessagesService {
       senderUserId,
       dto.content,
       dto.attachmentId,
+      dto.replyToId,
     );
     this.gateway.broadcast(message);
     return {

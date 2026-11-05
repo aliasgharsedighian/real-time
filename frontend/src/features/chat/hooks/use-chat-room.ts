@@ -6,7 +6,11 @@ import { useSessionStore } from "@/features/auth/session-store";
 import { displayName } from "@/shared/lib/types";
 import { chatKeys } from "../api";
 import { getSocket } from "../socket";
-import { applyReceipt, mergeMessages } from "../message-cache";
+import {
+  applyReceipt,
+  mergeMessages,
+  removeMessagesFromHistory,
+} from "../message-cache";
 import type { History, Message, ReadReceipt } from "../types";
 
 export function useChatRoom(chatId: number, enabled: boolean) {
@@ -82,6 +86,29 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       )
         markRead([message.id]);
     };
+    const updated = (message: Message) => {
+      if (message.chatId !== chatId) return;
+      cache.setQueryData<History>(key, (old) =>
+        old
+          ? {
+              ...old,
+              messages: old.messages.map((m) =>
+                m.id === message.id
+                  ? message
+                  : m.replyToId === message.id
+                    ? { ...m, replyTo: message }
+                    : m,
+              ),
+            }
+          : old,
+      );
+    };
+    const deleted = (payload: { chatId: number; messageIds: number[] }) => {
+      if (payload.chatId !== chatId) return;
+      cache.setQueryData<History>(key, (old) =>
+        old ? removeMessagesFromHistory(old, payload.messageIds) : old,
+      );
+    };
     const onReceipt = (receipt: ReadReceipt) => {
       cache.setQueryData<History>(key, (old) =>
         old ? { ...old, messages: applyReceipt(old.messages, receipt) } : old,
@@ -93,6 +120,8 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     socket.on("disconnect", disconnected);
     socket.on("chat:joined", joined);
     socket.on("message:new", onMessage);
+    socket.on("message:updated", updated);
+    socket.on("message:deleted", deleted);
     socket.on("message:read", onReceipt);
     socket.on("error", onError);
     // A reconnect can finish joining before refreshed history arrives.
@@ -119,6 +148,8 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       socket.off("disconnect", disconnected);
       socket.off("chat:joined", joined);
       socket.off("message:new", onMessage);
+      socket.off("message:updated", updated);
+      socket.off("message:deleted", deleted);
       socket.off("message:read", onReceipt);
       socket.off("error", onError);
       unsubscribe();
@@ -142,7 +173,11 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     socket.emit("typing:start", { chatId, userId, username });
   }, [chatId, userId, username, enabled]);
 
-  async function send(content: string, attachmentId?: string) {
+  async function send(
+    content: string,
+    attachmentId?: string,
+    replyToId?: number,
+  ) {
     const socket = getSocket();
     if (!socket.connected || !userId)
       throw new Error("You are offline. Your message has not been sent.");
@@ -152,6 +187,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         chatId,
         senderId: userId,
         content,
+        ...(replyToId ? { replyToId } : {}),
         ...(attachmentId ? { attachmentId } : {}),
       });
     } catch {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
-import { chatKeys, getHistory, getMessageWindow } from "../api";
-import { mergeMessages } from "../message-cache";
+import { chatKeys, getHistory, getMessageWindow, syncMessages } from "../api";
+import { mergeMessages, removeMessagesFromHistory } from "../message-cache";
 import type { History } from "../types";
 
 // Keep one normalized cache for the room, header, receipts and live messages.
@@ -21,16 +21,48 @@ export function useChatHistory(chatId: number) {
     queryKey: key,
     queryFn: async ({ signal }) => {
       const latest = await getHistory(chatId, signal);
-      const old = cache.getQueryData<History>(key);
+      let old = cache.getQueryData<History>(key);
+      const synchronized = old
+        ? await syncMessages(
+            chatId,
+            [
+              ...new Set(
+                [
+                  ...old.messages,
+                  ...(old.window?.afterId ? [] : latest.messages),
+                ].map((message) => message.id),
+              ),
+            ],
+            signal,
+          )
+        : [];
+      if (old) {
+        const existing = new Set(synchronized.map((message) => message.id));
+        const removed = old.messages
+          .filter((message) => !existing.has(message.id))
+          .map((message) => message.id);
+        if (removed.length) old = removeMessagesFromHistory(old, removed);
+      }
       // A search window has a gap to the latest history. Never join those lists.
       if (old?.window?.afterId)
-        return { ...old, chat: latest.chat, users: latest.users };
+        return {
+          ...old,
+          messages: synchronized,
+          unreadIds: old.unreadIds.filter((id) =>
+            synchronized.some((m) => m.id === id),
+          ),
+          chat: latest.chat,
+          users: latest.users,
+        };
       return old
         ? {
             ...latest,
-            messages: mergeMessages(old.messages, latest.messages),
-            unreadIds: [...new Set([...old.unreadIds, ...latest.unreadIds])],
+            messages: mergeMessages(synchronized),
+            unreadIds: [
+              ...new Set([...old.unreadIds, ...latest.unreadIds]),
+            ].filter((id) => synchronized.some((m) => m.id === id)),
             nextPage: old.nextPage,
+            olderCursor: old.olderCursor,
             window: old.window,
           }
         : latest;
@@ -44,7 +76,7 @@ export function useChatHistory(chatId: number) {
     const historyKey = chatKeys.history(identity, chatId);
     const current = cache.getQueryData<History>(historyKey);
     const page = current?.nextPage;
-    const beforeId = current?.window?.beforeId;
+    const beforeId = current?.window?.beforeId ?? current?.olderCursor;
     if ((!page && !beforeId) || request.current || history.isFetching) return;
     const controller = new AbortController();
     request.current = controller;
@@ -67,6 +99,10 @@ export function useChatHistory(chatId: number) {
                 ]),
               ],
               nextPage: "nextPage" in older ? older.nextPage : null,
+              olderCursor:
+                !old.window && "beforeId" in older
+                  ? older.beforeId
+                  : old.olderCursor,
               window:
                 old.window && "beforeId" in older
                   ? { ...old.window, beforeId: older.beforeId }
