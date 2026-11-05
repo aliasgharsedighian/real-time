@@ -355,6 +355,37 @@ describe("chat attachments", () => {
     expect(screen.getAllByLabelText("Group activity")).toHaveLength(3);
     expect(screen.queryByLabelText("Sent")).toBeNull();
   });
+  it("keeps mobile Enter for newlines and preserves composer focus while sending", async () => {
+    const originalMatchMedia = window.matchMedia;
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      ...originalMatchMedia(query),
+      matches: query === "(pointer: coarse)",
+    }));
+    let finish!: () => void;
+    mocks.send.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    setup();
+    const input = (await screen.findByLabelText(
+      "Message",
+    )) as HTMLTextAreaElement;
+    input.focus();
+    fireEvent.change(input, { target: { value: "hello" } });
+    expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(true);
+    expect(mocks.send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(input.getAttribute("aria-busy")).toBe("true");
+    expect(input.disabled).toBe(false);
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "next draft" } });
+    await act(async () => finish());
+    expect(input.value).toBe("next draft");
+    expect(input.readOnly).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
   it("keeps typing for a nonempty input even after blur and stops when cleared", async () => {
     setup();
     const input = await screen.findByLabelText("Message");

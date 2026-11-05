@@ -1,3 +1,4 @@
+import { useChatViewport } from "@/shared/hooks/use-chat-viewport";
 import { UserInfoDialog } from "@/features/chat/components/UserInfoDialog";
 import NotificationProvider from "@/features/notifications/NotificationProvider";
 import { useEffect } from "react";
@@ -41,6 +42,7 @@ export default function ChatLayout() {
 }
 
 function ChatLayoutContent() {
+  const viewport = useChatViewport();
   const match = useMatch("/dashboard/websocket/:chatId");
   const profile = useMatch("/dashboard/profile");
   const calls = useMatch("/dashboard/calls/*");
@@ -115,13 +117,14 @@ function ChatLayoutContent() {
   }, []);
   return (
     <SidebarProvider
+      ref={viewport}
       style={
         {
           "--sidebar-width": "21rem",
           "--sidebar-width-icon": "4.25rem",
         } as CSSProperties
       }
-      className="h-dvh min-h-0 overflow-hidden"
+      className="chat-viewport min-h-0 overflow-hidden"
     >
       <ChatSidebar />
       <MessageSearchProvider key={match?.params.chatId ?? "other"}>

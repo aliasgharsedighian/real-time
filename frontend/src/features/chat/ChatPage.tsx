@@ -34,6 +34,7 @@ import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { displayName } from "@/shared/lib/types";
 import NotFoundPage from "@/pages/NotFoundPage";
 import { useChatHistory } from "./hooks/use-chat-history";
+import { useComposerGestures } from "./hooks/use-composer-gestures";
 import { useMessageScroll } from "./hooks/use-message-scroll";
 import { useMessageSearch } from "./message-search-context";
 import { MessageSearchPanel } from "./components/MessageSearchPanel";
@@ -176,6 +177,15 @@ function ChatRoom({ chatId }: { chatId: number }) {
     loadOlder: history.loadOlder,
     focusMessage: focusedMessage,
   });
+  const composerGestures = useComposerGestures(textarea, () => {
+    nearBottom.current = false;
+  });
+  useEffect(() => {
+    const element = textarea.current;
+    if (!element) return;
+    element.style.height = "0px";
+    element.style.height = `${Math.min(element.scrollHeight, 144)}px`;
+  }, [input, history.isPending]);
   const firstUnread = messages?.find(
     (message) =>
       message.senderId !== user?.id &&
@@ -360,8 +370,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
           <div
             ref={container}
             onScroll={handleScroll}
+            {...composerGestures}
             tabIndex={0}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-6 [overflow-anchor:none]"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain overflow-x-hidden px-3 py-4 sm:px-6 [overflow-anchor:none]"
             role="log"
             aria-label="Messages"
             aria-live="polite"
@@ -512,14 +523,18 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               onReply={() => {
                                 if (editing) cancelEdit();
                                 setReply(message);
-                                textarea.current?.focus();
+                                textarea.current?.focus({
+                                  preventScroll: true,
+                                });
                               }}
                               onEdit={() => {
                                 if (!editing) savedDraft.current = input;
                                 setReply(undefined);
                                 setEditing(message);
                                 setInput(message.content);
-                                textarea.current?.focus();
+                                textarea.current?.focus({
+                                  preventScroll: true,
+                                });
                               }}
                               onDelete={() => setDeleting([message.id])}
                               onForward={() => setForwarding([message.id])}
@@ -643,7 +658,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
           )}
         </div>
         <form
-          className="relative shrink-0 border-t border-border bg-card/90 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]"
+          className="relative max-h-[60%] shrink-0 overflow-y-auto overscroll-y-contain border-t border-border bg-card/90 p-3 pb-[max(.75rem,var(--chat-safe-bottom,env(safe-area-inset-bottom)))]"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
@@ -808,7 +823,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 id="message-input"
                 rows={1}
                 maxLength={10000}
-                disabled={pending || voice.active}
+                aria-busy={pending}
+                disabled={voice.active}
                 className="block min-h-11 max-h-36 min-w-0 w-full flex-1 resize-none bg-transparent px-4 py-2.5 text-base outline-none placeholder:text-muted-foreground"
                 dir="auto"
                 value={input}
@@ -817,6 +833,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   if (
                     event.key === "Enter" &&
                     !event.shiftKey &&
+                    !window.matchMedia("(pointer: coarse)").matches &&
                     !event.nativeEvent.isComposing
                   ) {
                     event.preventDefault();
@@ -844,7 +861,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   className="w-[min(350px,calc(100vw-24px))] overflow-hidden p-0"
                   onCloseAutoFocus={(event) => {
                     event.preventDefault();
-                    textarea.current?.focus();
+                    textarea.current?.focus({ preventScroll: true });
                   }}
                 >
                   <Suspense
@@ -865,7 +882,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                           if (next.length > 10000) return;
                           setInput(next);
                           requestAnimationFrame(() => {
-                            element?.focus();
+                            element?.focus({ preventScroll: true });
                             element?.setSelectionRange(
                               start + emoji.length,
                               start + emoji.length,
@@ -881,6 +898,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
             {hasMessage || editing ? (
               <Button
                 type="submit"
+                onPointerDown={(event) => {
+                  if (document.activeElement === textarea.current)
+                    event.preventDefault();
+                }}
                 size="icon"
                 className="brand-cta size-11 shrink-0 rounded-full"
                 aria-label={editing ? "Save edited message" : "Send message"}
@@ -937,7 +958,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               </Button>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 hidden text-xs text-muted-foreground sm:block">
             {policy.data
               ? `Photos up to ${policy.data.imageMaxBytes / 1024 / 1024} MB · Videos up to ${policy.data.videoMaxBytes / 1024 / 1024} MB / ${policy.data.videoMaxSeconds / 60} min · Hold mic to record voice`
               : "Loading upload settings…"}
