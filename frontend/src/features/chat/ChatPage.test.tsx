@@ -355,6 +355,52 @@ describe("chat attachments", () => {
     expect(screen.getAllByLabelText("Group activity")).toHaveLength(3);
     expect(screen.queryByLabelText("Sent")).toBeNull();
   });
+  it("focuses the composer when history finishes loading, without refocusing on draft updates", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.history.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    setup();
+    expect(screen.queryByLabelText("Message")).toBeNull();
+    await act(async () => finish({ messages: [], users: [], unreadIds: [] }));
+    const input = await screen.findByLabelText("Message");
+    expect(document.activeElement).toBe(input);
+    const other = screen.getByRole("button", { name: "Open search panel" });
+    other.focus();
+    fireEvent.change(input, { target: { value: "draft update" } });
+    expect(document.activeElement).toBe(other);
+  });
+  it.each(["Reply", "Edit"])(
+    "keeps composer focus after choosing %s from the message menu",
+    async (action) => {
+      mocks.history.mockResolvedValue({
+        messages: [
+          {
+            id: 91,
+            chatId: 3,
+            senderId: 1,
+            content: "Original text",
+            createdAt: "2026-11-05T08:00:00Z",
+          },
+        ],
+        users: [],
+        unreadIds: [],
+      });
+      setup();
+      const input = await screen.findByLabelText("Message");
+      const trigger = screen.getByRole("button", {
+        name: "Message actions 91",
+      });
+      trigger.focus();
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("menuitem", { name: action }));
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(input);
+    },
+  );
   it("keeps mobile Enter for newlines and preserves composer focus while sending", async () => {
     const originalMatchMedia = window.matchMedia;
     vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
@@ -721,6 +767,7 @@ describe("chat attachments", () => {
     fireEvent.change(screen.getByLabelText("Message"), {
       target: { value: "My draft reply" },
     });
+    screen.getByLabelText("Message").blur();
     for (const [type, x] of [
       ["pointerdown", 100],
       ["pointermove", 20],
@@ -735,6 +782,7 @@ describe("chat attachments", () => {
       });
       fireEvent(message, event);
     }
+    expect(document.activeElement).toBe(screen.getByLabelText("Message"));
     expect(screen.getByLabelText("Reply preview").textContent).toContain(
       "Reply to peer@test.invalid",
     );

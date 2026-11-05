@@ -89,8 +89,18 @@ export function ActionMenu({
   const menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    menu.current?.querySelector("button")?.focus();
-    return () => previous?.focus();
+    const element = menu.current;
+    element?.querySelector("button")?.focus({ preventScroll: true });
+    return () => {
+      // Reply/Edit may already have moved focus to the composer synchronously.
+      // Restore the trigger only when dismissal leaves focus in the menu/body.
+      const active = document.activeElement;
+      if (
+        previous?.isConnected &&
+        (active === document.body || element?.contains(active))
+      )
+        previous.focus({ preventScroll: true });
+    };
   }, []);
   return createPortal(
     <div

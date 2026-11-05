@@ -22,7 +22,15 @@ import {
   validateUpload,
   type MediaFile,
 } from "@/features/uploads/api";
-import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useParams } from "react-router-dom";
 import { SendIcon, Paperclip, X, Mic, Smile, ChevronDown } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
@@ -128,6 +136,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [uploading, setUploading] = useState(false);
   const [sendError, setSendError] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const mountComposer = useCallback((element: HTMLTextAreaElement | null) => {
+    textarea.current = element;
+    // Run once when the actual input mounts, including after history loads.
+    // A stable ref avoids stealing focus again when messages or drafts change.
+    element?.focus({ preventScroll: true });
+  }, []);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const voice = useVoiceRecorder({
     maxSeconds: policy.data?.audioMaxSeconds ?? 300,
@@ -819,7 +833,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
             </Button>
             <div className="flex min-w-0 flex-1 items-end rounded-full border border-input bg-background/80 pr-1 shadow-inner focus-within:ring-2 focus-within:ring-ring">
               <textarea
-                ref={textarea}
+                ref={mountComposer}
                 id="message-input"
                 rows={1}
                 maxLength={10000}

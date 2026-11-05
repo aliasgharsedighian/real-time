@@ -43,6 +43,17 @@ describe("conversation actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     await waitFor(() => expect(muteChat).toHaveBeenCalledWith(1, true));
   });
+  it("restores focus to the trigger when the menu is dismissed with Escape", () => {
+    mount();
+    const link = screen.getByRole("link", { name: "Conversation" });
+    link.focus();
+    fireEvent.contextMenu(link);
+    const first = screen.getByRole("menuitem", { name: "Mute notifications" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(link);
+  });
   it("shows permanent deletion for direct chats on right click", () => {
     mount();
     fireEvent.contextMenu(screen.getByText("Conversation"));
