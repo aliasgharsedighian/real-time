@@ -1,3 +1,10 @@
+import { SharedContentSection } from "./SharedContentSection";
+import { UserInfoDialog } from "./UserInfoDialog";
+import { useChatStatus } from "../hooks/use-chat-status";
+import { formatPresence } from "../presence";
+import { useChatList } from "../hooks/use-chat-list";
+import { muteChat } from "../api";
+import { Bell, BellOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -66,7 +73,7 @@ export function GroupInfoDialog({
         </Button>
       )}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <GroupInfo
             key={`${chat.id}:${open}`}
             chat={chat}
@@ -87,6 +94,10 @@ function GroupInfo({
 }) {
   const { user } = useSession();
   const identity = useSessionStore((s) => s.tokens?.refreshToken);
+  const chats = useChatList();
+  const muted =
+    chats.data?.find((value) => value.id === chat.id)?.muted ?? false;
+  const status = useChatStatus(chat.id, user?.id);
   const owner = chat.participants.find((p) => p.role === "OWNER");
   const isOwner = owner?.userId === user?.id;
   const [name, setName] = useState(chat.name ?? "");
@@ -95,6 +106,12 @@ function GroupInfo({
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const cache = useQueryClient();
   const navigate = useNavigate();
+  const muteAction = useMutation({
+    mutationFn: () => muteChat(chat.id, !muted),
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+    },
+  });
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => {
@@ -160,6 +177,22 @@ function GroupInfo({
       ) : (
         <>
           <GroupPhotoEditor chat={chat} canEdit={isOwner} />
+          <div className="space-y-2 text-center">
+            <h2 dir="auto" className="break-words text-xl font-semibold">
+              {chat.name || "Group"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {chat.participants.length} members
+            </p>
+            <Button
+              variant="secondary"
+              disabled={muteAction.isPending || !chats.data}
+              onClick={() => muteAction.mutate()}
+            >
+              {muted ? <Bell /> : <BellOff />}
+              {muted ? "Unmute" : "Mute"}
+            </Button>
+          </div>
           {isOwner ? (
             <form
               className="space-y-2"
@@ -191,11 +224,8 @@ function GroupInfo({
                 </Button>
               </div>
             </form>
-          ) : (
-            <h2 dir="auto" className="break-words text-xl font-semibold">
-              {chat.name}
-            </h2>
-          )}
+          ) : null}
+          <SharedContentSection chatId={chat.id} />
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Members</h3>
             {isOwner && (
@@ -224,27 +254,39 @@ function GroupInfo({
                   key={p.id}
                   className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3"
                 >
-                  <IdentityAvatar
-                    name={displayName(p.user)}
-                    avatarId={p.user.profile?.avatarId}
-                    className="size-9"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {displayName(p.user)}
-                      {p.userId === user?.id ? " (you)" : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {p.role === "OWNER" ? (
-                        <>
-                          <Crown className="mr-1 inline size-3 text-brand" />
-                          Owner
-                        </>
-                      ) : (
-                        "Member"
+                  <UserInfoDialog
+                    userId={p.userId}
+                    presenceChatId={chat.id}
+                    label={`View profile of ${displayName(p.user)}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <IdentityAvatar
+                      name={displayName(p.user)}
+                      avatarId={p.user.profile?.avatarId}
+                      className="size-9"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {displayName(p.user)}
+                        {p.userId === user?.id ? " (you)" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.role === "OWNER" ? (
+                          <>
+                            <Crown className="mr-1 inline size-3 text-brand" />
+                            Owner
+                          </>
+                        ) : (
+                          "Member"
+                        )}
+                      </p>
+                      {p.userId !== user?.id && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatPresence(status.users[p.userId], status.now)}
+                        </p>
                       )}
-                    </p>
-                  </div>
+                    </div>
+                  </UserInfoDialog>
                   {isOwner && p.userId !== user?.id && (
                     <div className="flex w-full gap-1 pl-12">
                       <Button
@@ -325,6 +367,11 @@ function GroupInfo({
             </Button>
           </div>
         </div>
+      )}
+      {muteAction.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(muteAction.error)}
+        </p>
       )}
       {action.isError && (
         <p role="alert" className="text-sm text-destructive">

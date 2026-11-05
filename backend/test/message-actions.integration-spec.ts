@@ -390,4 +390,126 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
       await prisma.uploadFile.findUnique({ where: { id: copyId } }),
     ).toBeNull();
   });
+  it('keeps the original author through chained forwards, source deletion and history reloads', async () => {
+    const source = await create({ participant: [ids[1]] });
+    const target = await create({ participant: [ids[2]] });
+    const peer = await socket(1);
+    const original = await peer.emitWithAck('message:send', {
+      chatId: source.id,
+      content: 'Original author',
+    });
+    const first = await http(0)
+      .post(`chats/${source.id}/forward`)
+      .send({ messageIds: [original.id], targetChatId: target.id })
+      .expect(201);
+    expect(first.body.data[0].forwardedFrom.id).toBe(ids[1]);
+    expect(first.body.data[0].senderId).toBe(ids[0]);
+    const third = await http(2)
+      .post('polling/create-chat')
+      .send({ participant: [ids[3]] })
+      .expect(201);
+    chatIds.push(third.body.data.id);
+    const second = await http(2)
+      .post(`chats/${target.id}/forward`)
+      .send({
+        messageIds: [first.body.data[0].id],
+        targetChatId: third.body.data.id,
+      })
+      .expect(201);
+    expect(second.body.data[0].forwardedFrom.id).toBe(ids[1]);
+    expect(second.body.data[0].senderId).toBe(ids[2]);
+    await http(1).delete(`chats/${source.id}`).expect(200);
+    const history = await http(3)
+      .get(`polling/${third.body.data.id}`)
+      .expect(200);
+    expect(
+      history.body.data.chats.find((m: any) => m.id === second.body.data[0].id)
+        .forwardedFrom.id,
+    ).toBe(ids[1]);
+    const profile = await http(3).get(`user/${ids[1]}`).expect(200);
+    expect(profile.body.data.profile.firstname).toBe('Member 1');
+    expect(profile.body.data.password).toBeUndefined();
+    expect(profile.body.data.lastSeenAt).toBeUndefined();
+  });
+  it('counts and paginates shared content across history, excludes draft/avatar files and enforces membership', async () => {
+    const chat = await create({
+      isGroup: true,
+      name: 'Shared content',
+      participant: [ids[1]],
+    });
+    await prisma.message.createMany({
+      data: Array.from({ length: 25 }, (_, i) => ({
+        chatId: chat.id,
+        senderId: ids[0],
+        content: `https://example.invalid/${i}`,
+      })),
+    });
+    const photo = await prisma.message.create({
+      data: { chatId: chat.id, senderId: ids[0], content: 'Photo' },
+    });
+    const metadata = {
+      ownerId: ids[0],
+      chatId: chat.id,
+      kind: 'IMAGE',
+      mimeType: 'image/webp',
+      width: 8,
+      height: 8,
+      size: 10,
+    };
+    await prisma.uploadFile.create({
+      data: {
+        ...metadata,
+        storageKey: `media/shared-${chat.id}`,
+        messageId: photo.id,
+      },
+    });
+    await prisma.uploadFile.create({
+      data: { ...metadata, storageKey: `media/draft-${chat.id}` },
+    });
+    const avatar = await prisma.uploadFile.create({
+      data: { ...metadata, storageKey: `media/avatar-${chat.id}` },
+    });
+    await prisma.chat.update({
+      where: { id: chat.id },
+      data: { avatarId: avatar.id },
+    });
+    await request(base)
+      .get(`/api/v1/realtime/polling/${chat.id}/shared`)
+      .expect(401);
+    await http(2).get(`polling/${chat.id}/shared`).expect(403);
+    await http(1).get(`polling/${chat.id}/shared?kind=GIF`).expect(400);
+    const counts = await http(1).get(`polling/${chat.id}/shared`).expect(200);
+    expect(counts.body.data.counts).toEqual({
+      IMAGE: 1,
+      VIDEO: 0,
+      AUDIO: 0,
+      LINK: 25,
+    });
+    const images = await http(1)
+      .get(`polling/${chat.id}/shared?kind=IMAGE`)
+      .expect(200);
+    expect(images.body.data.messages.map((m: any) => m.id)).toEqual([photo.id]);
+    const first = await http(1)
+      .get(`polling/${chat.id}/shared?kind=LINK`)
+      .expect(200);
+    expect(first.body.data.messages).toHaveLength(20);
+    const second = await http(1)
+      .get(
+        `polling/${chat.id}/shared?kind=LINK&beforeId=${first.body.data.nextCursor}`,
+      )
+      .expect(200);
+    expect(second.body.data.messages).toHaveLength(5);
+    expect(second.body.data.nextCursor).toBeNull();
+    await http(0)
+      .delete(`chats/${chat.id}/messages`)
+      .send({ messageIds: [photo.id] })
+      .expect(200);
+    expect(
+      (await http(1).get(`polling/${chat.id}/shared`).expect(200)).body.data
+        .counts.IMAGE,
+    ).toBe(0);
+    await http(0).delete(`groups/${chat.id}/members/${ids[1]}`).expect(200);
+    await http(1).get(`polling/${chat.id}/shared?kind=LINK`).expect(403);
+    await http(0).delete(`chats/${chat.id}`).expect(200);
+  });
 });

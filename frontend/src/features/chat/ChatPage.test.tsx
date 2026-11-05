@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   delete: vi.fn(),
   forward: vi.fn(),
   chats: vi.fn(),
+  profile: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -43,6 +44,7 @@ vi.mock("./api", () => ({
   deleteMessages: (...args: unknown[]) => mocks.delete(...args),
   forwardMessages: (...args: unknown[]) => mocks.forward(...args),
   getChats: (...args: unknown[]) => mocks.chats(...args),
+  getUserProfile: (...args: unknown[]) => mocks.profile(...args),
   searchMessages: (...args: unknown[]) => mocks.search(...args),
   getMessageWindow: (...args: unknown[]) => mocks.window(...args),
   getMessageDays: (...args: unknown[]) => mocks.days(...args),
@@ -615,5 +617,44 @@ describe("chat attachments", () => {
       expect(mocks.forward).toHaveBeenCalledWith(3, [1, 2], 9),
     );
     await waitFor(() => expect(screen.queryByText("2 selected")).toBeNull());
+  });
+  it("shows a forwarded author's name and opens that author's profile", async () => {
+    mocks.history.mockResolvedValue({
+      messages: [
+        {
+          id: 15,
+          chatId: 3,
+          senderId: 1,
+          content: "Forwarded message",
+          createdAt: "2026-11-05T08:00:00Z",
+          forwarded: true,
+          forwardedFrom: { id: 8, email: "author@test.invalid", profile: null },
+        },
+      ],
+      users: [],
+      unreadIds: [],
+    });
+    mocks.chats.mockResolvedValue([]);
+    mocks.profile.mockResolvedValue({
+      id: 8,
+      email: "author@test.invalid",
+      phoneNumber: "+123456789",
+      profile: {
+        firstname: "Original",
+        lastname: "Author",
+        address: "Profile address",
+      },
+    });
+    setup();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "View profile of author@test.invalid",
+      }),
+    );
+    await screen.findByRole("heading", { name: "Original Author" });
+    expect(mocks.profile).toHaveBeenCalledWith(8, expect.any(AbortSignal));
+    expect(screen.getByText("+123456789")).toBeTruthy();
+    expect(screen.getByText("Profile address")).toBeTruthy();
+    expect(screen.queryByText("Username")).toBeNull();
   });
 });

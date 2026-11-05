@@ -1,3 +1,4 @@
+import { SharedContentDto } from './shared-content.dto';
 import { replyInclude } from './message-include';
 import {
   BadRequestException,
@@ -25,6 +26,62 @@ export class MessageSearchService {
   private async authorize(chatId: number, userId: number) {
     if (!(await this.chats.ensureParticipant(chatId, userId)))
       throw new ForbiddenException('User is not a participant of this chat.');
+  }
+
+  async shared(chatId: number, userId: number, query: SharedContentDto) {
+    await this.authorize(chatId, userId);
+    const links: Prisma.MessageWhereInput = {
+      OR: [
+        { content: { contains: 'https://', mode: 'insensitive' } },
+        { content: { contains: 'http://', mode: 'insensitive' } },
+      ],
+    };
+    const where: Prisma.MessageWhereInput = {
+      chatId,
+      kind: 'TEXT',
+      ...(query.kind === 'LINK'
+        ? links
+        : query.kind
+          ? { attachments: { some: { kind: query.kind } } }
+          : {}),
+      ...(query.beforeId ? { id: { lt: query.beforeId } } : {}),
+    };
+    const [mediaCounts, linkCount, messages] = await Promise.all([
+      Promise.all(
+        ['IMAGE', 'VIDEO', 'AUDIO'].map((kind) =>
+          this.prisma.uploadFile.count({
+            where: { chatId, messageId: { not: null }, kind },
+          }),
+        ),
+      ),
+      this.prisma.message.count({ where: { chatId, kind: 'TEXT', ...links } }),
+      query.kind
+        ? this.prisma.message.findMany({
+            where,
+            orderBy: { id: 'desc' },
+            take: 21,
+            include: {
+              ...replyInclude,
+              attachments: { select: fileSelect },
+              sender: { select: { id: true, email: true, profile: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const page = messages.slice(0, 20);
+    return {
+      data: {
+        counts: {
+          IMAGE: mediaCounts[0],
+          VIDEO: mediaCounts[1],
+          AUDIO: mediaCounts[2],
+          LINK: linkCount,
+        },
+        messages: page,
+        nextCursor: messages.length > 20 ? page.at(-1)!.id : null,
+      },
+      message: 'Shared content loaded',
+    };
   }
 
   async days(chatId: number, userId: number, query: MessageDaysDto) {

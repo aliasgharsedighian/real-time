@@ -178,6 +178,9 @@ export class MessageActionsService {
                 senderId: userId,
                 content: message.content,
                 forwarded: true,
+                forwardedFromId: message.forwarded
+                  ? message.forwardedFromId
+                  : message.senderId,
               },
             });
             for (const file of message.attachments) {

@@ -27,6 +27,12 @@ vi.mock("@/features/auth/session-context", () => ({
 }));
 vi.mock("../api", async (original) => ({
   ...(await original<object>()),
+  getChats: vi.fn(async () => []),
+  getSharedContent: vi.fn(async () => ({
+    counts: { IMAGE: 0, VIDEO: 0, AUDIO: 0, LINK: 0 },
+    messages: [],
+    nextCursor: null,
+  })),
   searchUsers: mocks.search,
   createChat: mocks.create,
   addGroupMembers: mocks.add,

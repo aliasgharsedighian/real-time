@@ -14,6 +14,8 @@ export interface Message {
   content: string;
   editedAt?: string | null;
   forwarded?: boolean;
+  forwardedFromId?: number | null;
+  forwardedFrom?: User | null;
   replyToId?: number | null;
   replyTo?: Message | null;
   attachments?: MediaFile[];

@@ -1,3 +1,4 @@
+import { SharedContentDto } from './shared-content.dto';
 import { MessageActionsService } from './message-actions.service';
 import {
   SyncMessagesDto,
@@ -100,6 +101,14 @@ export class PollingController {
     );
   }
 
+  @Get('realtime/polling/:id/shared')
+  sharedContent(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+    @Query() query: SharedContentDto,
+  ) {
+    return this.search.shared(params.id, user.id, query);
+  }
   @Get('realtime/polling/:id/days')
   messageDays(
     @Param() params: GetChatByIdParamsDto,

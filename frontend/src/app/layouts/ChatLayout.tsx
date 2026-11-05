@@ -1,3 +1,4 @@
+import { UserInfoDialog } from "@/features/chat/components/UserInfoDialog";
 import NotificationProvider from "@/features/notifications/NotificationProvider";
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
@@ -64,6 +65,9 @@ function ChatLayoutContent() {
     const socket = getSocket();
     const updated = ({ chatId }: { chatId: number }) => {
       void cache.invalidateQueries({
+        queryKey: ["shared-content", identity, chatId],
+      });
+      void cache.invalidateQueries({
         queryKey: ["message-search", identity, chatId],
       });
       void cache.invalidateQueries({
@@ -78,9 +82,12 @@ function ChatLayoutContent() {
       void cache.invalidateQueries({ queryKey: ["calls", identity] });
       cache.removeQueries({
         predicate: (query) =>
-          ["messages", "message-search", "message-days"].includes(
-            String(query.queryKey[0]),
-          ) &&
+          [
+            "messages",
+            "message-search",
+            "message-days",
+            "shared-content",
+          ].includes(String(query.queryKey[0])) &&
           query.queryKey[1] === identity &&
           query.queryKey[2] === chatId,
       });
@@ -160,7 +167,11 @@ function ChatLayoutContent() {
                   }
                 />
               ) : (
-                <>
+                <UserInfoDialog
+                  userId={participants[0]?.userId ?? 0}
+                  label="User info"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-2 text-left hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   <IdentityAvatar
                     avatarId={participants[0]?.user.profile?.avatarId}
                     name={title}
@@ -174,7 +185,7 @@ function ChatLayoutContent() {
                       peerId={participants[0]?.userId}
                     />
                   </div>
-                </>
+                </UserInfoDialog>
               )
             ) : profile ? (
               <h1 className="font-semibold">My profile</h1>

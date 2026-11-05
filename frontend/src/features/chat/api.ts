@@ -216,3 +216,32 @@ export async function syncMessages(
   }
   return messages;
 }
+
+export async function getUserProfile(id: number, signal?: AbortSignal) {
+  const user = unwrap(
+    (await api.get<ApiResponse<User>>(`realtime/user/${id}`, { signal })).data,
+  );
+  if (!user?.id) throw new Error("This user is no longer available.");
+  return user;
+}
+export type SharedKind = "IMAGE" | "VIDEO" | "AUDIO" | "LINK";
+export interface SharedContent {
+  counts: Record<SharedKind, number>;
+  messages: import("./types").Message[];
+  nextCursor: number | null;
+}
+export async function getSharedContent(
+  id: number,
+  kind?: SharedKind,
+  beforeId?: number,
+  signal?: AbortSignal,
+) {
+  return unwrap(
+    (
+      await api.get<ApiResponse<SharedContent>>(
+        `realtime/polling/${id}/shared`,
+        { params: { kind, beforeId }, signal },
+      )
+    ).data,
+  );
+}

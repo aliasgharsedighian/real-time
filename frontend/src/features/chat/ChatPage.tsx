@@ -1,3 +1,4 @@
+import { UserInfoDialog } from "./components/UserInfoDialog";
 import { removeMessagesFromHistory } from "./message-cache";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -537,7 +538,17 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 {message.forwarded && (
                                   <span className="flex items-center gap-1 text-xs text-brand">
                                     <Forward className="size-3" />
-                                    Forwarded
+                                    {message.forwardedFrom ? (
+                                      <UserInfoDialog
+                                        userId={message.forwardedFrom.id}
+                                        label={`View profile of ${displayName(message.forwardedFrom)}`}
+                                      >
+                                        Forwarded from{" "}
+                                        {displayName(message.forwardedFrom)}
+                                      </UserInfoDialog>
+                                    ) : (
+                                      "Forwarded"
+                                    )}
                                   </span>
                                 )}
                                 {message.replyTo && (
