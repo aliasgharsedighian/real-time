@@ -1,4 +1,32 @@
-import type { History, HistoryResponse, Message, ReadReceipt } from "./types";
+import type {
+  History,
+  HistoryResponse,
+  Message,
+  ReadReceipt,
+  ReactionUpdate,
+} from "./types";
+
+export function keepLatestReactions(
+  message: Message,
+  previous?: Message,
+): Message {
+  return previous &&
+    (previous.reactionVersion ?? 0) > (message.reactionVersion ?? 0)
+    ? {
+        ...message,
+        reactionVersion: previous.reactionVersion,
+        reactions: previous.reactions,
+      }
+    : message;
+}
+
+export function preserveReactions(messages: Message[], previous?: Message[]) {
+  if (!previous?.length) return messages;
+  const byId = new Map(previous.map((message) => [message.id, message]));
+  return messages.map((message) =>
+    keepLatestReactions(message, byId.get(message.id)),
+  );
+}
 
 export function mergeMessages(...groups: Message[][]): Message[] {
   const messages = new Map<number, Message>();
@@ -13,7 +41,7 @@ export function mergeMessages(...groups: Message[][]): Message[] {
         receipts.set(receipt.userId, receipt);
       messages.set(message.id, {
         ...previous,
-        ...message,
+        ...keepLatestReactions(message, previous),
         readStatuses: [...receipts.values()],
       });
     }
@@ -72,5 +100,25 @@ export function removeMessagesFromHistory(
           : message,
       ),
     unreadIds: history.unreadIds.filter((id) => !removed.has(id)),
+  };
+}
+
+export function applyReactionUpdate(
+  history: History | undefined,
+  update: ReactionUpdate,
+) {
+  if (!history) return history;
+  return {
+    ...history,
+    messages: history.messages.map((message) =>
+      message.id === update.messageId &&
+      (message.reactionVersion ?? 0) < update.reactionVersion
+        ? {
+            ...message,
+            reactionVersion: update.reactionVersion,
+            reactions: update.reactions,
+          }
+        : message,
+    ),
   };
 }

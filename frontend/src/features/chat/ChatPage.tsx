@@ -1,10 +1,21 @@
+import { ReactionChips } from "./components/ReactionPicker";
 import { MessageReaders } from "./components/MessageReaders";
 import { UserInfoDialog } from "./components/UserInfoDialog";
-import { removeMessagesFromHistory } from "./message-cache";
+import {
+  applyReactionUpdate,
+  keepLatestReactions,
+  removeMessagesFromHistory,
+} from "./message-cache";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSessionStore } from "@/features/auth/session-store";
-import { chatKeys, deleteMessages, editMessage, forwardMessages } from "./api";
+import {
+  chatKeys,
+  deleteMessages,
+  editMessage,
+  forwardMessages,
+  setMessageReaction,
+} from "./api";
 import type { History, Message } from "./types";
 import { ConfirmDelete } from "./components/ChatActions";
 import {
@@ -71,6 +82,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
   const cache = useQueryClient();
+  const pendingReactions = useRef(new Set<number>());
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
   const [reply, setReply] = useState<Message>();
   const [editing, setEditing] = useState<Message>();
@@ -212,6 +224,28 @@ function ChatRoom({ chatId }: { chatId: number }) {
     else sessionStorage.removeItem(key);
   }, [input, chatId, user?.id, editing]);
 
+  async function reactToMessage(message: Message, emoji: string) {
+    if (!user || pendingReactions.current.has(message.id)) return;
+    pendingReactions.current.add(message.id);
+    const selected = message.reactions?.find(
+      (reaction) => reaction.userId === user.id,
+    )?.emoji;
+    try {
+      const update = await setMessageReaction(
+        chatId,
+        message.id,
+        selected === emoji ? null : emoji,
+      );
+      cache.setQueryData<History>(chatKeys.history(identity, chatId), (old) =>
+        applyReactionUpdate(old, update),
+      );
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      pendingReactions.current.delete(message.id);
+    }
+  }
+
   async function submit() {
     if (
       (!input.trim() && !file && !uploaded && !editing?.attachments?.length) ||
@@ -234,7 +268,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   ...old,
                   messages: old.messages.map((m) =>
                     m.id === updated.id
-                      ? updated
+                      ? keepLatestReactions(updated, m)
                       : m.replyToId === updated.id
                         ? { ...m, replyTo: updated }
                         : m,
@@ -470,6 +504,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
                     </Fragment>
                   );
                 const own = message.senderId === user?.id;
+                const ownReaction = message.reactions?.find(
+                  (reaction) => reaction.userId === user?.id,
+                )?.emoji;
+                const pickReaction = (emoji: string) =>
+                  void reactToMessage(message, emoji);
                 return (
                   <Fragment key={message.id}>
                     {separator}
@@ -552,6 +591,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               }}
                               onDelete={() => setDeleting([message.id])}
                               onForward={() => setForwarding([message.id])}
+                              onReact={pickReaction}
+                              ownReaction={ownReaction}
                             >
                               <div
                                 className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
@@ -614,14 +655,24 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 >
                                   {message.content}
                                 </span>
-                                <div className="flex items-center justify-end gap-1 self-end text-[10px] leading-4 text-muted-foreground">
-                                  {message.editedAt && <span>edited</span>}
-                                  <time dateTime={message.createdAt}>
-                                    {formatMessageTime(message.createdAt)}
-                                  </time>
-                                  {own && (
-                                    <MessageReaders message={message} compact />
-                                  )}
+                                <div className="flex items-end gap-2">
+                                  <ReactionChips
+                                    reactions={message.reactions}
+                                    selected={ownReaction}
+                                    onPick={pickReaction}
+                                  />
+                                  <div className="ml-auto flex shrink-0 items-center gap-1 text-[10px] leading-4 whitespace-nowrap text-muted-foreground">
+                                    {message.editedAt && <span>edited</span>}
+                                    <time dateTime={message.createdAt}>
+                                      {formatMessageTime(message.createdAt)}
+                                    </time>
+                                    {own && (
+                                      <MessageReaders
+                                        message={message}
+                                        compact
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </MessageInteraction>

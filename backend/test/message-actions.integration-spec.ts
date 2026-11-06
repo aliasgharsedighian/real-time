@@ -512,4 +512,52 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
     await http(1).get(`polling/${chat.id}/shared?kind=LINK`).expect(403);
     await http(0).delete(`chats/${chat.id}`).expect(200);
   });
+  it('persists one reaction per participant, broadcasts changes, and removes reactions with the message', async () => {
+    const chat = await create({
+      isGroup: true,
+      name: 'Reactions',
+      participant: [ids[1]],
+      firstMessage: 'React here',
+    });
+    const message = await prisma.message.findFirstOrThrow({
+      where: { chatId: chat.id },
+    });
+    const path = `/api/v1/realtime/chats/${chat.id}/messages/${message.id}/reaction`;
+    const react = (index: number, emoji: string | null) =>
+      request(base)
+        .put(path)
+        .auth(tokens[index], { type: 'bearer' })
+        .send({ emoji });
+    await request(base).put(path).send({ emoji: '👍' }).expect(401);
+    await react(2, '👍').expect(404);
+    await react(1, 'not an emoji').expect(400);
+    await react(1, '👍🔥').expect(400);
+
+    const peer = await socket(0);
+    const changed = once(peer, 'message:reactions');
+    const first = await react(1, '👍').expect(200);
+    expect(await changed).toEqual(first.body.data);
+    await react(0, '👍').expect(200);
+    await react(1, '❤️‍🔥').expect(200);
+    const history = await http(0).get(`polling/${chat.id}`).expect(200);
+    const [saved] = history.body.data.chats;
+    expect(saved.reactions).toEqual([
+      { userId: ids[0], emoji: '👍' },
+      { userId: ids[1], emoji: '❤️‍🔥' },
+    ]);
+    const removed = await react(1, null).expect(200);
+    expect(removed.body.data.reactionVersion).toBeGreaterThan(
+      saved.reactionVersion,
+    );
+    expect(removed.body.data.reactions).toEqual([
+      { userId: ids[0], emoji: '👍' },
+    ]);
+    await http(0)
+      .delete(`chats/${chat.id}/messages`)
+      .send({ messageIds: [message.id] })
+      .expect(200);
+    expect(
+      await prisma.messageReaction.count({ where: { messageId: message.id } }),
+    ).toBe(0);
+  });
 });

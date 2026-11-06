@@ -262,3 +262,18 @@ export async function getMessageReaders(
     ).data,
   );
 }
+
+export async function setMessageReaction(
+  chatId: number,
+  messageId: number,
+  emoji: string | null,
+) {
+  return unwrap(
+    (
+      await api.put<ApiResponse<import("./types").ReactionUpdate>>(
+        `realtime/chats/${chatId}/messages/${messageId}/reaction`,
+        { emoji },
+      )
+    ).data,
+  );
+}

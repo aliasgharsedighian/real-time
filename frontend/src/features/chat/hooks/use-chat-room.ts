@@ -9,6 +9,7 @@ import { chatKeys } from "../api";
 import { getSocket } from "../socket";
 import {
   applyReceipt,
+  keepLatestReactions,
   mergeMessages,
   removeMessagesFromHistory,
 } from "../message-cache";
@@ -96,7 +97,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
               ...old,
               messages: old.messages.map((m) =>
                 m.id === message.id
-                  ? message
+                  ? keepLatestReactions(message, m)
                   : m.replyToId === message.id
                     ? { ...m, replyTo: message }
                     : m,

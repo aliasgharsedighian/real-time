@@ -1,4 +1,4 @@
-import { replyInclude } from '../../modules/polling/message-include';
+import { messageRelations } from '../../modules/polling/message-include';
 import { fileSelect } from '../../modules/files-upload/upload.policy';
 // src/chat/chat.service.ts
 import {
@@ -127,7 +127,7 @@ export class ChatService {
       return tx.message.findUniqueOrThrow({
         where: { id: message.id },
         include: {
-          ...replyInclude,
+          ...messageRelations,
           attachments: { select: fileSelect },
           sender: { select: { id: true, email: true, profile: true } },
           readStatuses: true,

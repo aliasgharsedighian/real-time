@@ -12,7 +12,7 @@ import { extname, join } from 'node:path';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 import { ChatGateway } from '../../gateway/chat/gateway';
 import { uploadRoot } from '../files-upload/upload.policy';
-import { messageInclude } from './message-include';
+import { messageInclude, reactionSelect } from './message-include';
 
 @Injectable()
 export class MessageActionsService {
@@ -47,6 +47,43 @@ export class MessageActionsService {
       ),
     );
   }
+  async setReaction(
+    chatId: number,
+    userId: number,
+    messageId: number,
+    emoji: string | null,
+  ) {
+    const { users, data } = await this.prisma.$transaction(async (tx) => {
+      const { users } = await this.member(tx, chatId, userId);
+      const message = await tx.message.findFirst({
+        where: { id: messageId, chatId, kind: 'TEXT' },
+        select: { id: true },
+      });
+      if (!message) throw new NotFoundException('Message unavailable.');
+
+      if (emoji === null) {
+        await tx.messageReaction.deleteMany({ where: { messageId, userId } });
+      } else {
+        await tx.messageReaction.upsert({
+          where: { messageId_userId: { messageId, userId } },
+          create: { messageId, userId, emoji },
+          update: { emoji },
+        });
+      }
+      const state = await tx.message.update({
+        where: { id: messageId },
+        data: { reactionVersion: { increment: 1 } },
+        select: {
+          reactionVersion: true,
+          reactions: { select: reactionSelect, orderBy: { userId: 'asc' } },
+        },
+      });
+      return { users, data: { chatId, messageId, ...state } };
+    });
+    this.gateway.reactionsChanged(users, data);
+    return { data, message: 'Reaction updated' };
+  }
+
   async readers(chatId: number, userId: number, messageId: number) {
     const readers = await this.prisma.$transaction(async (tx) => {
       await this.member(tx, chatId, userId);

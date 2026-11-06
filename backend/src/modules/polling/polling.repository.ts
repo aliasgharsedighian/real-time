@@ -1,4 +1,4 @@
-import { replyInclude } from './message-include';
+import { messageRelations } from './message-include';
 import { fileSelect } from '../files-upload/upload.policy';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
@@ -24,7 +24,7 @@ export class PrsimaPollingRepository {
       skip,
       take: limit,
       include: {
-        ...replyInclude,
+        ...messageRelations,
         attachments: { select: fileSelect },
         sender: {
           select: {
@@ -79,7 +79,7 @@ export class PrsimaPollingRepository {
     const unreadMessages = await this.prisma.message.findMany({
       where: { ...unreadWhere, id: { in: chat.map((message) => message.id) } },
       include: {
-        ...replyInclude,
+        ...messageRelations,
         attachments: { select: fileSelect },
         sender: {
           select: {

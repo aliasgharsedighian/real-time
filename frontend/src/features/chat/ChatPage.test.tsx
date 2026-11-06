@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   forward: vi.fn(),
   chats: vi.fn(),
   profile: vi.fn(),
+  reaction: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -47,6 +48,7 @@ vi.mock("./api", () => ({
     ],
   },
   getMessageReaders: async () => [],
+  setMessageReaction: (...args: unknown[]) => mocks.reaction(...args),
   getHistory: (...args: unknown[]) => mocks.history(...args),
   syncMessages: (...args: unknown[]) => mocks.sync(...args),
   editMessage: (...args: unknown[]) => mocks.edit(...args),
@@ -838,5 +840,48 @@ describe("chat attachments", () => {
         screen.queryByRole("button", { name: "Go to latest messages" }),
       ).toBeNull(),
     );
+  });
+  it("opens quick reactions and the expanded picker, then adds and removes a reaction", async () => {
+    mocks.history.mockResolvedValue({
+      messages: [
+        {
+          id: 73,
+          chatId: 3,
+          senderId: 2,
+          content: "React to this",
+          createdAt: "2026-11-06T09:00:00Z",
+        },
+      ],
+      users: [],
+      unreadIds: [],
+    });
+    mocks.reaction
+      .mockResolvedValueOnce({
+        chatId: 3,
+        messageId: 73,
+        reactionVersion: 1,
+        reactions: [{ userId: 1, emoji: "🔥" }],
+      })
+      .mockResolvedValueOnce({
+        chatId: 3,
+        messageId: 73,
+        reactionVersion: 2,
+        reactions: [],
+      });
+    setup();
+    fireEvent.contextMenu(await screen.findByText("React to this"));
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(6);
+    fireEvent.click(screen.getByRole("menuitem", { name: "More reactions" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "🔥" }));
+    const chip = await screen.findByRole("button", { name: "🔥 1 reaction" });
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(mocks.reaction).toHaveBeenNthCalledWith(1, 3, 73, "🔥");
+    fireEvent.click(chip);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "🔥 1 reaction" }),
+      ).toBeNull(),
+    );
+    expect(mocks.reaction).toHaveBeenNthCalledWith(2, 3, 73, null);
   });
 });

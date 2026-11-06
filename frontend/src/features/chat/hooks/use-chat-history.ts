@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStore } from "@/features/auth/session-store";
 import { chatKeys, getHistory, getMessageWindow, syncMessages } from "../api";
-import { mergeMessages, removeMessagesFromHistory } from "../message-cache";
+import {
+  mergeMessages,
+  preserveReactions,
+  removeMessagesFromHistory,
+} from "../message-cache";
 import type { History } from "../types";
 
 // Keep one normalized cache for the room, header, receipts and live messages.
@@ -22,7 +26,7 @@ export function useChatHistory(chatId: number) {
     queryFn: async ({ signal }) => {
       const latest = await getHistory(chatId, signal);
       let old = cache.getQueryData<History>(key);
-      const synchronized = old
+      let synchronized = old
         ? await syncMessages(
             chatId,
             [
@@ -37,6 +41,10 @@ export function useChatHistory(chatId: number) {
           )
         : [];
       if (old) {
+        synchronized = preserveReactions(
+          synchronized,
+          cache.getQueryData<History>(key)?.messages,
+        );
         const existing = new Set(synchronized.map((message) => message.id));
         const removed = old.messages
           .filter((message) => !existing.has(message.id))
@@ -150,7 +158,7 @@ export function useChatHistory(chatId: number) {
         old
           ? {
               ...old,
-              messages: context.messages,
+              messages: preserveReactions(context.messages, old.messages),
               unreadIds: [],
               nextPage: null,
               window: {
@@ -220,7 +228,10 @@ export function useChatHistory(chatId: number) {
       await cache.cancelQueries({ queryKey: historyKey });
       const latest = await getHistory(chatId, controller.signal);
       if (!controller.signal.aborted) {
-        cache.setQueryData<History>(historyKey, latest);
+        cache.setQueryData<History>(historyKey, (old) => ({
+          ...latest,
+          messages: preserveReactions(latest.messages, old?.messages),
+        }));
         setOlderError(null);
       }
     } catch (error) {

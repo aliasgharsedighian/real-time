@@ -9,6 +9,8 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
+  ValidateIf,
   Min,
 } from 'class-validator';
 export class MessageIdsDto {
@@ -56,4 +58,14 @@ export class MessageReadersParamsDto extends GetChatByIdParamsDto {
   @Min(1)
   @Max(2147483647)
   messageId: number;
+}
+
+export class SetReactionDto {
+  @ValidateIf((_body, value) => value !== null)
+  @IsString()
+  @MaxLength(32)
+  @Matches(
+    /^\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*$/u,
+  )
+  emoji: string | null;
 }

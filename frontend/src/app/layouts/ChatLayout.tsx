@@ -1,3 +1,4 @@
+import { applyReactionUpdate } from "@/features/chat/message-cache";
 import { useChatViewport } from "@/shared/hooks/use-chat-viewport";
 import { UserInfoDialog } from "@/features/chat/components/UserInfoDialog";
 import NotificationProvider from "@/features/notifications/NotificationProvider";
@@ -20,7 +21,7 @@ import { GroupInfoDialog } from "@/features/chat/components/GroupInfoDialog";
 import { ChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { getSocket } from "@/features/chat/socket";
 import { chatKeys } from "@/features/chat/api";
-import type { History } from "@/features/chat/types";
+import type { History, ReactionUpdate } from "@/features/chat/types";
 import { useSessionStore } from "@/features/auth/session-store";
 import { displayName } from "@/shared/lib/types";
 import { ThemeToggle } from "@/shared/components/ThemeToggle";
@@ -101,9 +102,17 @@ function ChatLayoutContent() {
       if (Number(match?.params.chatId) === chatId)
         navigate("/dashboard", { replace: true });
     };
+    const reactionsChanged = (update: ReactionUpdate) => {
+      cache.setQueryData<History>(
+        chatKeys.history(identity, update.chatId),
+        (old) => applyReactionUpdate(old, update),
+      );
+    };
+    socket.on("message:reactions", reactionsChanged);
     socket.on("chat:updated", updated);
     socket.on("chat:removed", removed);
     return () => {
+      socket.off("message:reactions", reactionsChanged);
       socket.off("chat:updated", updated);
       socket.off("chat:removed", removed);
     };

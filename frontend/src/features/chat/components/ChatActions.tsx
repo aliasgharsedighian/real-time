@@ -80,11 +80,15 @@ export function ActionMenu({
   actions,
   onClose,
   footer,
+  header,
+  headerOnly = false,
 }: {
   position: { x: number; y: number };
   actions: MenuAction[];
   onClose: () => void;
   footer?: ReactNode;
+  header?: ReactNode;
+  headerOnly?: boolean;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -102,6 +106,10 @@ export function ActionMenu({
         previous.focus({ preventScroll: true });
     };
   }, []);
+  const width = header ? Math.min(352, window.innerWidth - 16) : 208;
+  const height = headerOnly
+    ? 288
+    : actions.length * 44 + (footer ? 64 : 0) + (header ? 68 : 16);
   return createPortal(
     <div
       data-message-menu
@@ -117,16 +125,17 @@ export function ActionMenu({
         role="menu"
         aria-label="Chat actions"
         style={{
-          left: Math.max(8, Math.min(position.x, window.innerWidth - 224)),
+          width,
+          left: Math.max(
+            8,
+            Math.min(position.x, window.innerWidth - width - 8),
+          ),
           top: Math.max(
             8,
-            Math.min(
-              position.y,
-              window.innerHeight - actions.length * 44 - (footer ? 64 : 0) - 20,
-            ),
+            Math.min(position.y, window.innerHeight - height - 8),
           ),
         }}
-        className="absolute max-h-[calc(100dvh-16px)] w-52 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+        className="absolute flex max-h-[calc(100dvh-16px)] flex-col gap-2"
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape" || event.key === "Tab") {
@@ -146,23 +155,28 @@ export function ActionMenu({
           }
         }}
       >
-        {actions.map((action) => (
-          <button
-            key={action.label}
-            role="menuitem"
-            type="button"
-            className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm hover:bg-muted focus:bg-muted focus:outline-none ${action.destructive ? "text-destructive" : ""}`}
-            onClick={() => {
-              onClose();
-              action.run();
-            }}
-          >
-            {action.icon}
-            {action.label}
-          </button>
-        ))}
-        {footer && (
-          <div className="mt-1 border-t border-border pt-1">{footer}</div>
+        {header && <div className="shrink-0">{header}</div>}
+        {!headerOnly && (
+          <div className="w-52 max-w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+            {actions.map((action) => (
+              <button
+                key={action.label}
+                role="menuitem"
+                type="button"
+                className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm hover:bg-muted focus:bg-muted focus:outline-none ${action.destructive ? "text-destructive" : ""}`}
+                onClick={() => {
+                  onClose();
+                  action.run();
+                }}
+              >
+                {action.icon}
+                {action.label}
+              </button>
+            ))}
+            {footer && (
+              <div className="mt-1 border-t border-border pt-1">{footer}</div>
+            )}
+          </div>
         )}
       </div>
     </div>,

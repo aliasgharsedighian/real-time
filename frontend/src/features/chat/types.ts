@@ -17,6 +17,16 @@ export interface MessageReader extends ReadReceipt {
     } | null;
   };
 }
+export interface Reaction {
+  userId: number;
+  emoji: string;
+}
+export interface ReactionUpdate {
+  chatId: number;
+  messageId: number;
+  reactionVersion: number;
+  reactions: Reaction[];
+}
 export interface Message {
   kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED" | "MEMBER_ADDED";
   id: number;
@@ -33,6 +43,8 @@ export interface Message {
   createdAt: string;
   sender?: User;
   readStatuses?: ReadReceipt[];
+  reactions?: Reaction[];
+  reactionVersion?: number;
 }
 export interface Participant {
   id: number;

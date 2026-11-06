@@ -1,5 +1,5 @@
 import { SharedContentDto } from './shared-content.dto';
-import { replyInclude } from './message-include';
+import { messageRelations } from './message-include';
 import {
   BadRequestException,
   ForbiddenException,
@@ -61,7 +61,7 @@ export class MessageSearchService {
             orderBy: { id: 'desc' },
             take: 21,
             include: {
-              ...replyInclude,
+              ...messageRelations,
               attachments: { select: fileSelect },
               sender: { select: { id: true, email: true, profile: true } },
             },
@@ -185,7 +185,7 @@ export class MessageSearchService {
     )
       throw new NotFoundException('Message not found in this conversation.');
     const include = {
-      ...replyInclude,
+      ...messageRelations,
       attachments: { select: fileSelect },
       sender: { select: { id: true, email: true, profile: true } },
       readStatuses: { where: { userId: { not: userId } } },

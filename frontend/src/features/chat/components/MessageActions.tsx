@@ -1,3 +1,4 @@
+import { ReactionPicker } from "./ReactionPicker";
 import { useHorizontalSwipe } from "../hooks/use-horizontal-swipe";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -47,6 +48,8 @@ export function MessageInteraction({
   onEdit,
   onDelete,
   onForward,
+  onReact,
+  ownReaction,
   children,
 }: {
   message: Message;
@@ -59,9 +62,12 @@ export function MessageInteraction({
   onEdit: () => void;
   onDelete: () => void;
   onForward: () => void;
+  onReact?: (emoji: string) => void;
+  ownReaction?: string;
   children: ReactNode;
 }) {
   const [position, setPosition] = useState<{ x: number; y: number }>();
+  const [expandedReactions, setExpandedReactions] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   const held = useRef(false);
@@ -190,7 +196,25 @@ export function MessageInteraction({
       {position && (
         <ActionMenu
           position={position}
-          onClose={() => setPosition(undefined)}
+          onClose={() => {
+            setPosition(undefined);
+            setExpandedReactions(false);
+          }}
+          headerOnly={expandedReactions}
+          header={
+            onReact && (
+              <ReactionPicker
+                selected={ownReaction}
+                expanded={expandedReactions}
+                onExpand={() => setExpandedReactions((value) => !value)}
+                onPick={(emoji) => {
+                  setPosition(undefined);
+                  setExpandedReactions(false);
+                  onReact(emoji);
+                }}
+              />
+            )
+          }
           footer={own ? <MessageReaders message={message} /> : undefined}
           actions={[
             {

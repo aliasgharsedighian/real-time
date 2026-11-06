@@ -2,6 +2,7 @@ import { SharedContentDto } from './shared-content.dto';
 import { MessageActionsService } from './message-actions.service';
 import {
   SyncMessagesDto,
+  SetReactionDto,
   MessageReadersParamsDto,
   MessageIdsDto,
   ForwardMessagesDto,
@@ -11,6 +12,7 @@ import {
 import {
   Body,
   Patch,
+  Put,
   Delete,
   Controller,
   Get,
@@ -51,6 +53,20 @@ export class PollingController {
     private search: MessageSearchService,
     private actions: MessageActionsService,
   ) {}
+
+  @Put('realtime/chats/:id/messages/:messageId/reaction')
+  setReaction(
+    @Param() params: MessageReadersParamsDto,
+    @GetUser() user: User,
+    @Body() body: SetReactionDto,
+  ) {
+    return this.actions.setReaction(
+      params.id,
+      user.id,
+      params.messageId,
+      body.emoji,
+    );
+  }
 
   @Get('realtime/chats/:id/messages/:messageId/readers')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
