@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   chats: vi.fn(),
   profile: vi.fn(),
   reaction: vi.fn(),
+  pins: vi.fn(),
+  setPin: vi.fn(),
 }));
 vi.mock("@/features/auth/session-context", () => ({
   useSession: () => ({
@@ -41,6 +43,7 @@ vi.mock("./api", () => ({
   chatKeys: {
     history: () => ["history"],
     list: () => ["chats"],
+    pins: (_: unknown, chatId: number) => ["pinned-messages", chatId],
     readers: (_: unknown, chatId: number, id: number) => [
       "message-readers",
       chatId,
@@ -49,6 +52,8 @@ vi.mock("./api", () => ({
   },
   getMessageReaders: async () => [],
   setMessageReaction: (...args: unknown[]) => mocks.reaction(...args),
+  getPinnedMessages: (...args: unknown[]) => mocks.pins(...args),
+  setMessagePin: (...args: unknown[]) => mocks.setPin(...args),
   getHistory: (...args: unknown[]) => mocks.history(...args),
   syncMessages: (...args: unknown[]) => mocks.sync(...args),
   editMessage: (...args: unknown[]) => mocks.edit(...args),
@@ -251,6 +256,7 @@ describe("chat attachments", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.history.mockResolvedValue({ messages: [], users: [], unreadIds: [] });
+    mocks.pins.mockReset().mockResolvedValue([]);
     sessionStorage.clear();
     useSessionStore
       .getState()
@@ -883,5 +889,43 @@ describe("chat attachments", () => {
       ).toBeNull(),
     );
     expect(mocks.reaction).toHaveBeenNthCalledWith(2, 3, 73, null);
+  });
+
+  it("pins from the message menu, jumps from the pin list to unloaded history, and unpins", async () => {
+    const latest = {
+      id: 73,
+      chatId: 3,
+      senderId: 2,
+      content: "Pin this message",
+      createdAt: "2026-11-06T09:00:00Z",
+    };
+    const older = { ...latest, id: 30, content: "An older pin" };
+    mocks.history.mockResolvedValue({ messages: [latest], users: [], unreadIds: [] });
+    mocks.pins.mockResolvedValue([older]);
+    mocks.setPin.mockImplementation(async (_chatId, _messageId, pinned) => {
+      mocks.pins.mockResolvedValue(pinned ? [latest, older] : [older]);
+    });
+    mocks.window.mockResolvedValue({
+      messages: [older],
+      beforeId: null,
+      afterId: 30,
+    });
+    setup();
+    fireEvent.contextMenu(await screen.findByText(latest.content));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin message" }));
+    await screen.findByRole("button", { name: /Pinned message Pin this message/ });
+    expect(mocks.setPin).toHaveBeenCalledWith(3, 73, true);
+    fireEvent.contextMenu(document.querySelector('[data-message-id="73"] .message-bubble')!);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unpin message" }));
+    await screen.findByRole("button", { name: /Pinned message An older pin/ });
+    expect(mocks.setPin).toHaveBeenCalledWith(3, 73, false);
+    fireEvent.click(screen.getByRole("button", { name: "View all pinned messages" }));
+    await screen.findByRole("heading", { name: "1 pinned message" });
+    fireEvent.click(screen.getByRole("button", { name: /An older pin.*Go to message/ }));
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "1 pinned message" })).toBeNull();
+      expect(document.querySelector('[data-message-id="30"]')).toBeTruthy();
+    });
+    expect(mocks.window.mock.calls[0][1]).toEqual({ aroundId: 30 });
   });
 });

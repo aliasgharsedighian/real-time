@@ -47,6 +47,50 @@ export class MessageActionsService {
       ),
     );
   }
+
+  async pinnedMessages(chatId: number, userId: number) {
+    const data = await this.prisma.$transaction(async (tx) => {
+      await this.member(tx, chatId, userId);
+      return tx.message.findMany({
+        where: { chatId, pinnedAt: { not: null } },
+        orderBy: [{ pinnedAt: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
+          sender: messageInclude.sender,
+          attachments: messageInclude.attachments,
+        },
+      });
+    });
+    return { data, message: 'Pinned messages loaded' };
+  }
+
+  async setPin(
+    chatId: number,
+    userId: number,
+    messageId: number,
+    pinned: boolean,
+  ) {
+    const { users, changed } = await this.prisma.$transaction(async (tx) => {
+      const { users } = await this.member(tx, chatId, userId);
+      const message = await tx.message.findFirst({
+        where: { id: messageId, chatId, kind: 'TEXT' },
+        select: { pinnedAt: true },
+      });
+      if (!message) throw new NotFoundException('Message unavailable.');
+      const changed = Boolean(message.pinnedAt) !== pinned;
+      if (changed)
+        await tx.message.update({
+          where: { id: messageId },
+          data: { pinnedAt: pinned ? new Date() : null },
+        });
+      return { users, changed };
+    });
+    if (changed) this.gateway.pinsChanged(chatId, users);
+    return { data: null, message: pinned ? 'Message pinned' : 'Message unpinned' };
+  }
+
   async setReaction(
     chatId: number,
     userId: number,

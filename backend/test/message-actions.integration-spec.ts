@@ -512,6 +512,54 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
     await http(1).get(`polling/${chat.id}/shared?kind=LINK`).expect(403);
     await http(0).delete(`chats/${chat.id}`).expect(200);
   });
+  it.each([false, true])(
+    'shares pins between members and removes deleted pins (group: %s)',
+    async (isGroup) => {
+      const chat = await create({
+        participant: [ids[3]],
+        firstMessage: 'First pinned message',
+        ...(isGroup ? { isGroup, name: 'Pinned messages' } : {}),
+      });
+      const first = await prisma.message.findFirstOrThrow({
+        where: { chatId: chat.id, content: 'First pinned message' },
+      });
+      const second = await prisma.message.create({
+        data: { chatId: chat.id, senderId: ids[0], content: 'Second pin' },
+      });
+      const pins = `chats/${chat.id}/pins`;
+      const pin = (messageId: number) =>
+        `chats/${chat.id}/messages/${messageId}/pin`;
+      const put = (index: number, path: string) =>
+        request(base)
+          .put(`/api/v1/realtime/${path}`)
+          .auth(tokens[index], { type: 'bearer' });
+      await http(2).get(pins).expect(404);
+      await put(2, pin(first.id)).expect(404);
+
+      const peer = await socket(0);
+      const changed = once(peer, 'message:pins');
+      await put(3, pin(first.id)).expect(200);
+      expect(await changed).toEqual({ chatId: chat.id });
+      await put(3, pin(second.id)).expect(200);
+      await put(3, pin(first.id)).expect(200);
+      const listed = await http().get(pins).expect(200);
+      expect(listed.body.data.map((message) => message.id)).toEqual([
+        second.id,
+        first.id,
+      ]);
+
+      await http(3).delete(pin(first.id)).expect(200);
+      await http(0)
+        .delete(`chats/${chat.id}/messages`)
+        .send({ messageIds: [second.id] })
+        .expect(200);
+      const empty = await http(3).get(pins).expect(200);
+      expect(empty.body.data).toEqual([]);
+      peer.disconnect();
+      await http(0).delete(`chats/${chat.id}`).expect(200);
+    },
+  );
+
   it('persists one reaction per participant, broadcasts changes, and removes reactions with the message', async () => {
     const chat = await create({
       isGroup: true,

@@ -54,6 +54,27 @@ export class PollingController {
     private actions: MessageActionsService,
   ) {}
 
+  @Get('realtime/chats/:id/pins')
+  pinnedMessages(
+    @Param() params: GetChatByIdParamsDto,
+    @GetUser() user: User,
+  ) {
+    return this.actions.pinnedMessages(params.id, user.id);
+  }
+
+  @Put('realtime/chats/:id/messages/:messageId/pin')
+  pinMessage(@Param() params: MessageReadersParamsDto, @GetUser() user: User) {
+    return this.actions.setPin(params.id, user.id, params.messageId, true);
+  }
+
+  @Delete('realtime/chats/:id/messages/:messageId/pin')
+  unpinMessage(
+    @Param() params: MessageReadersParamsDto,
+    @GetUser() user: User,
+  ) {
+    return this.actions.setPin(params.id, user.id, params.messageId, false);
+  }
+
   @Put('realtime/chats/:id/messages/:messageId/reaction')
   setReaction(
     @Param() params: MessageReadersParamsDto,

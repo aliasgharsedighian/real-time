@@ -310,6 +310,10 @@ export class ChatGateway implements OnGatewayInit {
     this.calls.discardChat(chatId);
     for (const userId of userIds) this.removeChatMember(chatId, userId);
   }
+  pinsChanged(chatId: number, userIds: number[]) {
+    for (const userId of userIds)
+      this.server?.to(`user:${userId}`).emit('message:pins', { chatId });
+  }
   reactionsChanged(
     userIds: number[],
     payload: {

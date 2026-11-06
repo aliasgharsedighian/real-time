@@ -27,6 +27,11 @@ export interface ReactionUpdate {
   reactionVersion: number;
   reactions: Reaction[];
 }
+export type PinnedMessage = Pick<
+  Message,
+  "id" | "content" | "createdAt" | "sender" | "attachments"
+>;
+
 export interface Message {
   kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED" | "MEMBER_ADDED";
   id: number;
@@ -45,6 +50,7 @@ export interface Message {
   readStatuses?: ReadReceipt[];
   reactions?: Reaction[];
   reactionVersion?: number;
+  pinnedAt?: string | null;
 }
 export interface Participant {
   id: number;

@@ -127,6 +127,7 @@ model Message {
   attachments UploadFile[]
   content   String
   editedAt DateTime?
+  pinnedAt DateTime?
   forwarded Boolean @default(false)
   forwardedFromId Int?
   forwardedFrom User? @relation("ForwardOrigin", fields: [forwardedFromId], references: [id], onDelete: SetNull)

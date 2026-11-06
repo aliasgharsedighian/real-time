@@ -5,17 +5,38 @@ import { normalizeHistory } from "./message-cache";
 import type {
   Chat,
   HistoryResponse,
+  PinnedMessage,
   MessageSearchPage,
   MessageWindow,
 } from "./types";
 
 export const chatKeys = {
+  pins: (identity: string | undefined, chatId: number) =>
+    ["pinned-messages", identity, chatId] as const,
   readers: (identity: string | undefined, chatId: number, messageId: number) =>
     ["message-readers", identity, chatId, messageId] as const,
   list: (identity?: string) => ["chats", identity] as const,
   history: (identity: string | undefined, id: number) =>
     ["messages", identity, id] as const,
 };
+
+export async function getPinnedMessages(chatId: number, signal?: AbortSignal) {
+  const { data } = await api.get<ApiResponse<PinnedMessage[]>>(
+    `realtime/chats/${chatId}/pins`,
+    { signal },
+  );
+  return unwrap(data);
+}
+
+export async function setMessagePin(
+  chatId: number,
+  messageId: number,
+  pinned: boolean,
+) {
+  const url = `realtime/chats/${chatId}/messages/${messageId}/pin`;
+  if (pinned) await api.put(url);
+  else await api.delete(url);
+}
 
 export async function getChats(userId: number): Promise<Chat[]> {
   const socket = getSocket();

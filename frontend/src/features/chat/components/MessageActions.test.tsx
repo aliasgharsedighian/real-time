@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MessageInteraction } from "./MessageActions";
 
-function mount() {
+function mount(onPin?: () => void) {
   const reply = vi.fn();
   render(
     <MessageInteraction
@@ -22,6 +22,7 @@ function mount() {
       onEdit={vi.fn()}
       onDelete={vi.fn()}
       onForward={vi.fn()}
+      onPin={onPin}
     >
       <p>Message</p>
     </MessageInteraction>,
@@ -37,12 +38,15 @@ afterEach(() => vi.useRealTimers());
 describe("message gestures", () => {
   it("opens the message menu after a one second touch hold", () => {
     vi.useFakeTimers();
-    mount();
+    const pin = vi.fn();
+    mount(pin);
     touch(screen.getByText("Message"), "pointerdown");
     act(() => vi.advanceTimersByTime(999));
     expect(screen.queryByRole("menu")).toBeNull();
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByRole("menuitem", { name: "Reply" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin message" }));
+    expect(pin).toHaveBeenCalledOnce();
   });
   it("does not open the menu when the touch moves to scroll or is released early", () => {
     vi.useFakeTimers();

@@ -9,6 +9,8 @@ import {
   Trash2,
   CheckCircle,
   Copy,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MessageReaders } from "./MessageReaders";
@@ -27,7 +29,9 @@ import { displayName } from "@/shared/lib/types";
 import { errorMessage } from "@/shared/lib/api";
 import type { Message } from "../types";
 
-export function messageSummary(message: Message) {
+export function messageSummary(
+  message: Pick<Message, "content" | "attachments">,
+) {
   return (
     message.content ||
     (message.attachments?.[0]?.kind === "AUDIO"
@@ -48,6 +52,8 @@ export function MessageInteraction({
   onEdit,
   onDelete,
   onForward,
+  onPin,
+  pinned,
   onReact,
   ownReaction,
   children,
@@ -62,6 +68,8 @@ export function MessageInteraction({
   onEdit: () => void;
   onDelete: () => void;
   onForward: () => void;
+  onPin?: () => void;
+  pinned?: boolean;
   onReact?: (emoji: string) => void;
   ownReaction?: string;
   children: ReactNode;
@@ -249,6 +257,19 @@ export function MessageInteraction({
               icon: <Forward className="size-4" />,
               run: onForward,
             },
+            ...(onPin
+              ? [
+                  {
+                    label: pinned ? "Unpin message" : "Pin message",
+                    icon: pinned ? (
+                      <PinOff className="size-4" />
+                    ) : (
+                      <Pin className="size-4" />
+                    ),
+                    run: onPin,
+                  },
+                ]
+              : []),
             ...(canDelete
               ? [
                   {

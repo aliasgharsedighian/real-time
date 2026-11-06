@@ -6,7 +6,7 @@ import {
   keepLatestReactions,
   removeMessagesFromHistory,
 } from "./message-cache";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSessionStore } from "@/features/auth/session-store";
 import {
@@ -14,6 +14,8 @@ import {
   deleteMessages,
   editMessage,
   forwardMessages,
+  getPinnedMessages,
+  setMessagePin,
   setMessageReaction,
 } from "./api";
 import type { History, Message } from "./types";
@@ -57,6 +59,7 @@ import { useComposerGestures } from "./hooks/use-composer-gestures";
 import { useMessageScroll } from "./hooks/use-message-scroll";
 import { useMessageSearch } from "./message-search-context";
 import { MessageSearchPanel } from "./components/MessageSearchPanel";
+import { PinnedMessageBar, PinnedMessagesView } from "./components/PinnedMessages";
 import {
   ChatDateNavigation,
   DaySeparator,
@@ -83,7 +86,20 @@ function ChatRoom({ chatId }: { chatId: number }) {
   );
   const cache = useQueryClient();
   const pendingReactions = useRef(new Set<number>());
+  const pendingPins = useRef(new Set<number>());
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
+  const pins = useQuery({
+    queryKey: chatKeys.pins(identity, chatId),
+    queryFn: ({ signal }) => getPinnedMessages(chatId, signal),
+    enabled: history.isSuccess,
+  });
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const pinListTrigger = useRef<HTMLButtonElement>(null);
+  const refreshPins = useCallback(async () => {
+    const queryKey = chatKeys.pins(identity, chatId);
+    await cache.cancelQueries({ queryKey });
+    await cache.invalidateQueries({ queryKey });
+  }, [cache, identity, chatId]);
   const [reply, setReply] = useState<Message>();
   const [editing, setEditing] = useState<Message>();
   const savedDraft = useRef("");
@@ -113,6 +129,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
     const socket = getSocket();
     const deleted = (event: { chatId: number; messageIds: number[] }) => {
       if (event.chatId !== chatId) return;
+      void refreshPins();
       setSelected((current) =>
         current.filter((id) => !event.messageIds.includes(id)),
       );
@@ -125,16 +142,25 @@ function ChatRoom({ chatId }: { chatId: number }) {
       }
     };
     const updated = (message: Message) => {
-      if (message.chatId === chatId)
-        setReply((current) => (current?.id === message.id ? message : current));
+      if (message.chatId !== chatId) return;
+      if (message.pinnedAt) void refreshPins();
+      setReply((current) => (current?.id === message.id ? message : current));
     };
+    const pinsChanged = (event: { chatId: number }) => {
+      if (event.chatId === chatId) void refreshPins();
+    };
+    const reconnected = () => void refreshPins();
+    socket.on("message:pins", pinsChanged);
+    socket.on("connect", reconnected);
     socket.on("message:updated", updated);
     socket.on("message:deleted", deleted);
     return () => {
+      socket.off("message:pins", pinsChanged);
+      socket.off("connect", reconnected);
       socket.off("message:updated", updated);
       socket.off("message:deleted", deleted);
     };
-  }, [chatId, editing]);
+  }, [chatId, editing, refreshPins]);
   const hasDraft = input.length > 0;
   const { startTyping, stopTyping } = room;
   useEffect(() => {
@@ -206,6 +232,40 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const composerGestures = useComposerGestures(textarea, () => {
     nearBottom.current = false;
   });
+
+  async function focusMessage(id: number, align?: "start") {
+    await history.openMessage(id);
+    setFocusedMessage((current) => ({
+      id,
+      requestId: (current?.requestId ?? 0) + 1,
+      align,
+    }));
+  }
+
+  async function jumpToPin(id: number) {
+    try {
+      await focusMessage(id);
+      setPinsOpen(false);
+      requestAnimationFrame(() =>
+        container.current?.focus({ preventScroll: true }),
+      );
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  async function togglePin(messageId: number, pinned: boolean) {
+    if (pendingPins.current.has(messageId)) return;
+    pendingPins.current.add(messageId);
+    try {
+      await setMessagePin(chatId, messageId, !pinned);
+      await refreshPins();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      pendingPins.current.delete(messageId);
+    }
+  }
   useEffect(() => {
     const element = textarea.current;
     if (!element) return;
@@ -277,6 +337,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               : old,
         );
         cancelEdit();
+        if (updated.pinnedAt) void refreshPins();
         void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
         return;
       }
@@ -334,12 +395,26 @@ function ChatRoom({ chatId }: { chatId: number }) {
       </div>
     );
 
+  const latestPin = pins.data?.[0];
+  const pinnedIds = new Set(pins.data?.map((message) => message.id));
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
       <section
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden chat-scene"
+        className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden chat-scene ${pinsOpen ? "hidden" : "flex"}`}
         aria-label="Chat room"
       >
+        {latestPin && (
+          <PinnedMessageBar
+            message={latestPin}
+            busy={history.navigating}
+            listTrigger={pinListTrigger}
+            onJump={(id) => void jumpToPin(id)}
+            onOpen={() => {
+              search.setOpen(false);
+              setPinsOpen(true);
+            }}
+          />
+        )}
         {!!selected.length && (
           <div
             className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2"
@@ -405,14 +480,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               day={visibleDay || localDateKey(messages.at(-1)!.createdAt)}
               disabled={history.navigating}
               visible={scrolling}
-              onSelect={async (id) => {
-                await history.openMessage(id);
-                setFocusedMessage((current) => ({
-                  id,
-                  requestId: (current?.requestId ?? 0) + 1,
-                  align: "start",
-                }));
-              }}
+              onSelect={(id) => focusMessage(id, "start")}
             />
           )}
           <div
@@ -507,6 +575,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 const ownReaction = message.reactions?.find(
                   (reaction) => reaction.userId === user?.id,
                 )?.emoji;
+                const pinned = pins.data
+                  ? pinnedIds.has(message.id)
+                  : !!message.pinnedAt;
                 const pickReaction = (emoji: string) =>
                   void reactToMessage(message, emoji);
                 return (
@@ -591,6 +662,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               }}
                               onDelete={() => setDeleting([message.id])}
                               onForward={() => setForwarding([message.id])}
+                              pinned={pinned}
+                              onPin={() => void togglePin(message.id, pinned)}
                               onReact={pickReaction}
                               ownReaction={ownReaction}
                             >
@@ -619,14 +692,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                     className="max-w-full rounded-md border-l-4 border-primary bg-primary/10 px-2 py-1 text-left text-xs"
                                     onClick={async () => {
                                       try {
-                                        await history.openMessage(
-                                          message.replyTo!.id,
-                                        );
-                                        setFocusedMessage((current) => ({
-                                          id: message.replyTo!.id,
-                                          requestId:
-                                            (current?.requestId ?? 0) + 1,
-                                        }));
+                                        await focusMessage(message.replyTo!.id);
                                       } catch (error) {
                                         toast.error(errorMessage(error));
                                       }
@@ -1050,6 +1116,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
         description={`Permanently delete ${deleting.length} message(s) for everyone? This cannot be undone.`}
         onConfirm={async () => {
           await deleteMessages(chatId, deleting);
+          void refreshPins();
           await cache.cancelQueries({
             queryKey: chatKeys.history(identity, chatId),
           });
@@ -1081,7 +1148,22 @@ function ChatRoom({ chatId }: { chatId: number }) {
           }}
         />
       )}
-      {search.open && (
+      {pinsOpen && (
+        <PinnedMessagesView
+          messages={pins.data ?? []}
+          busy={history.navigating}
+          onJump={(id) => void jumpToPin(id)}
+          onClose={() => {
+            setPinsOpen(false);
+            requestAnimationFrame(() =>
+              (pinListTrigger.current ?? container.current)?.focus({
+                preventScroll: true,
+              }),
+            );
+          }}
+        />
+      )}
+      {search.open && !pinsOpen && (
         <MessageSearchPanel
           chatId={chatId}
           title={
@@ -1090,13 +1172,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               : displayName(history.data?.users[0]?.user)
           }
           selectedId={focusedMessage?.id}
-          onSelect={async (id) => {
-            await history.openMessage(id);
-            setFocusedMessage((current) => ({
-              id,
-              requestId: (current?.requestId ?? 0) + 1,
-            }));
-          }}
+          onSelect={focusMessage}
         />
       )}
     </div>
