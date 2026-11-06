@@ -1,5 +1,8 @@
-import { messageRelations } from '../../modules/polling/message-include';
-import { fileSelect } from '../../modules/files-upload/upload.policy';
+import { messageInclude } from '../../modules/polling/message-include';
+import {
+  maxAlbumPhotos,
+  messageAttachments,
+} from '../../modules/files-upload/upload.policy';
 // src/chat/chat.service.ts
 import {
   BadRequestException,
@@ -45,7 +48,7 @@ export class ChatService {
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          include: { attachments: { select: fileSelect } },
+          include: { attachments: messageAttachments },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -70,23 +73,32 @@ export class ChatService {
     chatId: number,
     senderId: number,
     content: string,
-    attachmentId?: string,
+    attachment?: string | string[],
     replyToId?: number,
   ) {
+    const attachmentIds =
+      attachment === undefined
+        ? []
+        : Array.isArray(attachment)
+          ? attachment
+          : [attachment];
+    if (
+      (attachment !== undefined && !attachmentIds.length) ||
+      attachmentIds.length > maxAlbumPhotos ||
+      new Set(attachmentIds).size !== attachmentIds.length ||
+      attachmentIds.some(
+        (id) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id),
+      )
+    )
+      throw new BadRequestException('Invalid attachments.');
     if (
       typeof content !== 'string' ||
       content.length > 10000 ||
-      (!content.trim() && !attachmentId)
+      (!content.trim() && !attachmentIds.length)
     )
       throw new BadRequestException(
         'A message needs text or an attachment (maximum 10000 characters).',
       );
-    if (
-      attachmentId !== undefined &&
-      (typeof attachmentId !== 'string' ||
-        !/^[0-9a-f-]{36}$/i.test(attachmentId))
-    )
-      throw new BadRequestException('Invalid attachment.');
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
       if (
@@ -107,17 +119,19 @@ export class ChatService {
       const message = await tx.message.create({
         data: { content, chatId, senderId, replyToId },
       });
-      if (attachmentId) {
+      const draftCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      for (const [position, id] of attachmentIds.entries()) {
         const claimed = await tx.uploadFile.updateMany({
           where: {
-            id: attachmentId,
+            id,
+            ...(attachmentIds.length > 1 ? { kind: 'IMAGE' } : {}),
             ownerId: senderId,
             chatId,
             messageId: null,
             groupAvatar: null,
-            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            createdAt: { gte: draftCutoff },
           },
-          data: { messageId: message.id },
+          data: { messageId: message.id, position },
         });
         if (claimed.count !== 1)
           throw new BadRequestException(
@@ -126,12 +140,7 @@ export class ChatService {
       }
       return tx.message.findUniqueOrThrow({
         where: { id: message.id },
-        include: {
-          ...messageRelations,
-          attachments: { select: fileSelect },
-          sender: { select: { id: true, email: true, profile: true } },
-          readStatuses: true,
-        },
+        include: messageInclude,
       });
     });
   }

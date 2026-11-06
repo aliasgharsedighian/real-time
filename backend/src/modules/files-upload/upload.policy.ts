@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { resolve } from 'node:path';
 
 export const uploadPolicy = {
@@ -31,3 +32,9 @@ export const fileSelect = {
   height: true,
   duration: true,
 } as const;
+
+export const maxAlbumPhotos = 10;
+export const messageAttachments = {
+  select: fileSelect,
+  orderBy: [{ position: 'asc' }, { id: 'asc' }],
+} satisfies Prisma.UploadFileFindManyArgs;

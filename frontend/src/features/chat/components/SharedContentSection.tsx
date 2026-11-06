@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { useSessionStore } from "@/features/auth/session-store";
 import { Media } from "@/features/uploads/Media";
+import { MessagePhotos, PhotoGallery } from "@/features/uploads/PhotoGallery";
+import type { MediaFile } from "@/features/uploads/api";
 import { Button } from "@/shared/ui/button";
 import { errorMessage } from "@/shared/lib/api";
 import { formatMessageTime } from "@/shared/lib/date";
@@ -88,6 +90,11 @@ function SharedItems({ chatId, kind }: { chatId: number; kind: SharedKind }) {
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
   const messages = result.data?.pages.flatMap((page) => page.messages) ?? [];
+  const [gallery, setGallery] = useState<{
+    photos: MediaFile[];
+    index: number;
+    trigger: HTMLButtonElement;
+  }>();
   return (
     <div className="space-y-3 pt-3">
       <h3 className="px-3 text-sm font-semibold">
@@ -111,13 +118,16 @@ function SharedItems({ chatId, kind }: { chatId: number; kind: SharedKind }) {
           Nothing shared here yet.
         </p>
       )}
-      {messages.map((message) => (
-        <article
-          key={message.id}
-          className="space-y-2 rounded-xl border border-border bg-muted/30 p-3"
-        >
-          {kind === "LINK"
-            ? [
+      {messages.map((message) => {
+        const files =
+          message.attachments?.filter((file) => file.kind === kind) ?? [];
+        return (
+          <article
+            key={message.id}
+            className="space-y-2 rounded-xl border border-border bg-muted/30 p-3"
+          >
+            {kind === "LINK" ? (
+              [
                 ...new Set(
                   message.content.match(/https?:\/\/[^\s<>]+/gi) ?? [],
                 ),
@@ -132,23 +142,39 @@ function SharedItems({ chatId, kind }: { chatId: number; kind: SharedKind }) {
                   {url}
                 </a>
               ))
-            : message.attachments
-                ?.filter((file) => file.kind === kind)
-                .map((file) => <Media key={file.id} file={file} />)}
-          {message.content && kind !== "LINK" && (
-            <p dir="auto" className="whitespace-pre-wrap break-words text-sm">
-              {message.content}
-            </p>
-          )}
-          <time
-            dateTime={message.createdAt}
-            className="block text-xs text-muted-foreground"
-          >
-            {new Date(message.createdAt).toLocaleDateString()} ·{" "}
-            {formatMessageTime(message.createdAt)}
-          </time>
-        </article>
-      ))}
+            ) : kind === "IMAGE" ? (
+              <MessagePhotos
+                photos={files}
+                open={(index, trigger) =>
+                  setGallery({ photos: files, index, trigger })
+                }
+              />
+            ) : (
+              files.map((file) => <Media key={file.id} file={file} />)
+            )}
+            {message.content && kind !== "LINK" && (
+              <p dir="auto" className="whitespace-pre-wrap break-words text-sm">
+                {message.content}
+              </p>
+            )}
+            <time
+              dateTime={message.createdAt}
+              className="block text-xs text-muted-foreground"
+            >
+              {new Date(message.createdAt).toLocaleDateString()} ·{" "}
+              {formatMessageTime(message.createdAt)}
+            </time>
+          </article>
+        );
+      })}
+      {gallery && (
+        <PhotoGallery
+          photos={gallery.photos}
+          initialIndex={gallery.index}
+          trigger={gallery.trigger}
+          onClose={() => setGallery(undefined)}
+        />
+      )}
       {result.hasNextPage && (
         <Button
           variant="outline"

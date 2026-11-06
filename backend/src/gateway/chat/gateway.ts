@@ -350,16 +350,25 @@ export class ChatGateway implements OnGatewayInit {
       chatId: number;
       content: string;
       attachmentId?: string;
+      attachmentIds?: string[];
       replyToId?: number;
     },
   ) {
     try {
       const userId = await this.participant(client, payload?.chatId);
+      if (
+        (payload.attachmentId !== undefined &&
+          typeof payload.attachmentId !== 'string') ||
+        (payload.attachmentIds !== undefined &&
+          (!Array.isArray(payload.attachmentIds) ||
+            payload.attachmentId !== undefined))
+      )
+        throw new Error('Invalid attachments.');
       const msg = await this.chatService.createMessage(
         payload.chatId,
         userId,
         payload.content,
-        payload.attachmentId,
+        payload.attachmentIds ?? payload.attachmentId,
         payload.replyToId,
       );
       this.broadcast(msg);

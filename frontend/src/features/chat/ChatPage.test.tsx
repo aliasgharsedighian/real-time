@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -92,7 +93,7 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
   uploadFile: mocks.upload,
 }));
 vi.mock("@/features/uploads/Media", () => ({
-  useFileUrl: () => ({}),
+  useFileUrl: (id?: string) => ({ url: id ? `blob:${id}` : undefined }),
   LocalPreview: ({ file }: { file: File }) => <p>Preview: {file.name}</p>,
   Media: () => <p>Sent attachment</p>,
 }));
@@ -538,6 +539,172 @@ describe("chat attachments", () => {
     );
     expect(mocks.upload.mock.calls[0][1].type).toBe("audio/webm");
   });
+  it("previews, adds and removes photos before sending an ordered album with one caption", async () => {
+    mocks.upload
+      .mockResolvedValueOnce({ id: "first", kind: "IMAGE" })
+      .mockResolvedValueOnce({ id: "third", kind: "IMAGE" });
+    setup();
+    const picker = await screen.findByLabelText(
+      "Choose chat photo, video or audio",
+    );
+    const photo = (name: string) =>
+      new File(["image"], name, { type: "image/jpeg" });
+    fireEvent.change(picker, {
+      target: { files: [photo("one.jpg"), photo("two.jpg")] },
+    });
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("2 photos selected")).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Remove photo 2: two.jpg" }),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Choose more photos"), {
+      target: { files: [photo("three.jpg")] },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Caption"), {
+      target: { value: "Album caption" },
+    });
+    expect(mocks.upload).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith(
+        "Album caption",
+        ["first", "third"],
+        undefined,
+      ),
+    );
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.upload.mock.calls.map(([, file]) => file.name)).toEqual([
+      "one.jpg",
+      "three.jpg",
+    ]);
+  });
+
+  it("continues separate photo sends after a partial failure without resending a delivered photo", async () => {
+    mocks.upload
+      .mockResolvedValueOnce({ id: "one", kind: "IMAGE" })
+      .mockResolvedValueOnce({ id: "two", kind: "IMAGE" });
+    mocks.send
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Try sending again"));
+    setup();
+    const picker = await screen.findByLabelText(
+      "Choose chat photo, video or audio",
+    );
+    fireEvent.change(picker, {
+      target: {
+        files: ["one", "two"].map(
+          (name) => new File(["image"], `${name}.jpg`, { type: "image/jpeg" }),
+        ),
+      },
+    });
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Group photos in one message",
+      }),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Caption"), {
+      target: { value: "First photo caption" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText("Try sending again");
+    expect(screen.getByText("1 photo selected")).toBeTruthy();
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Send" }),
+    );
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(3));
+    expect(mocks.send.mock.calls).toEqual([
+      ["First photo caption", "one", undefined],
+      ["", "two", undefined],
+      ["", "two", undefined],
+    ]);
+    expect(mocks.upload).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels an active photo upload from the pending message and restores the selection", async () => {
+    mocks.upload.mockImplementationOnce(
+      (_path, _file, signal: AbortSignal, progress) =>
+        new Promise((_resolve, reject) => {
+          progress(35);
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    setup();
+    const picker = await screen.findByLabelText(
+      "Choose chat photo, video or audio",
+    );
+    fireEvent.change(picker, {
+      target: {
+        files: [new File(["image"], "photo.jpg", { type: "image/jpeg" })],
+      },
+    });
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Send" }),
+    );
+    expect(await screen.findByText("35%")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await screen.findByText("1 photo selected");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it("opens a single photo and opens an album at the selected photo with navigation and download", async () => {
+    const photo = (id: string) => ({
+      id,
+      kind: "IMAGE",
+      mimeType: "image/webp",
+      width: 120,
+      height: 250,
+      size: 100,
+    });
+    const message = (id: number, attachments: ReturnType<typeof photo>[]) => ({
+      id,
+      attachments,
+      chatId: 3,
+      senderId: 2,
+      content: "Caption",
+      createdAt: "2026-11-05T08:00:00Z",
+    });
+    mocks.history.mockResolvedValue({
+      messages: [
+        message(91, [photo("single")]),
+        message(92, [photo("first"), photo("second")]),
+      ],
+      users: [],
+      unreadIds: [],
+    });
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Open photo" }));
+    let gallery = screen.getByRole("dialog");
+    expect(
+      within(gallery)
+        .getByRole("link", { name: "Download photo" })
+        .getAttribute("href"),
+    ).toBe("blob:single");
+    fireEvent.click(
+      within(gallery).getByRole("button", { name: "Close gallery" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open photo 2" }));
+    gallery = screen.getByRole("dialog");
+    expect(within(gallery).getByText("Photo 2 of 2")).toBeTruthy();
+    fireEvent.click(
+      within(gallery).getByRole("button", { name: "Previous photo" }),
+    );
+    expect(
+      within(gallery)
+        .getByRole("link", { name: "Download photo" })
+        .getAttribute("download"),
+    ).toBe("batgram-first.webp");
+    fireEvent.keyDown(gallery, { key: "ArrowRight" });
+    expect(
+      within(gallery)
+        .getByRole("link", { name: "Download photo" })
+        .getAttribute("href"),
+    ).toBe("blob:second");
+  });
+
   it("uploads a video and sends an attachment without requiring a caption", async () => {
     setup();
     await select();
@@ -900,7 +1067,11 @@ describe("chat attachments", () => {
       createdAt: "2026-11-06T09:00:00Z",
     };
     const older = { ...latest, id: 30, content: "An older pin" };
-    mocks.history.mockResolvedValue({ messages: [latest], users: [], unreadIds: [] });
+    mocks.history.mockResolvedValue({
+      messages: [latest],
+      users: [],
+      unreadIds: [],
+    });
     mocks.pins.mockResolvedValue([older]);
     mocks.setPin.mockImplementation(async (_chatId, _messageId, pinned) => {
       mocks.pins.mockResolvedValue(pinned ? [latest, older] : [older]);
@@ -913,17 +1084,27 @@ describe("chat attachments", () => {
     setup();
     fireEvent.contextMenu(await screen.findByText(latest.content));
     fireEvent.click(screen.getByRole("menuitem", { name: "Pin message" }));
-    await screen.findByRole("button", { name: /Pinned message Pin this message/ });
+    await screen.findByRole("button", {
+      name: /Pinned message Pin this message/,
+    });
     expect(mocks.setPin).toHaveBeenCalledWith(3, 73, true);
-    fireEvent.contextMenu(document.querySelector('[data-message-id="73"] .message-bubble')!);
+    fireEvent.contextMenu(
+      document.querySelector('[data-message-id="73"] .message-bubble')!,
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Unpin message" }));
     await screen.findByRole("button", { name: /Pinned message An older pin/ });
     expect(mocks.setPin).toHaveBeenCalledWith(3, 73, false);
-    fireEvent.click(screen.getByRole("button", { name: "View all pinned messages" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "View all pinned messages" }),
+    );
     await screen.findByRole("heading", { name: "1 pinned message" });
-    fireEvent.click(screen.getByRole("button", { name: /An older pin.*Go to message/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /An older pin.*Go to message/ }),
+    );
     await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: "1 pinned message" })).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: "1 pinned message" }),
+      ).toBeNull();
       expect(document.querySelector('[data-message-id="30"]')).toBeTruthy();
     });
     expect(mocks.window.mock.calls[0][1]).toEqual({ aroundId: 30 });

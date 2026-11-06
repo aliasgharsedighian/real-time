@@ -142,24 +142,20 @@ describe('media with real PostgreSQL, HTTP, JWT and Socket.IO', () => {
     const delivery = new Promise<any>((resolve) =>
       receiver.once('message:new', resolve),
     );
-    const message = await sender
-      .timeout(5000)
-      .emitWithAck('message:send', {
-        chatId,
-        senderId: userIds[2],
-        content: '',
-        attachmentId: media.id,
-      });
+    const message = await sender.timeout(5000).emitWithAck('message:send', {
+      chatId,
+      senderId: userIds[2],
+      content: '',
+      attachmentId: media.id,
+    });
     expect(message.senderId).toBe(userIds[0]);
     expect(message.attachments[0].id).toBe(media.id);
     expect((await delivery).id).toBe(message.id);
-    const duplicate = await sender
-      .timeout(5000)
-      .emitWithAck('message:send', {
-        chatId,
-        content: '',
-        attachmentId: media.id,
-      });
+    const duplicate = await sender.timeout(5000).emitWithAck('message:send', {
+      chatId,
+      content: '',
+      attachmentId: media.id,
+    });
     expect(duplicate.id).toBeUndefined();
     expect(await prisma.message.count({ where: { chatId } })).toBe(1);
     await http(1)
@@ -253,5 +249,57 @@ describe('media with real PostgreSQL, HTTP, JWT and Socket.IO', () => {
         contentType: 'video/mp4',
       });
     expect(badUpload.status).toBe(400);
+  });
+  it('sends a photo album atomically and keeps its order in the live message and history', async () => {
+    const sender = await socket(0);
+    const receiver = await socket(1);
+    await sender.timeout(5000).emitWithAck('chat:join', { chatId });
+    await receiver.timeout(5000).emitWithAck('chat:join', { chatId });
+    const first = (
+      await http()
+        .post(`/api/v1/files/chats/${chatId}`)
+        .attach('file', image, 'first.jpg')
+        .expect(201)
+    ).body;
+    const second = (
+      await http()
+        .post(`/api/v1/files/chats/${chatId}`)
+        .attach('file', image, 'second.jpg')
+        .expect(201)
+    ).body;
+    const count = await prisma.message.count({ where: { chatId } });
+    const send = (attachmentIds: string[]) =>
+      sender.timeout(5000).emitWithAck('message:send', {
+        chatId,
+        content: 'Album caption',
+        attachmentIds,
+      });
+    const failed = await send([
+      first.id,
+      '12345678-1234-1234-1234-123456789abc',
+    ]);
+    expect(failed.id).toBeUndefined();
+    expect(await prisma.message.count({ where: { chatId } })).toBe(count);
+    expect(
+      await prisma.uploadFile.findUnique({ where: { id: first.id } }),
+    ).toMatchObject({ messageId: null });
+    expect((await send([first.id, first.id])).id).toBeUndefined();
+    const delivered = new Promise<any>((resolve) =>
+      receiver.once('message:new', resolve),
+    );
+    const attachmentIds = [second.id, first.id];
+    const message = await send(attachmentIds);
+    expect(message.attachments.map(({ id }) => id)).toEqual(attachmentIds);
+    expect((await delivered).attachments.map(({ id }) => id)).toEqual(
+      attachmentIds,
+    );
+    const history = await http(1)
+      .get(`/api/v1/realtime/polling/${chatId}`)
+      .expect(200);
+    expect(JSON.stringify(history.body)).toContain(
+      JSON.stringify(message.attachments),
+    );
+    await http(1).get(`/api/v1/files/${first.id}/content`).expect(200);
+    await http(2).get(`/api/v1/files/${second.id}/content`).expect(403);
   });
 });

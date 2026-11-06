@@ -88,7 +88,10 @@ export class MessageActionsService {
       return { users, changed };
     });
     if (changed) this.gateway.pinsChanged(chatId, users);
-    return { data: null, message: pinned ? 'Message pinned' : 'Message unpinned' };
+    return {
+      data: null,
+      message: pinned ? 'Message pinned' : 'Message unpinned',
+    };
   }
 
   async setReaction(
@@ -310,6 +313,7 @@ export class MessageActionsService {
                   width: file.width,
                   height: file.height,
                   duration: file.duration,
+                  position: file.position,
                   ownerId: userId,
                   chatId: targetChatId,
                   messageId: forwarded.id,

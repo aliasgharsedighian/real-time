@@ -1,5 +1,5 @@
 import { messageRelations } from './message-include';
-import { fileSelect } from '../files-upload/upload.policy';
+import { messageAttachments } from '../files-upload/upload.policy';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
 import { PaginatedQueryRequestDto } from './polling.request.dto';
@@ -25,7 +25,7 @@ export class PrsimaPollingRepository {
       take: limit,
       include: {
         ...messageRelations,
-        attachments: { select: fileSelect },
+        attachments: messageAttachments,
         sender: {
           select: {
             id: true,
@@ -80,7 +80,7 @@ export class PrsimaPollingRepository {
       where: { ...unreadWhere, id: { in: chat.map((message) => message.id) } },
       include: {
         ...messageRelations,
-        attachments: { select: fileSelect },
+        attachments: messageAttachments,
         sender: {
           select: {
             id: true,

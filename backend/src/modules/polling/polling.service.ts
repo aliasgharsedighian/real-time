@@ -1,6 +1,11 @@
 import { ChatService } from '../../gateway/chat/chat.service';
 import { ChatGateway } from '../../gateway/chat/gateway';
-import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import {
   PaginatedQueryRequestDto,
   SendMessageRequestDto,
@@ -56,11 +61,13 @@ export class GetMessagesService {
 
   async sendMessage(senderUserId: number, dto: SendMessageRequestDto) {
     await this.ensureParticipant(dto.chatId, senderUserId);
+    if (dto.attachmentIds && dto.attachmentId)
+      throw new BadRequestException('Invalid attachments.');
     const message = await this.chats.createMessage(
       dto.chatId,
       senderUserId,
       dto.content,
-      dto.attachmentId,
+      dto.attachmentIds ?? dto.attachmentId,
       dto.replyToId,
     );
     this.gateway.broadcast(message);

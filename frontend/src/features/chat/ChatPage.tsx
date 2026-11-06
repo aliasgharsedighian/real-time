@@ -28,6 +28,12 @@ import {
 import { getSocket } from "./socket";
 import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
 import { Media, LocalPreview } from "@/features/uploads/Media";
+import { MessagePhotos, PhotoGallery } from "@/features/uploads/PhotoGallery";
+import {
+  maxAlbumPhotos,
+  PhotoPreview,
+  UploadingMedia,
+} from "./components/PhotoPreview";
 import {
   discardFile,
   uploadFile,
@@ -59,7 +65,10 @@ import { useComposerGestures } from "./hooks/use-composer-gestures";
 import { useMessageScroll } from "./hooks/use-message-scroll";
 import { useMessageSearch } from "./message-search-context";
 import { MessageSearchPanel } from "./components/MessageSearchPanel";
-import { PinnedMessageBar, PinnedMessagesView } from "./components/PinnedMessages";
+import {
+  PinnedMessageBar,
+  PinnedMessagesView,
+} from "./components/PinnedMessages";
 import {
   ChatDateNavigation,
   DaySeparator,
@@ -69,6 +78,8 @@ import { useChatRoom } from "./hooks/use-chat-room";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { useVoiceRecorder } from "./hooks/use-voice-recorder";
 const EmojiPicker = lazy(() => import("./components/ChatEmojiPicker"));
+
+type SelectedPhoto = { key: number; file: File; uploaded?: MediaFile };
 
 export default function ChatPage() {
   const { chatId } = useParams();
@@ -171,7 +182,19 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [file, setFile] = useState<File>();
   const [uploaded, setUploaded] = useState<MediaFile>();
   const [progress, setProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<{ file: File; caption: string }>();
+  const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
+  const [photoPreview, setPhotoPreview] = useState(false);
+  const [photoCaption, setPhotoCaption] = useState("");
+  const [groupPhotos, setGroupPhotos] = useState(true);
+  const [photoError, setPhotoError] = useState("");
+  const photoKey = useRef(0);
+  const sourceDraft = useRef("");
+  const [gallery, setGallery] = useState<{
+    photos: MediaFile[];
+    index: number;
+    trigger: HTMLButtonElement;
+  }>();
   const [sendError, setSendError] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
   const mountComposer = useCallback((element: HTMLTextAreaElement | null) => {
@@ -306,6 +329,140 @@ function ChatRoom({ chatId }: { chatId: number }) {
     }
   }
 
+  function addPhotos(files: File[]) {
+    if (!policy.data) return;
+    try {
+      if (photos.length + files.length > maxAlbumPhotos)
+        throw new Error(`Choose up to ${maxAlbumPhotos} photos at a time.`);
+      for (const photo of files) {
+        validateUpload(photo, policy.data);
+        if (!policy.data.imageMimeTypes.includes(photo.type))
+          throw new Error(
+            "Choose only photos for an album, or attach one video or audio file.",
+          );
+      }
+      const added = files.map((file) => ({ file, key: photoKey.current++ }));
+      setPhotos((current) => [...current, ...added]);
+      setPhotoError("");
+      setSendError("");
+      if (!photos.length) {
+        sourceDraft.current = input;
+        setPhotoCaption(input);
+        setGroupPhotos(true);
+        setPhotoPreview(true);
+      }
+    } catch (error) {
+      (photoPreview ? setPhotoError : setSendError)(errorMessage(error));
+    }
+  }
+
+  function removePhoto(photo: SelectedPhoto) {
+    if (photo.uploaded) void discardFile(photo.uploaded.id).catch(() => {});
+    setPhotos((current) => current.filter((item) => item.key !== photo.key));
+    setPhotoError("");
+    if (photos.length === 1) setPhotoPreview(false);
+  }
+
+  function closePhotoPreview() {
+    for (const photo of photos)
+      if (photo.uploaded) void discardFile(photo.uploaded.id).catch(() => {});
+    setPhotoPreview(false);
+    setPhotos([]);
+  }
+
+  async function uploadAttachment(
+    file: File,
+    caption: string,
+    signal: AbortSignal,
+  ) {
+    if (!policy.data)
+      throw new Error("Upload settings are unavailable. Please try again.");
+    validateUpload(file, policy.data);
+    setUploading({ file, caption });
+    setProgress(0);
+    try {
+      const uploaded = await uploadFile<MediaFile>(
+        `files/chats/${chatId}`,
+        file,
+        signal,
+        setProgress,
+      );
+      signal.throwIfAborted();
+      return uploaded;
+    } finally {
+      setUploading(undefined);
+    }
+  }
+
+  function showSentMessage() {
+    if (history.data?.window) {
+      setFocusedMessage(undefined);
+      void history.returnToLatest();
+    }
+    scrollToBottom();
+  }
+
+  async function sendPhotos() {
+    if (!photos.length || pending || !room.connected) return;
+    const request = new AbortController();
+    uploadController.current = request;
+    setPending(true);
+    setPhotoPreview(false);
+    setPhotoError("");
+    setSendError("");
+    const ids: string[] = [];
+    let caption = photoCaption;
+    let replyId = reply?.id;
+    let remaining = photos.length;
+    const draft = sourceDraft.current;
+    const clearSentCaption = () => {
+      setInput((current) => (current === draft ? "" : current));
+      setPhotoCaption("");
+      if (reply)
+        setReply((current) => (current?.id === reply.id ? undefined : current));
+    };
+    try {
+      scrollToBottom();
+      for (const photo of photos) {
+        request.signal.throwIfAborted();
+        const uploaded =
+          photo.uploaded ??
+          (await uploadAttachment(photo.file, caption, request.signal));
+        setPhotos((current) =>
+          current.map((item) =>
+            item.key === photo.key ? { ...item, uploaded } : item,
+          ),
+        );
+        if (groupPhotos) {
+          ids.push(uploaded.id);
+        } else {
+          await room.send(caption, uploaded.id, replyId);
+          if (remaining === photos.length) clearSentCaption();
+          remaining--;
+          setPhotos((current) =>
+            current.filter((item) => item.key !== photo.key),
+          );
+          caption = "";
+          replyId = undefined;
+        }
+      }
+      if (groupPhotos) {
+        request.signal.throwIfAborted();
+        await room.send(caption, ids.length === 1 ? ids[0] : ids, replyId);
+        remaining = 0;
+        setPhotos([]);
+        clearSentCaption();
+      }
+    } catch (error) {
+      if (!request.signal.aborted) setPhotoError(errorMessage(error));
+    } finally {
+      if (remaining < photos.length && !request.signal.aborted)
+        showSentMessage();
+      setPending(false);
+      if (remaining) setPhotoPreview(true);
+    }
+  }
+
   async function submit() {
     if (
       (!input.trim() && !file && !uploaded && !editing?.attachments?.length) ||
@@ -345,37 +502,18 @@ function ChatRoom({ chatId }: { chatId: number }) {
       const request = new AbortController();
       uploadController.current = request;
       if (file && !attachment) {
-        if (!policy.data)
-          throw new Error("Upload settings are unavailable. Please try again.");
-        validateUpload(file, policy.data);
-        setUploading(true);
-        setProgress(0);
-        try {
-          attachment = await uploadFile<MediaFile>(
-            `files/chats/${chatId}`,
-            file,
-            request.signal,
-            setProgress,
-          );
-          if (request.signal.aborted) return;
-          setUploaded(attachment);
-        } finally {
-          setUploading(false);
-        }
+        scrollToBottom();
+        attachment = await uploadAttachment(file, text, request.signal);
+        setUploaded(attachment);
       }
       if (request.signal.aborted) return;
       if (reply) await room.send(text, attachment?.id, reply.id);
       else await room.send(text, attachment?.id);
       setReply(undefined);
-      if (history.data?.window) {
-        setFocusedMessage(undefined);
-        void history.returnToLatest();
-      }
       setFile(undefined);
       setUploaded(undefined);
       setInput((current) => (current === text ? "" : current));
-      nearBottom.current = true;
-      bottom.current?.scrollIntoView?.({ behavior: "smooth" });
+      showSentMessage();
     } catch (error) {
       if (!uploadController.current?.signal.aborted)
         setSendError(errorMessage(error));
@@ -572,6 +710,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
                     </Fragment>
                   );
                 const own = message.senderId === user?.id;
+                const photos =
+                  message.attachments?.filter(
+                    (file) => file.kind === "IMAGE",
+                  ) ?? [];
                 const ownReaction = message.reactions?.find(
                   (reaction) => reaction.userId === user?.id,
                 )?.emoji;
@@ -668,7 +810,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               ownReaction={ownReaction}
                             >
                               <div
-                                className={`message-bubble flex flex-col gap-2 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "message-own" : "message-incoming"}`}
+                                className={`message-bubble flex flex-col gap-2 rounded-2xl text-sm leading-6 shadow-sm ${photos.length ? "px-1 py-1 [&>*:not([data-photo-grid])]:mx-2" : "px-4 py-3"} ${own ? "message-own" : "message-incoming"}`}
                               >
                                 {message.forwarded && (
                                   <span className="flex items-center gap-1 text-xs text-brand">
@@ -709,18 +851,28 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                     </span>
                                   </button>
                                 )}
-                                {message.attachments?.map((attachment) => (
-                                  <Media
-                                    key={attachment.id}
-                                    file={attachment}
-                                  />
-                                ))}
-                                <span
-                                  className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                                  dir="auto"
-                                >
-                                  {message.content}
-                                </span>
+                                <MessagePhotos
+                                  photos={photos}
+                                  open={(index, trigger) =>
+                                    setGallery({ photos, index, trigger })
+                                  }
+                                />
+                                {message.attachments
+                                  ?.filter((file) => file.kind !== "IMAGE")
+                                  .map((attachment) => (
+                                    <Media
+                                      key={attachment.id}
+                                      file={attachment}
+                                    />
+                                  ))}
+                                {!!message.content && (
+                                  <span
+                                    className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                                    dir="auto"
+                                  >
+                                    {message.content}
+                                  </span>
+                                )}
                                 <div className="flex items-end gap-2">
                                   <ReactionChips
                                     reactions={message.reactions}
@@ -763,6 +915,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   </Button>
                 </div>
               ) : null}
+              {uploading && (
+                <UploadingMedia
+                  file={uploading.file}
+                  caption={uploading.caption}
+                  progress={progress}
+                  cancel={() => uploadController.current?.abort()}
+                />
+              )}
               <div ref={bottom} />
             </div>
           </div>
@@ -830,7 +990,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               </Button>
             </div>
           )}
-          {(file || uploaded) && (
+          {(file || uploaded) && !uploading && (
             <div className="mb-3 flex items-start gap-3 rounded-xl border border-border p-3">
               <div className="min-w-0 flex-1">
                 {file ? (
@@ -863,31 +1023,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
               </Button>
             </div>
           )}
-          {uploading && (
-            <div role="status" className="mb-2 text-sm">
-              <progress
-                value={progress}
-                max={100}
-                aria-label="Upload progress"
-                className="w-full"
-              />
-              <p>
-                {progress < 100
-                  ? `Uploading… ${progress}%`
-                  : "Processing attachment…"}
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => uploadController.current?.abort()}
-              >
-                Cancel upload
-              </Button>
-            </div>
-          )}
           <input
             ref={picker}
             type="file"
+            multiple
             className="sr-only"
             aria-label="Choose chat photo, video or audio"
             disabled={pending || voice.active || !!editing || !policy.data}
@@ -901,9 +1040,17 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 : ""
             }
             onChange={(event) => {
-              const chosen = event.target.files?.[0];
-              event.target.value = "";
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              const chosen = files[0];
               if (!chosen || !policy.data) return;
+              if (
+                files.length > 1 ||
+                policy.data.imageMimeTypes.includes(chosen.type)
+              ) {
+                addPhotos(files);
+                return;
+              }
               try {
                 validateUpload(chosen, policy.data);
                 if (uploaded) void discardFile(uploaded.id).catch(() => {});
@@ -1110,6 +1257,33 @@ function ChatRoom({ chatId }: { chatId: number }) {
           )}
         </form>
       </section>
+      {photoPreview && photos.length > 0 && (
+        <PhotoPreview
+          photos={photos}
+          mimeTypes={policy.data?.imageMimeTypes ?? []}
+          grouped={groupPhotos}
+          caption={photoCaption}
+          error={photoError}
+          connected={room.connected}
+          onGroup={setGroupPhotos}
+          onCaption={setPhotoCaption}
+          onAdd={addPhotos}
+          onRemove={(key) => {
+            const photo = photos.find((item) => item.key === key);
+            if (photo) removePhoto(photo);
+          }}
+          onClose={closePhotoPreview}
+          onSend={() => void sendPhotos()}
+        />
+      )}
+      {gallery && (
+        <PhotoGallery
+          photos={gallery.photos}
+          initialIndex={gallery.index}
+          trigger={gallery.trigger}
+          onClose={() => setGallery(undefined)}
+        />
+      )}
       <ConfirmDelete
         open={deleting.length > 0}
         onClose={() => setDeleting([])}

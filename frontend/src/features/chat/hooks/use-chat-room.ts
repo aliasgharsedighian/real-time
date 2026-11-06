@@ -182,7 +182,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
 
   async function send(
     content: string,
-    attachmentId?: string,
+    attachment?: string | string[],
     replyToId?: number,
   ) {
     const socket = getSocket();
@@ -195,7 +195,11 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         senderId: userId,
         content,
         ...(replyToId ? { replyToId } : {}),
-        ...(attachmentId ? { attachmentId } : {}),
+        ...(Array.isArray(attachment)
+          ? { attachmentIds: attachment }
+          : attachment
+            ? { attachmentId: attachment }
+            : {}),
       });
     } catch {
       throw new Error(

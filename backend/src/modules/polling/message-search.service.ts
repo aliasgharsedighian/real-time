@@ -9,7 +9,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/libs/db/prisma/prisma.service';
 import { ChatService } from '../../gateway/chat/chat.service';
-import { fileSelect } from '../files-upload/upload.policy';
+import { messageAttachments } from '../files-upload/upload.policy';
 import {
   MessageDaysDto,
   MessageWindowDto,
@@ -62,7 +62,7 @@ export class MessageSearchService {
             take: 21,
             include: {
               ...messageRelations,
-              attachments: { select: fileSelect },
+              attachments: messageAttachments,
               sender: { select: { id: true, email: true, profile: true } },
             },
           })
@@ -186,7 +186,7 @@ export class MessageSearchService {
       throw new NotFoundException('Message not found in this conversation.');
     const include = {
       ...messageRelations,
-      attachments: { select: fileSelect },
+      attachments: messageAttachments,
       sender: { select: { id: true, email: true, profile: true } },
       readStatuses: { where: { userId: { not: userId } } },
     };

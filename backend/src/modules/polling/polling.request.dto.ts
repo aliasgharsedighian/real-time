@@ -1,3 +1,4 @@
+import { maxAlbumPhotos } from '../files-upload/upload.policy';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -23,6 +24,13 @@ export class SendMessageRequestDto {
   @IsOptional()
   @IsUUID()
   readonly attachmentId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(maxAlbumPhotos)
+  @IsUUID(undefined, { each: true })
+  readonly attachmentIds?: string[];
 
   @IsOptional()
   @IsInt()

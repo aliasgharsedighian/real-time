@@ -1,4 +1,4 @@
-import { fileSelect } from '../files-upload/upload.policy';
+import { messageAttachments } from '../files-upload/upload.policy';
 export const reactionSelect = { userId: true, emoji: true } as const;
 export const messageRelations = {
   reactions: { select: reactionSelect, orderBy: { userId: 'asc' } },
@@ -6,13 +6,13 @@ export const messageRelations = {
   replyTo: {
     include: {
       sender: { select: { id: true, email: true, profile: true } },
-      attachments: { select: fileSelect },
+      attachments: messageAttachments,
     },
   },
 } as const;
 export const messageInclude = {
   ...messageRelations,
   sender: { select: { id: true, email: true, profile: true } },
-  attachments: { select: fileSelect },
+  attachments: messageAttachments,
   readStatuses: true,
 } as const;

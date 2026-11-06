@@ -187,6 +187,7 @@ model UploadFile {
   chatId Int?
   chat Chat? @relation(fields: [chatId], references: [id])
   messageId Int?
+  position Int @default(0)
   message Message? @relation(fields: [messageId], references: [id])
   avatar Profile? @relation("Avatar")
   groupAvatar Chat? @relation("GroupAvatar")
