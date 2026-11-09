@@ -52,6 +52,35 @@ function mount() {
 }
 
 describe("chat room events", () => {
+  it("updates the room and inbox totals once per confirmed read, including with unloaded unread messages", () => {
+    const { cache, key } = mount();
+    const inbox = chatKeys.list("refresh");
+    cache.setQueryData(inbox, [{ id: 7, _count: { messages: 19 } }]);
+    cache.setQueryData<History>(key, {
+      messages: [],
+      users: [],
+      unreadIds: [8, 9],
+      unreadCount: 19,
+    });
+    const receipt = (messageId: number, userId: number) =>
+      act(() =>
+        fake.handlers.get("message:read")!(
+          { messageId, userId, readAt: "2026-11-04T10:00:00Z" } as never,
+        ),
+      );
+    receipt(8, 2);
+    expect(cache.getQueryData<History>(key)?.unreadIds).toEqual([8, 9]);
+    receipt(8, 1);
+    receipt(8, 1);
+    expect(cache.getQueryData<History>(key)?.unreadIds).toEqual([9]);
+    receipt(9, 1);
+    expect(cache.getQueryData<History>(key)?.unreadIds).toEqual([]);
+    expect(cache.getQueryData<History>(key)?.unreadCount).toBe(17);
+    expect(cache.getQueryData(inbox)).toEqual([
+      { id: 7, _count: { messages: 17 } },
+    ]);
+  });
+
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();

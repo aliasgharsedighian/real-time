@@ -95,8 +95,8 @@ export default function ChatPage() {
 
 function ChatRoom({ chatId }: { chatId: number }) {
   const { user } = useSession();
-  const history = useChatHistory(chatId);
-  const room = useChatRoom(chatId, history.isSuccess);
+  const history = useChatHistory(chatId, user?.id);
+  const room = useChatRoom(chatId, history.isSuccess && !history.opening);
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
@@ -232,7 +232,19 @@ function ChatRoom({ chatId }: { chatId: number }) {
     [],
   );
   const [pending, setPending] = useState(false);
-  const messages = history.data?.messages;
+  const messages = history.opening ? undefined : history.data?.messages;
+  const [unreadBoundary, setUnreadBoundary] = useState<{ id?: number }>();
+  // Capture the divider once for this room visit, independently of live receipts.
+  if (messages && !unreadBoundary) {
+    setUnreadBoundary({
+      id: messages.find((message) =>
+        history.data?.unreadIds.includes(message.id),
+      )?.id,
+    });
+  }
+  const firstUnread = unreadBoundary?.id;
+  const unreadCount =
+    history.data?.unreadCount ?? history.data?.unreadIds.length ?? 0;
   const search = useMessageSearch();
   const [focusedMessage, setFocusedMessage] = useState<{
     id: number;
@@ -264,6 +276,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
       !history.navigating,
     loadOlder: history.loadOlder,
     focusMessage: focusedMessage,
+    firstUnread,
   });
   const composerGestures = useComposerGestures(textarea, () => {
     nearBottom.current = false;
@@ -308,11 +321,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
     element.style.height = "0px";
     element.style.height = `${Math.min(element.scrollHeight, 144)}px`;
   }, [input, history.isPending]);
-  const firstUnread = messages?.find(
-    (message) =>
-      message.senderId !== user?.id &&
-      history.data?.unreadIds.includes(message.id),
-  )?.id;
   useEffect(() => {
     const key = `beam-draft:${user?.id}:${chatId}`;
     if (editing) return;
@@ -590,7 +598,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
       setPending(false);
     }
   }
-  if (history.isPending) return <BrandLoading message="Loading messages…" />;
+  if (history.isPending || history.opening)
+    return <BrandLoading message="Loading messages…" />;
   if (history.isError && !history.data)
     return (
       <div className="space-y-4 p-6 text-center">
@@ -794,6 +803,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 return (
                   <Fragment key={message.id}>
                     {separator}
+                    {message.id === firstUnread && (
+                      <p
+                        data-unread-for={message.id}
+                        className="my-4 border-t pt-2 text-center text-xs text-muted-foreground"
+                      >
+                        Unread messages
+                      </p>
+                    )}
                     <div
                       data-message-id={message.id}
                       data-message-day={day}
@@ -803,11 +820,6 @@ function ChatRoom({ chatId }: { chatId: number }) {
                           : undefined
                       }
                     >
-                      {message.id === firstUnread && (
-                        <p className="my-4 border-t pt-2 text-center text-xs text-muted-foreground">
-                          Unread messages
-                        </p>
-                      )}
                       <div
                         className={`mb-4 flex ${selected.length ? "pl-8" : ""} ${own ? "justify-end" : "justify-start"}`}
                       >
@@ -1002,12 +1014,15 @@ function ChatRoom({ chatId }: { chatId: number }) {
               <div ref={bottom} />
             </div>
           </div>
-          {(!atBottom || !!history.data?.window?.afterId) && (
+          {(!atBottom || !!history.data?.window?.afterId || unreadCount > 0) && (
             <Button
               type="button"
               variant="secondary"
               size="icon"
               aria-label="Go to latest messages"
+              aria-description={
+                unreadCount > 0 ? `${unreadCount} unread messages` : undefined
+              }
               title="Go to latest messages"
               className="absolute right-4 bottom-4 z-10 size-12 animate-in rounded-full border border-border bg-card text-brand shadow-lg fade-in zoom-in-90 duration-150 motion-reduce:animate-none sm:right-6"
               disabled={history.navigating}
@@ -1021,6 +1036,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
               }}
             >
               <ChevronDown className="size-6" />
+              {unreadCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-2 left-1/2 min-w-6 -translate-x-1/2 rounded-full border border-card bg-primary px-1.5 py-0.5 text-xs font-bold leading-4 text-primary-foreground tabular-nums"
+                >
+                  {unreadCount}
+                </span>
+              )}
             </Button>
           )}
         </div>

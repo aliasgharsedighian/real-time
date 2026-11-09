@@ -57,6 +57,7 @@ export function normalizeHistory(data: HistoryResponse): History {
     messages: mergeMessages(data.chats ?? [], data.unreadMessages ?? []),
     users: data.users ?? [],
     unreadIds: (data.unreadMessages ?? []).map((message) => message.id),
+    unreadCount: data.unreadCount,
   };
 }
 
@@ -85,6 +86,7 @@ export function removeMessagesFromHistory(
   ids: number[],
 ): History {
   const removed = new Set(ids);
+  const unreadIds = history.unreadIds.filter((id) => !removed.has(id));
   const before =
     history.olderCursor ??
     (history.nextPage ? history.messages[0]?.id : undefined);
@@ -99,7 +101,12 @@ export function removeMessagesFromHistory(
           ? { ...message, replyToId: null, replyTo: null }
           : message,
       ),
-    unreadIds: history.unreadIds.filter((id) => !removed.has(id)),
+    unreadIds,
+    unreadCount: Math.max(
+      0,
+      (history.unreadCount ?? history.unreadIds.length) -
+        (history.unreadIds.length - unreadIds.length),
+    ),
   };
 }
 

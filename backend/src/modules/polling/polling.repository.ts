@@ -76,6 +76,14 @@ export class PrsimaPollingRepository {
       ],
     };
     const unreadCount = await this.prisma.message.count({ where: unreadWhere });
+    const firstUnread =
+      +page === 1 && unreadCount
+        ? await this.prisma.message.findFirst({
+            where: unreadWhere,
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { id: true },
+          })
+        : null;
     const unreadMessages = await this.prisma.message.findMany({
       where: { ...unreadWhere, id: { in: chat.map((message) => message.id) } },
       include: {
@@ -103,6 +111,7 @@ export class PrsimaPollingRepository {
 
     return {
       unreadCount,
+      firstUnreadId: firstUnread?.id ?? null,
       users: users?.participants.filter((p) => p.userId !== userId),
       chat: users,
       chats: chat.reverse(),

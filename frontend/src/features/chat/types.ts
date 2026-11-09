@@ -79,19 +79,22 @@ export interface HistoryResponse {
   chats: Message[];
   unreadMessages: Message[];
   unreadCount: number;
+  firstUnreadId?: number | null;
   users: Participant[];
 }
 export interface History {
-  window?: Omit<MessageWindow, "messages"> & { focusId: number };
+  window?: Pick<MessageWindow, "beforeId" | "afterId"> & { focusId: number };
   nextPage?: number | null;
   olderCursor?: number | null;
   chat?: ChatDetails;
   messages: Message[];
   users: Participant[];
   unreadIds: number[];
+  unreadCount?: number;
 }
 export interface MessageWindow {
   messages: Message[];
+  unreadIds?: number[];
   beforeId: number | null;
   afterId: number | null;
 }

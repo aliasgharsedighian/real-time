@@ -188,7 +188,7 @@ export class MessageSearchService {
       ...messageRelations,
       attachments: messageAttachments,
       sender: { select: { id: true, email: true, profile: true } },
-      readStatuses: { where: { userId: { not: userId } } },
+      readStatuses: true,
     };
     const [before, after] = await Promise.all([
       query.afterId
@@ -232,6 +232,16 @@ export class MessageSearchService {
       message: 'Message context loaded',
       data: {
         messages,
+        unreadIds: messages
+          .filter(
+            (message) =>
+              message.kind === 'TEXT' &&
+              message.senderId !== userId &&
+              !message.readStatuses.some(
+                (receipt) => receipt.userId === userId,
+              ),
+          )
+          .map((message) => message.id),
         beforeId: older ? firstId : null,
         afterId: newer ? lastId : null,
       },

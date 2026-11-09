@@ -67,6 +67,7 @@ export async function getHistory(
   const response = unwrap(data);
   return {
     ...normalizeHistory(response),
+    ...(response.firstUnreadId ? { firstUnreadId: response.firstUnreadId } : {}),
     nextPage: response.chats.length === HISTORY_PAGE_SIZE ? page + 1 : null,
   };
 }

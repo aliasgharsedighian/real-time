@@ -5,6 +5,41 @@ import { useMessageScroll } from "./use-message-scroll";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("starts at the unread separator and only uses it for the initial position", () => {
+  const items = messages(2, 3);
+  const { result, rerender } = renderHook(
+    ({ firstUnread }) =>
+      useMessageScroll({
+        messages: items,
+        loadingOlder: false,
+        canLoadOlder: false,
+        loadOlder: async () => {},
+        firstUnread,
+      }),
+    { initialProps: { firstUnread: undefined as number | undefined } },
+  );
+  const element = document.createElement("div");
+  Object.defineProperties(element, {
+    clientHeight: { value: 300 },
+    scrollHeight: { value: 1000 },
+  });
+  for (const [id, offset] of [[2, 340], [3, 580]]) {
+    const separator = document.createElement("p");
+    separator.dataset.unreadFor = String(id);
+    vi.spyOn(separator, "getBoundingClientRect").mockImplementation(
+      () => ({ top: offset - element.scrollTop }) as DOMRect,
+    );
+    element.append(separator);
+  }
+  result.current.container.current = element;
+  rerender({ firstUnread: 2 });
+  expect(element.scrollTop).toBe(328);
+  rerender({ firstUnread: 3 });
+  expect(element.scrollTop).toBe(328);
+  rerender({ firstUnread: undefined });
+  expect(element.scrollTop).toBe(328);
+});
+
 it("shows the date only for scrolling and hides it after scrolling stops", () => {
   vi.useFakeTimers();
   try {

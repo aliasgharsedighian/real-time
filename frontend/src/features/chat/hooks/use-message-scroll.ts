@@ -13,12 +13,14 @@ export function useMessageScroll({
   canLoadOlder,
   loadOlder,
   focusMessage,
+  firstUnread,
 }: {
   messages?: Message[];
   loadingOlder: boolean;
   canLoadOlder: boolean;
   loadOlder: () => Promise<void>;
   focusMessage?: { id: number; requestId: number; align?: "start" | "center" };
+  firstUnread?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -100,9 +102,21 @@ export function useMessageScroll({
     const element = container.current;
     // Suspense/hidden layouts can attach refs before the viewport has a size.
     if (!element || element.clientHeight <= 0) return;
-    if (!initialized.current || nearBottom.current) {
-      element.scrollTop = element.scrollHeight;
+    if (!initialized.current) {
+      const unread =
+        firstUnread === undefined
+          ? null
+          : element.querySelector(`[data-unread-for="${firstUnread}"]`);
+      nearBottom.current = !unread;
+      element.scrollTop = unread
+        ? element.scrollTop +
+          unread.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          12
+        : element.scrollHeight;
       initialized.current = true;
+    } else if (nearBottom.current) {
+      element.scrollTop = element.scrollHeight;
     } else if (anchor.current) {
       // Anchor the actual visible row, so prepends and the loading row cannot jump the viewport.
       const row = element.querySelector<HTMLElement>(
@@ -115,7 +129,7 @@ export function useMessageScroll({
           anchor.current.offset;
     }
     rememberPosition();
-  }, [rememberPosition]);
+  }, [firstUnread, rememberPosition]);
 
   useLayoutEffect(() => {
     const element = container.current;

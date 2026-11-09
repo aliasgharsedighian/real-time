@@ -24,10 +24,9 @@ const message = (id: number): Message => ({
 function page(ids: number[], nextPage: number | null) {
   return { messages: ids.map(message), unreadIds: ids, users: [], nextPage };
 }
-function mount() {
-  const cache = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+function mount(
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={cache}>{children}</QueryClientProvider>
   );
@@ -47,6 +46,43 @@ beforeEach(() => {
     .setTokens({ accessToken: "access", refreshToken: "refresh" });
 });
 describe("incremental chat history", () => {
+  it("opens directly around the oldest unread message outside the latest page", async () => {
+    get.mockResolvedValue({ ...page([99, 100], 2), firstUnreadId: 30 });
+    getWindow.mockResolvedValueOnce({
+      messages: [message(29), message(30), message(31)],
+      unreadIds: [30, 31],
+      beforeId: 29,
+      afterId: 31,
+    });
+    const { result } = mount();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getWindow).toHaveBeenCalledWith(
+      7,
+      { aroundId: 30 },
+      expect.any(AbortSignal),
+    );
+    expect(result.current.data?.unreadIds).toEqual([30, 31]);
+    expect(result.current.data?.window?.afterId).toBe(31);
+  });
+
+  it("rechecks unread messages when reopening with a warm history cache", async () => {
+    get.mockResolvedValueOnce(page([10, 11, 12], null));
+    const first = mount();
+    await waitFor(() =>
+      expect(first.result.current.data?.unreadIds).toEqual([10, 11, 12]),
+    );
+    first.unmount();
+
+    get.mockResolvedValueOnce({ ...page([10, 11, 12], null), unreadIds: [12] });
+    const second = mount(first.cache);
+    await waitFor(() => expect(second.result.current.data?.unreadIds).toEqual([12]));
+    second.unmount();
+
+    get.mockResolvedValueOnce({ ...page([10, 11, 12], null), unreadIds: [] });
+    const third = mount(first.cache);
+    await waitFor(() => expect(third.result.current.data?.unreadIds).toEqual([]));
+  });
+
   it("opens an old result directly and traverses its context without merging the disconnected latest history", async () => {
     get.mockResolvedValue(page([99, 100], null));
     getWindow

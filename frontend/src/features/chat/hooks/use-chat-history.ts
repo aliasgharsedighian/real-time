@@ -7,14 +7,43 @@ import {
   preserveReactions,
   removeMessagesFromHistory,
 } from "../message-cache";
-import type { History } from "../types";
+import type { History, Message } from "../types";
+
+function remainingUnread(ids: number[], messages: Message[], userId?: number) {
+  const unread = new Set(ids);
+  return messages
+    .filter(
+      (message) =>
+        unread.has(message.id) &&
+        message.senderId !== userId &&
+        !message.readStatuses?.some((receipt) => receipt.userId === userId),
+    )
+    .map((message) => message.id);
+}
+
+function withPageUnread(
+  old: History,
+  messages: Message[],
+  unreadIds: number[] | undefined,
+  userId?: number,
+) {
+  return {
+    messages,
+    unreadIds: remainingUnread(
+      [...old.unreadIds, ...(unreadIds ?? [])],
+      messages,
+      userId,
+    ),
+  };
+}
 
 // Keep one normalized cache for the room, header, receipts and live messages.
-export function useChatHistory(chatId: number) {
+export function useChatHistory(chatId: number, userId?: number) {
   const identity = useSessionStore((state) => state.tokens?.refreshToken);
   const cache = useQueryClient();
   const key = chatKeys.history(identity, chatId);
   const request = useRef<AbortController | null>(null);
+  const opened = useRef(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<unknown>(null);
   const [navigating, setNavigating] = useState(false);
@@ -26,6 +55,33 @@ export function useChatHistory(chatId: number) {
     queryFn: async ({ signal }) => {
       const latest = await getHistory(chatId, signal);
       let old = cache.getQueryData<History>(key);
+      if (!opened.current) {
+        const first = latest.firstUnreadId;
+        if (first && !latest.messages.some((message) => message.id === first)) {
+          const context = await getMessageWindow(
+            chatId,
+            { aroundId: first },
+            signal,
+          );
+          opened.current = true;
+          return {
+            ...latest,
+            messages: context.messages,
+            unreadIds: remainingUnread(
+              context.unreadIds ?? [first],
+              context.messages,
+              userId,
+            ),
+            nextPage: null,
+            window: {
+              beforeId: context.beforeId,
+              afterId: context.afterId,
+              focusId: first,
+            },
+          };
+        }
+        if (old?.window) old = undefined;
+      }
       let synchronized = old
         ? await syncMessages(
             chatId,
@@ -41,34 +97,53 @@ export function useChatHistory(chatId: number) {
           )
         : [];
       if (old) {
-        synchronized = preserveReactions(
-          synchronized,
-          cache.getQueryData<History>(key)?.messages,
+        const current = cache.getQueryData<History>(key);
+        synchronized = preserveReactions(synchronized, current?.messages);
+        const previous = new Map(
+          current?.messages.map((message) => [message.id, message]),
         );
+        synchronized = synchronized.map((message) => {
+          const receipt = previous
+            .get(message.id)
+            ?.readStatuses?.find((entry) => entry.userId === userId);
+          return receipt &&
+            !message.readStatuses?.some((entry) => entry.userId === userId)
+            ? {
+                ...message,
+                readStatuses: [...(message.readStatuses ?? []), receipt],
+              }
+            : message;
+        });
         const existing = new Set(synchronized.map((message) => message.id));
         const removed = old.messages
           .filter((message) => !existing.has(message.id))
           .map((message) => message.id);
         if (removed.length) old = removeMessagesFromHistory(old, removed);
       }
+      opened.current = true;
       // A search window has a gap to the latest history. Never join those lists.
       if (old?.window?.afterId)
         return {
           ...old,
           messages: synchronized,
-          unreadIds: old.unreadIds.filter((id) =>
-            synchronized.some((m) => m.id === id),
-          ),
+          unreadIds: remainingUnread(old.unreadIds, synchronized, userId),
+          unreadCount: latest.unreadCount ?? old.unreadCount,
           chat: latest.chat,
           users: latest.users,
         };
+      const latestIds = new Set(latest.messages.map((message) => message.id));
       return old
         ? {
             ...latest,
             messages: mergeMessages(synchronized),
-            unreadIds: [
-              ...new Set([...old.unreadIds, ...latest.unreadIds]),
-            ].filter((id) => synchronized.some((m) => m.id === id)),
+            unreadIds: remainingUnread(
+              [
+                ...old.unreadIds.filter((id) => !latestIds.has(id)),
+                ...latest.unreadIds,
+              ],
+              synchronized,
+              userId,
+            ),
             nextPage: old.nextPage,
             olderCursor: old.olderCursor,
             window: old.window,
@@ -76,6 +151,7 @@ export function useChatHistory(chatId: number) {
         : latest;
     },
     staleTime: 30_000,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -99,13 +175,12 @@ export function useChatHistory(chatId: number) {
         old
           ? {
               ...old,
-              messages: mergeMessages(older.messages, old.messages),
-              unreadIds: [
-                ...new Set([
-                  ...old.unreadIds,
-                  ...("unreadIds" in older ? older.unreadIds : []),
-                ]),
-              ],
+              ...withPageUnread(
+                old,
+                mergeMessages(older.messages, old.messages),
+                older.unreadIds,
+                userId,
+              ),
               nextPage: "nextPage" in older ? older.nextPage : null,
               olderCursor:
                 !old.window && "beforeId" in older
@@ -126,7 +201,7 @@ export function useChatHistory(chatId: number) {
         setLoadingOlder(false);
       }
     }
-  }, [cache, chatId, identity, history.isFetching]);
+  }, [cache, chatId, identity, history.isFetching, userId]);
 
   async function openMessage(messageId: number) {
     const historyKey = chatKeys.history(identity, chatId);
@@ -159,7 +234,11 @@ export function useChatHistory(chatId: number) {
           ? {
               ...old,
               messages: preserveReactions(context.messages, old.messages),
-              unreadIds: [],
+              unreadIds: remainingUnread(
+                context.unreadIds ?? [],
+                context.messages,
+                userId,
+              ),
               nextPage: null,
               window: {
                 beforeId: context.beforeId,
@@ -200,7 +279,12 @@ export function useChatHistory(chatId: number) {
         old?.window
           ? {
               ...old,
-              messages: mergeMessages(old.messages, context.messages),
+              ...withPageUnread(
+                old,
+                mergeMessages(old.messages, context.messages),
+                context.unreadIds,
+                userId,
+              ),
               window: { ...old.window, afterId: context.afterId },
             }
           : old,
@@ -245,6 +329,7 @@ export function useChatHistory(chatId: number) {
   }
   return {
     ...history,
+    opening: history.isFetching && !history.isFetchedAfterMount,
     loadOlder,
     loadingOlder,
     olderError,

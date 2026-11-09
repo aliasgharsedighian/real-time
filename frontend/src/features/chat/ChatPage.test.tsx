@@ -110,13 +110,11 @@ function SearchOpener() {
     <button onClick={() => search.setOpen(true)}>Open search panel</button>
   );
 }
-function setup() {
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+function setup(
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
+  return render(
+    <QueryClientProvider client={cache}>
       <MemoryRouter initialEntries={["/dashboard/websocket/3"]}>
         <Routes>
           <Route
@@ -1042,6 +1040,56 @@ describe("chat attachments", () => {
       expect(screen.queryByLabelText("Reply preview")).toBeNull(),
     );
   });
+  it("keeps the unread divider in place while updating the count, then resets it on reentry", async () => {
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const messages = [1, 2].map((id) => ({
+      id,
+      chatId: 3,
+      senderId: 2,
+      content: `Unread example ${id}`,
+      createdAt: "2026-11-05T08:00:00Z",
+    }));
+    const history = { messages, users: [], unreadIds: [1, 2], unreadCount: 2 };
+    mocks.history.mockResolvedValue(history);
+    const first = setup(cache);
+    const divider = await screen.findByText("Unread messages");
+    expect(divider.getAttribute("data-unread-for")).toBe("1");
+    const jump = screen.getByRole("button", { name: "Go to latest messages" });
+    expect(within(jump).getByText("2")).toBeTruthy();
+    const remaining = { ...history, unreadIds: [2], unreadCount: 1 };
+    act(() => {
+      cache.setQueryData(["history"], remaining);
+    });
+    await within(jump).findByText("1");
+    expect(screen.getByText("Unread messages")).toBe(divider);
+    expect(divider.getAttribute("data-unread-for")).toBe("1");
+    first.unmount();
+
+    mocks.history.mockResolvedValue(remaining);
+    mocks.sync.mockResolvedValue(messages);
+    const second = setup(cache);
+    expect(
+      (await screen.findByText("Unread messages")).getAttribute("data-unread-for"),
+    ).toBe("2");
+    act(() => {
+      cache.setQueryData(["history"], { ...history, unreadIds: [], unreadCount: 0 });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Go to latest messages" })).toBeNull(),
+    );
+    expect(
+      screen.getByText("Unread messages").getAttribute("data-unread-for"),
+    ).toBe("2");
+    second.unmount();
+
+    mocks.history.mockResolvedValue({ ...history, unreadIds: [], unreadCount: 0 });
+    setup(cache);
+    await screen.findByText("Unread example 2");
+    expect(screen.queryByText("Unread messages")).toBeNull();
+  });
+
   it("shows the jump button above the bottom, scrolls to the end and hides it again", async () => {
     mocks.history.mockResolvedValue({
       messages: [

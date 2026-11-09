@@ -13,7 +13,7 @@ import {
   mergeMessages,
   removeMessagesFromHistory,
 } from "../message-cache";
-import type { History, Message, ReadReceipt } from "../types";
+import type { Chat, History, Message, ReadReceipt } from "../types";
 
 export function useChatRoom(chatId: number, enabled: boolean) {
   const { user } = useSession();
@@ -30,6 +30,23 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     const key = chatKeys.history(identity, chatId);
     let hasJoined = false;
     const acknowledged = new Set<number>();
+    const receivedOutsideWindow = new Set<number>();
+    const updateUnread = (update: (history: History) => History) => {
+      const previous = cache.getQueryData<History>(key);
+      if (!previous) return;
+      const next = update(previous);
+      cache.setQueryData(key, next);
+      const unreadCount = next.unreadCount ?? next.unreadIds.length;
+      if (unreadCount === (previous.unreadCount ?? previous.unreadIds.length))
+        return;
+      cache.setQueryData<Chat[]>(chatKeys.list(identity), (chats) =>
+        chats?.map((chat) =>
+          chat.id === chatId
+            ? { ...chat, _count: { ...chat._count, messages: unreadCount } }
+            : chat,
+        ),
+      );
+    };
     const markRead = (ids: number[]) => {
       if (
         document.visibilityState === "visible" &&
@@ -54,6 +71,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
             (message) =>
               visibility.ids.has(message.id) &&
               message.senderId !== userId &&
+              !message.readStatuses?.some((receipt) => receipt.userId === userId) &&
               (!message.kind || message.kind === "TEXT"),
           )
           .map((message) => message.id) ?? [],
@@ -83,11 +101,26 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     };
     const onMessage = (message: Message) => {
       if (message.chatId !== chatId) return;
-      cache.setQueryData<History>(key, (old) =>
-        old && !old.window?.afterId
-          ? { ...old, messages: mergeMessages(old.messages, [message]) }
-          : old,
-      );
+      const incoming =
+        message.senderId !== userId && (!message.kind || message.kind === "TEXT");
+      updateUnread((old) => {
+        const added =
+          incoming &&
+          !receivedOutsideWindow.has(message.id) &&
+          !old.messages.some((entry) => entry.id === message.id);
+        if (added && old.window?.afterId) receivedOutsideWindow.add(message.id);
+        return {
+          ...old,
+          messages: old.window?.afterId
+            ? old.messages
+            : mergeMessages(old.messages, [message]),
+          unreadIds:
+            added && !old.window?.afterId
+              ? [...old.unreadIds, message.id]
+              : old.unreadIds,
+          unreadCount: (old.unreadCount ?? old.unreadIds.length) + Number(added),
+        };
+      });
     };
     const updated = (message: Message) => {
       if (message.chatId !== chatId) return;
@@ -108,17 +141,42 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     };
     const deleted = (payload: { chatId: number; messageIds: number[] }) => {
       if (payload.chatId !== chatId) return;
-      cache.setQueryData<History>(key, (old) =>
-        old ? removeMessagesFromHistory(old, payload.messageIds) : old,
-      );
+      updateUnread((old) => {
+        const next = removeMessagesFromHistory(old, payload.messageIds);
+        const removedOutsideWindow = payload.messageIds.filter(
+          (id) => receivedOutsideWindow.delete(id) && !old.unreadIds.includes(id),
+        );
+        return {
+          ...next,
+          unreadCount: Math.max(
+            0,
+            (next.unreadCount ?? 0) - removedOutsideWindow.length,
+          ),
+        };
+      });
     };
     const onReceipt = (receipt: ReadReceipt) => {
       void cache.invalidateQueries({
         queryKey: chatKeys.readers(identity, chatId, receipt.messageId),
       });
-      cache.setQueryData<History>(key, (old) =>
-        old ? { ...old, messages: applyReceipt(old.messages, receipt) } : old,
-      );
+      updateUnread((old) => {
+        const read =
+          receipt.userId === userId &&
+          (old.unreadIds.includes(receipt.messageId) ||
+            receivedOutsideWindow.has(receipt.messageId));
+        if (read) receivedOutsideWindow.delete(receipt.messageId);
+        return {
+          ...old,
+          messages: applyReceipt(old.messages, receipt),
+          unreadIds: read
+            ? old.unreadIds.filter((id) => id !== receipt.messageId)
+            : old.unreadIds,
+          unreadCount: Math.max(
+            0,
+            (old.unreadCount ?? old.unreadIds.length) - Number(read),
+          ),
+        };
+      });
     };
     const onError = (payload: { message?: string }) =>
       toast.error(payload.message || "Chat request failed.");
