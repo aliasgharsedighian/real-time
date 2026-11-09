@@ -589,17 +589,24 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
     await react(1, '❤️‍🔥').expect(200);
     const history = await http(0).get(`polling/${chat.id}`).expect(200);
     const [saved] = history.body.data.chats;
+    const reactor = (index: number, emoji: string) => ({
+      userId: ids[index],
+      emoji,
+      user: {
+        id: ids[index],
+        email: expect.any(String),
+        profile: { firstname: `Member ${index}`, lastname: null, avatarId: null },
+      },
+    });
     expect(saved.reactions).toEqual([
-      { userId: ids[0], emoji: '👍' },
-      { userId: ids[1], emoji: '❤️‍🔥' },
+      reactor(0, '👍'),
+      reactor(1, '❤️‍🔥'),
     ]);
     const removed = await react(1, null).expect(200);
     expect(removed.body.data.reactionVersion).toBeGreaterThan(
       saved.reactionVersion,
     );
-    expect(removed.body.data.reactions).toEqual([
-      { userId: ids[0], emoji: '👍' },
-    ]);
+    expect(removed.body.data.reactions).toEqual([reactor(0, '👍')]);
     await http(0)
       .delete(`chats/${chat.id}/messages`)
       .send({ messageIds: [message.id] })

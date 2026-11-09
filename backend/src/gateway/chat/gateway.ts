@@ -13,6 +13,8 @@ import {
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
+import type { Prisma } from '@prisma/client';
+import type { reactionSelect } from '../../modules/polling/message-include';
 import { ChatService } from './chat.service';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 import { CallsService } from './calls.service';
@@ -320,7 +322,9 @@ export class ChatGateway implements OnGatewayInit {
       chatId: number;
       messageId: number;
       reactionVersion: number;
-      reactions: { userId: number; emoji: string }[];
+      reactions: Prisma.MessageReactionGetPayload<{
+        select: typeof reactionSelect;
+      }>[];
     },
   ) {
     for (const userId of userIds)

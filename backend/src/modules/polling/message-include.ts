@@ -1,5 +1,15 @@
 import { messageAttachments } from '../files-upload/upload.policy';
-export const reactionSelect = { userId: true, emoji: true } as const;
+export const reactionSelect = {
+  userId: true,
+  emoji: true,
+  user: {
+    select: {
+      id: true,
+      email: true,
+      profile: { select: { firstname: true, lastname: true, avatarId: true } },
+    },
+  },
+} as const;
 export const messageRelations = {
   reactions: { select: reactionSelect, orderBy: { userId: 'asc' } },
   forwardedFrom: { select: { id: true, email: true, profile: true } },

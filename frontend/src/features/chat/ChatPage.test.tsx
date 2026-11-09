@@ -1176,6 +1176,52 @@ describe("chat attachments", () => {
     expect(mocks.reaction).toHaveBeenNthCalledWith(2, 3, 73, null);
   });
 
+  it.each(["context menu", "touch hold"])(
+    "shows only the selected emoji's reactors via %s without changing the reaction",
+    async (gesture) => {
+      mocks.history.mockResolvedValue({
+        messages: [
+          {
+            id: 73,
+            chatId: 3,
+            senderId: 2,
+            content: "React to this",
+            createdAt: "2026-11-06T09:00:00Z",
+            reactions: [
+              { userId: 1, emoji: "🔥", user: { email: "Alice" } },
+              { userId: 2, emoji: "🔥", user: { email: "Bob" } },
+              { userId: 3, emoji: "👍", user: { email: "Charlie" } },
+            ],
+          },
+        ],
+        users: [],
+        unreadIds: [],
+      });
+      setup();
+      const chip = await screen.findByRole("button", { name: "🔥 2 reactions" });
+      if (gesture === "context menu") {
+        fireEvent.contextMenu(chip);
+      } else {
+        const down = Object.assign(new Event("pointerdown", { bubbles: true }), {
+          pointerType: "touch",
+          pointerId: 1,
+          clientX: 30,
+          clientY: 30,
+        });
+        fireEvent(chip, down);
+        await screen.findByRole("dialog", { name: "Reactions for 🔥" });
+        fireEvent.pointerUp(chip);
+        fireEvent.click(chip);
+      }
+      const popup = screen.getByRole("dialog", { name: "Reactions for 🔥" });
+      expect(within(popup).getByText("Alice")).toBeTruthy();
+      expect(within(popup).getByText("Bob")).toBeTruthy();
+      expect(within(popup).queryByText("Charlie")).toBeNull();
+      expect(screen.queryByRole("menu", { name: "Chat actions" })).toBeNull();
+      expect(mocks.reaction).not.toHaveBeenCalled();
+    },
+  );
+
   it("pins from the message menu, jumps from the pin list to unloaded history, and unpins", async () => {
     const latest = {
       id: 73,

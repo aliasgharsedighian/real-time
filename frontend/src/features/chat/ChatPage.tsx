@@ -958,6 +958,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                   <ReactionChips
                                     reactions={message.reactions}
                                     selected={ownReaction}
+                                    selecting={selected.length > 0}
                                     onPick={pickReaction}
                                   />
                                   <div className="ml-auto flex shrink-0 items-center gap-1 text-[10px] leading-4 whitespace-nowrap text-muted-foreground">

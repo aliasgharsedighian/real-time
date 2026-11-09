@@ -20,6 +20,7 @@ export interface MessageReader extends ReadReceipt {
 export interface Reaction {
   userId: number;
   emoji: string;
+  user?: MessageReader["user"];
 }
 export interface ReactionUpdate {
   chatId: number;
