@@ -403,6 +403,27 @@ export class ChatGateway implements OnGatewayInit {
       return this.failure(client, error);
     }
   }
+  @SubscribeMessage('message:read-through')
+  async onReadThrough(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { chatId: number; throughMessageId: number },
+  ) {
+    try {
+      const userId = await this.participant(client, payload?.chatId);
+      const { receipts, unreadCount } =
+        await this.chatService.markMessagesReadThrough(
+          userId,
+          payload.chatId,
+          payload.throughMessageId,
+        );
+      for (const receipt of receipts)
+        this.server.to(`chat:${payload.chatId}`).emit('message:read', receipt);
+      return { unreadCount };
+    } catch (error) {
+      return this.failure(client, error);
+    }
+  }
+
   @SubscribeMessage('typing:start')
   async onTypingStart(
     @ConnectedSocket() client: Socket,

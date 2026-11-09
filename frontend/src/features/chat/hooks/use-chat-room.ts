@@ -28,7 +28,13 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     if (!enabled || !userId) return;
     const socket = getSocket();
     const key = chatKeys.history(identity, chatId);
+    const root = document.querySelector<HTMLElement>(
+      '[role="log"][aria-label="Messages"]',
+    );
     let hasJoined = false;
+    let active = true;
+    let readingThrough = false;
+    let readThroughId: number | undefined;
     const acknowledged = new Set<number>();
     const receivedOutsideWindow = new Set<number>();
     const updateUnread = (update: (history: History) => History) => {
@@ -65,6 +71,63 @@ export function useChatRoom(chatId: number, enabled: boolean) {
     };
     const readLoaded = () => {
       const data = cache.getQueryData<History>(key);
+      if (readingThrough) return;
+      const last = data?.messages.at(-1);
+      if (
+        data &&
+        last &&
+        !data.window?.afterId &&
+        (data.unreadCount ?? data.unreadIds.length) > 0 &&
+        last.id !== readThroughId &&
+        root &&
+        root.clientHeight > 0 &&
+        (visibility.ids.has(last.id) ||
+          root.scrollHeight - root.scrollTop - root.clientHeight <= 24) &&
+        root.querySelector(`[data-message-id="${last.id}"]`) &&
+        socket.connected &&
+        document.visibilityState === "visible"
+      ) {
+        readingThrough = true;
+        void socket
+          .timeout(8000)
+          .emitWithAck("message:read-through", {
+            chatId,
+            throughMessageId: last.id,
+          })
+          .then((result: { unreadCount?: number }) => {
+            const unreadCount = result?.unreadCount;
+            if (typeof unreadCount !== "number" || !Number.isSafeInteger(unreadCount))
+              return;
+            readThroughId = last.id;
+            if (!active) {
+              void cache.invalidateQueries({ queryKey: chatKeys.list(identity) });
+              return;
+            }
+            updateUnread((old) => {
+              const after = new Set(
+                old.messages
+                  .filter(
+                    (message) =>
+                      message.createdAt > last.createdAt ||
+                      (message.createdAt === last.createdAt && message.id > last.id),
+                  )
+                  .map((message) => message.id),
+              );
+              const unreadIds = old.unreadIds.filter((id) => after.has(id));
+              return {
+                ...old,
+                unreadIds,
+                unreadCount: Math.max(unreadCount, unreadIds.length),
+              };
+            });
+          })
+          .catch(() => {})
+          .finally(() => {
+            readingThrough = false;
+            if (active && readThroughId === last.id) readLoaded();
+          });
+        return;
+      }
       markRead(
         data?.messages
           .filter(
@@ -77,14 +140,10 @@ export function useChatRoom(chatId: number, enabled: boolean) {
           .map((message) => message.id) ?? [],
       );
     };
-    const visibility = observeVisibleMessages(
-      document.querySelector<HTMLElement>(
-        '[role="log"][aria-label="Messages"]',
-      ),
-      readLoaded,
-    );
+    const visibility = observeVisibleMessages(root, readLoaded);
     const join = () => {
       acknowledged.clear();
+      readThroughId = undefined;
       setConnected(true);
       socket.emit("chat:join", { chatId, userId });
       if (hasJoined) void cache.invalidateQueries({ queryKey: key });
@@ -201,9 +260,11 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         readLoaded();
     });
     document.addEventListener("visibilitychange", readLoaded);
+    root?.addEventListener("scroll", readLoaded, { passive: true });
     if (socket.connected) join();
     else socket.connect();
     return () => {
+      active = false;
       if (socket.connected) {
         socket.emit("typing:stop", { chatId, userId, username });
         socket.emit("chat:leave", { chatId, userId });
@@ -219,6 +280,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
       unsubscribe();
       visibility.stop();
       document.removeEventListener("visibilitychange", readLoaded);
+      root?.removeEventListener("scroll", readLoaded);
     };
   }, [chatId, userId, username, identity, enabled, cache]);
 

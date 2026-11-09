@@ -10,6 +10,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
+import type { MessageReadStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
@@ -145,6 +146,68 @@ export class ChatService {
     });
   }
 
+  private async lockReadMembership(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    chatId: number,
+  ) {
+    // Serialize reads with departures and message deletion.
+    await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
+    if (
+      !(await tx.chatParticipant.findUnique({
+        where: { userId_chatId: { userId, chatId } },
+      }))
+    )
+      throw new ForbiddenException('Conversation unavailable.');
+  }
+
+  async markMessagesReadThrough(
+    userId: number,
+    chatId: number,
+    throughMessageId: number,
+  ) {
+    if (
+      !Number.isSafeInteger(throughMessageId) ||
+      throughMessageId <= 0 ||
+      throughMessageId > 2147483647
+    )
+      throw new BadRequestException('Invalid message ID');
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockReadMembership(tx, userId, chatId);
+      const anchor = await tx.message.findFirst({
+        where: { id: throughMessageId, chatId },
+        select: { id: true },
+      });
+      if (!anchor)
+        throw new BadRequestException('Message not in conversation.');
+      const receipts = await tx.$queryRaw<MessageReadStatus[]>`
+        INSERT INTO "MessageReadStatus" ("messageId", "userId")
+        SELECT m.id, ${userId}
+        FROM "Message" m
+        JOIN "Message" anchor ON anchor.id = ${anchor.id}
+        WHERE m."chatId" = ${chatId}
+          AND m."kind" = 'TEXT'
+          AND m."senderId" <> ${userId}
+          AND (m."createdAt", m.id) <= (anchor."createdAt", anchor.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM "MessageReadStatus" r
+            WHERE r."messageId" = m.id AND r."userId" = ${userId}
+          )
+        ON CONFLICT ("messageId", "userId") DO NOTHING
+        RETURNING *
+      `;
+      const unreadCount = await tx.message.count({
+        where: {
+          chatId,
+          kind: 'TEXT',
+          senderId: { not: userId },
+          readStatuses: { none: { userId } },
+        },
+      });
+      return { receipts, unreadCount };
+    });
+  }
+
   async markMessagesRead(userId: number, messageIds: number[], chatId: number) {
     if (
       !Array.isArray(messageIds) ||
@@ -155,14 +218,7 @@ export class ChatService {
     )
       throw new BadRequestException('Invalid message IDs');
     return this.prisma.$transaction(async (tx) => {
-      // Serialize with departures and deletion; a stale socket cannot create receipts after removal.
-      await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
-      if (
-        !(await tx.chatParticipant.findUnique({
-          where: { userId_chatId: { userId, chatId } },
-        }))
-      )
-        throw new ForbiddenException('Conversation unavailable.');
+      await this.lockReadMembership(tx, userId, chatId);
       const allowed = await tx.message.findMany({
         where: {
           id: { in: messageIds },

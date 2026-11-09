@@ -11,6 +11,7 @@ import type { History, Message } from "../types";
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (...args: never[]) => void>(),
   emit: vi.fn(),
+  emitWithAck: vi.fn(),
   intersect: (entries: unknown[]) => {
     void entries;
   },
@@ -20,6 +21,7 @@ vi.mock("../socket", () => ({
     connected: true,
     connect: vi.fn(),
     emit: fake.emit,
+    timeout: () => ({ emitWithAck: fake.emitWithAck }),
     on: (event: string, handler: (...args: never[]) => void) =>
       fake.handlers.set(event, handler),
     off: (event: string) => fake.handlers.delete(event),
@@ -90,6 +92,7 @@ describe("chat room events", () => {
     const { result, unmount } = mount();
     act(() => result.current.startTyping());
     fake.emit.mockClear();
+    fake.emitWithAck.mockReset();
     act(() => vi.advanceTimersByTime(60_000));
     expect(fake.emit).not.toHaveBeenCalledWith(
       "typing:stop",
@@ -123,6 +126,48 @@ describe("chat room events", () => {
       "typing:stop",
       expect.objectContaining({ chatId: 7 }),
     );
+  });
+  it("clears unloaded unread messages only after reaching the real end of the conversation", async () => {
+    const { cache, key } = mount();
+    const inbox = chatKeys.list("refresh");
+    cache.setQueryData(inbox, [{ id: 7, _count: { messages: 19 } }]);
+    const data: History = {
+      messages: [{
+        id: 8,
+        chatId: 7,
+        senderId: 2,
+        content: "Last loaded message",
+        createdAt: "2026-11-04T10:00:00Z",
+      }],
+      unreadIds: [8],
+      unreadCount: 19,
+      users: [],
+      window: { focusId: 8, beforeId: null, afterId: 8 },
+    };
+    const root = document.querySelector<HTMLElement>('[role="log"]')!;
+    Object.defineProperties(root, {
+      clientHeight: { value: 300 },
+      scrollHeight: { value: 1000 },
+    });
+    root.scrollTop = 700;
+    act(() => cache.setQueryData(key, data));
+    expect(fake.emitWithAck).not.toHaveBeenCalled();
+
+    root.scrollTop = 250;
+    act(() => cache.setQueryData(key, { ...data, window: undefined }));
+    expect(fake.emitWithAck).not.toHaveBeenCalled();
+
+    fake.emitWithAck.mockResolvedValue({ unreadCount: 0 });
+    root.scrollTop = 700;
+    await act(async () => root.dispatchEvent(new Event("scroll")));
+    expect(fake.emitWithAck).toHaveBeenCalledExactlyOnceWith(
+      "message:read-through",
+      { chatId: 7, throughMessageId: 8 },
+    );
+    expect(cache.getQueryData<History>(key)?.unreadIds).toEqual([]);
+    expect(cache.getQueryData(inbox)).toEqual([
+      { id: 7, _count: { messages: 0 } },
+    ]);
   });
   it("keeps new live messages out of a search window with a gap and does not mark them read", () => {
     const { cache, key } = mount();

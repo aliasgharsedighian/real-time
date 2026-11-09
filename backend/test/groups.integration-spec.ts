@@ -301,6 +301,41 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
   });
 
+  it('marks skipped unread messages across history pages through the requested last message', async () => {
+    const group = await create({
+      participant: [ids[1]],
+      isGroup: true,
+      name: 'Read through',
+    });
+    const messages = await prisma.message.createManyAndReturn({
+      data: Array.from({ length: 55 }, () => ({
+        chatId: group.id,
+        senderId: ids[0],
+        content: 'Incoming message',
+      })),
+      select: { id: true },
+    });
+    const ordered = messages.map(({ id }) => id).sort((a, b) => a - b);
+    const throughMessageId = ordered[53];
+    const reader = await socket(1);
+    const readThrough = (id: number) =>
+      reader.timeout(5000).emitWithAck('message:read-through', {
+        chatId: group.id,
+        throughMessageId: id,
+      });
+
+    expect(await readThrough(throughMessageId)).toEqual({ unreadCount: 1 });
+    expect(await readThrough(throughMessageId)).toEqual({ unreadCount: 1 });
+    expect(
+      await prisma.messageReadStatus.findMany({
+        where: { userId: ids[1], message: { chatId: group.id } },
+        select: { messageId: true },
+        orderBy: { messageId: 'asc' },
+      }),
+    ).toEqual(ordered.slice(0, 54).map((messageId) => ({ messageId })));
+    expect(await readThrough(ordered[54])).toEqual({ unreadCount: 0 });
+  });
+
   it('protects named message readers, preserves first-seen times and rejects forged or cross-chat receipts', async () => {
     const group = await create({
       participant: [ids[1], ids[2]],
