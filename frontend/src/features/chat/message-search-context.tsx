@@ -5,8 +5,19 @@ const MessageSearchContext = createContext<{
   setOpen: (open: boolean) => void;
 }>({ open: false, setOpen: () => {} });
 
-export function MessageSearchProvider({ children }: { children: ReactNode }) {
+export function MessageSearchProvider({
+  children,
+  scope,
+}: {
+  children: ReactNode;
+  scope?: string;
+}) {
+  const [previousScope, setPreviousScope] = useState(scope);
   const [open, setOpen] = useState(false);
+  if (scope !== previousScope) {
+    setPreviousScope(scope);
+    setOpen(false);
+  }
   return (
     <MessageSearchContext.Provider value={{ open, setOpen }}>
       {children}

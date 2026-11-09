@@ -1,11 +1,11 @@
-import { Image, MessageCircle, Mic, Users, Video, X } from "lucide-react";
+import { Image, MessageCircle, Music2, Mic, Users, Video, X } from "lucide-react";
 import type { ChatNotification } from "./types";
 
 export function NotificationCard({ notification, count, open, dismiss }: {
   notification: ChatNotification; count: number; open: () => void; dismiss: () => void;
 }) {
   const Icon = notification.mediaKind === "IMAGE" ? Image : notification.mediaKind === "VIDEO"
-    ? Video : notification.mediaKind === "AUDIO" ? Mic : MessageCircle;
+    ? Video : notification.mediaKind === "AUDIO" ? Mic : notification.mediaKind === "MUSIC" ? Music2 : MessageCircle;
   return (
     <article className="brand-panel relative flex w-full items-start gap-3 rounded-2xl border-primary/40 p-4 shadow-[0_12px_50px_#0005,0_0_24px_var(--brand-halo)]">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-brand">

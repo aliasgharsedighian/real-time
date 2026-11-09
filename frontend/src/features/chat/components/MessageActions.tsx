@@ -32,14 +32,18 @@ import type { Message } from "../types";
 export function messageSummary(
   message: Pick<Message, "content" | "attachments">,
 ) {
-  return (
-    message.content ||
-    (message.attachments?.[0]?.kind === "AUDIO"
-      ? "Voice message"
-      : message.attachments?.[0]?.kind === "VIDEO"
-        ? "Video"
-        : "Photo")
-  );
+  if (message.content) return message.content;
+  const file = message.attachments?.[0];
+  switch (file?.kind) {
+    case "MUSIC":
+      return file.title || "Music";
+    case "AUDIO":
+      return "Voice message";
+    case "VIDEO":
+      return "Video";
+    default:
+      return "Photo";
+  }
 }
 export function MessageInteraction({
   message,

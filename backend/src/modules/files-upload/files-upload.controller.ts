@@ -83,6 +83,15 @@ export class FilesUploadController {
   ) {
     return this.files.upload(file, user.id, chatId);
   }
+  @Post('chats/:chatId/music')
+  @UseInterceptors(interceptor(uploadPolicy.audioMaxBytes))
+  music(
+    @Param('chatId', ParseIntPipe) chatId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @GetUser() user: { id: number },
+  ) {
+    return this.files.upload(file, user.id, chatId, false, true);
+  }
   @Delete(':id')
   remove(
     @Param('id', ParseUUIDPipe) id: string,

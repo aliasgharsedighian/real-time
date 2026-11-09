@@ -5,6 +5,7 @@ import {
   Image,
   Video,
   Mic,
+  Music2,
   Link as LinkIcon,
   ChevronRight,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import type { MediaFile } from "@/features/uploads/api";
 import { Button } from "@/shared/ui/button";
 import { errorMessage } from "@/shared/lib/api";
 import { formatMessageTime } from "@/shared/lib/date";
+import { MusicMessage } from "./MusicPlayback";
 import { getSharedContent, type SharedKind } from "../api";
 
 const categories = [
@@ -22,6 +24,7 @@ const categories = [
   { kind: "VIDEO", label: "Videos", icon: Video },
   { kind: "LINK", label: "Link messages", icon: LinkIcon },
   { kind: "AUDIO", label: "Voice messages", icon: Mic },
+  { kind: "MUSIC", label: "Music", icon: Music2 },
 ] as const;
 export function SharedContentSection({ chatId }: { chatId: number }) {
   const identity = useSessionStore((s) => s.tokens?.refreshToken);
@@ -70,7 +73,7 @@ export function SharedContentSection({ chatId }: { chatId: number }) {
                 <Icon className="size-5 text-muted-foreground" />
                 <span className="flex-1">{label}</span>
                 <span className="text-muted-foreground">
-                  {counts.data.counts[kind]}
+                  {counts.data.counts[kind] ?? 0}
                 </span>
                 <ChevronRight className="size-4 text-muted-foreground" />
               </button>
@@ -150,7 +153,13 @@ function SharedItems({ chatId, kind }: { chatId: number; kind: SharedKind }) {
                 }
               />
             ) : (
-              files.map((file) => <Media key={file.id} file={file} />)
+              files.map((file) =>
+                file.kind === "MUSIC" ? (
+                  <MusicMessage key={file.id} file={file} chatId={chatId} />
+                ) : (
+                  <Media key={file.id} file={file} />
+                ),
+              )
             )}
             {message.content && kind !== "LINK" && (
               <p dir="auto" className="whitespace-pre-wrap break-words text-sm">

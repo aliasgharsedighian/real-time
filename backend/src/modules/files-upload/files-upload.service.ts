@@ -55,6 +55,7 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     ownerId: number,
     chatId?: number,
     groupAvatar = false,
+    music = false,
   ) {
     if (!file) throw new BadRequestException('Choose a file to upload.');
     const avatar = chatId === undefined || groupAvatar;
@@ -68,7 +69,11 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
       const image = uploadPolicy.imageMimeTypes.includes(file.mimetype);
       const video = uploadPolicy.videoMimeTypes.includes(file.mimetype);
       const audio = uploadPolicy.audioMimeTypes.includes(file.mimetype);
-      if ((!image && !video && !audio) || (avatar && !image))
+      if (
+        (!image && !video && !audio) ||
+        (avatar && !image) ||
+        (music && !audio)
+      )
         throw new BadRequestException('Unsupported file type.');
       const max = avatar
         ? uploadPolicy.avatarMaxBytes
@@ -92,7 +97,11 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
       const metadata = image
         ? await this.processor.image(file.path, output, avatar)
         : audio
-          ? await this.processor.audio(file.path, output)
+          ? await this.processor.audio(
+              file.path,
+              output,
+              music ? file.originalname : undefined,
+            )
           : await this.processor.video(file.path, output);
       if (!avatar) {
         const record = await this.prisma.uploadFile.create({

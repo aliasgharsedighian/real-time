@@ -1,3 +1,4 @@
+import { messageSummary } from "./MessageActions";
 import { ConversationActions } from "./ChatActions";
 import { useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -238,13 +239,8 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                         dir="auto"
                       >
                         {typingText ||
-                          lastMessage?.content ||
-                          (lastMessage?.attachments?.length
-                            ? lastMessage.attachments[0].kind === "VIDEO"
-                              ? "Video"
-                              : lastMessage.attachments[0].kind === "AUDIO"
-                                ? "Voice message"
-                                : "Photo"
+                          (lastMessage && (lastMessage.content || lastMessage.attachments?.length)
+                            ? messageSummary(lastMessage)
                             : "Start the conversation")}
                       </p>
                       {!!chat._count?.messages && (

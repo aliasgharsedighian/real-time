@@ -15,13 +15,28 @@ import * as ffprobe from '@ffprobe-installer/ffprobe';
 interface ProbeResult {
   streams?: {
     codec_type?: string;
+    tags?: Record<string, unknown>;
     width?: number;
     height?: number;
     disposition?: { attached_pic?: number };
   }[];
-  format?: { duration?: string; size?: string };
+  format?: { duration?: string; size?: string; tags?: Record<string, unknown> };
 }
 const run = promisify(execFile);
+
+function audioLabel(value: unknown) {
+  if (typeof value !== 'string') return null;
+  return (
+    Array.from(
+      value
+        .replace(/\s+/g, ' ')
+        .replace(/\p{Cc}/gu, '')
+        .trim(),
+    )
+      .slice(0, 200)
+      .join('') || null
+  );
+}
 
 @Injectable()
 export class MediaProcessorService {
@@ -60,7 +75,11 @@ export class MediaProcessorService {
     }
   }
 
-  async audio(input: string, output: string) {
+  async audio(input: string, output: string, musicFilename?: string) {
+    const music = musicFilename !== undefined;
+    const maxSeconds = music
+      ? uploadPolicy.musicMaxSeconds
+      : uploadPolicy.audioMaxSeconds;
     try {
       const handle = await import('node:fs/promises').then((fs) =>
         fs.open(input, 'r'),
@@ -99,19 +118,19 @@ export class MediaProcessorService {
         return JSON.parse(stdout) as ProbeResult;
       };
       const source = await probe(input);
+      const audioStream = source.streams?.find(
+        (stream) => stream.codec_type === 'audio',
+      );
       if (
-        !source.streams?.some((s) => s.codec_type === 'audio') ||
-        source.streams.some(
+        !audioStream ||
+        source.streams?.some(
           (s) => s.codec_type === 'video' && !s.disposition?.attached_pic,
         )
       )
         throw new Error('Expected audio only');
       // MediaRecorder WebM may have no duration until decoded. Bound decoding and verify the output.
       const sourceDuration = Number(source.format?.duration);
-      if (
-        Number.isFinite(sourceDuration) &&
-        sourceDuration > uploadPolicy.audioMaxSeconds
-      )
+      if (Number.isFinite(sourceDuration) && sourceDuration > maxSeconds)
         throw new Error('Audio too long');
       await run(
         process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg',
@@ -134,13 +153,13 @@ export class MediaProcessorService {
           '-map_chapters',
           '-1',
           '-t',
-          String(uploadPolicy.audioMaxSeconds + 1),
+          String(maxSeconds + 1),
           '-c:a',
           'aac',
           '-b:a',
-          '96k',
+          music ? '160k' : '96k',
           '-ac',
-          '1',
+          music ? '2' : '1',
           '-movflags',
           '+faststart',
           '-fs',
@@ -155,7 +174,7 @@ export class MediaProcessorService {
       if (
         !Number.isFinite(duration) ||
         duration <= 0 ||
-        duration > uploadPolicy.audioMaxSeconds ||
+        duration > maxSeconds ||
         !Number.isFinite(size) ||
         size <= 0 ||
         size > uploadPolicy.audioMaxBytes ||
@@ -163,8 +182,25 @@ export class MediaProcessorService {
           Math.abs(sourceDuration - duration) > 1)
       )
         throw new Error('Invalid audio duration or size');
+      const tags = Object.fromEntries(
+        Object.entries({
+          ...audioStream.tags,
+          ...source.format?.tags,
+        }).map(([key, value]) => [key.toLowerCase(), value]),
+      );
+      const filename = musicFilename ?? '';
+      // Multer's multipart parser decodes UTF-8 filenames as Latin-1.
+      const decoded = Buffer.from(filename, 'latin1').toString('utf8');
+      const fallback = decoded.includes('�') ? filename : decoded;
       return {
-        kind: 'AUDIO',
+        kind: music ? 'MUSIC' : 'AUDIO',
+        ...(music && {
+          title:
+            audioLabel(tags.title) ??
+            audioLabel(fallback.replace(/\.[^.]+$/, '')) ??
+            'Music',
+          artist: audioLabel(tags.artist) ?? audioLabel(tags.album_artist),
+        }),
         mimeType: 'audio/mp4',
         size,
         width: 0,
@@ -177,7 +213,7 @@ export class MediaProcessorService {
           'Audio processing is unavailable.',
         );
       throw new BadRequestException(
-        'Invalid audio. Use WebM, M4A, Ogg, MP3 or WAV, up to 5 minutes.',
+        `Invalid audio. Use WebM, M4A, Ogg, MP3 or WAV, up to ${maxSeconds / 60} minutes.`,
       );
     }
   }

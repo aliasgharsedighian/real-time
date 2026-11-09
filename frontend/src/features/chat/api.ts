@@ -248,7 +248,7 @@ export async function getUserProfile(id: number, signal?: AbortSignal) {
   if (!user?.id) throw new Error("This user is no longer available.");
   return user;
 }
-export type SharedKind = "IMAGE" | "VIDEO" | "AUDIO" | "LINK";
+export type SharedKind = "IMAGE" | "VIDEO" | "AUDIO" | "MUSIC" | "LINK";
 export interface SharedContent {
   counts: Record<SharedKind, number>;
   messages: import("./types").Message[];

@@ -48,7 +48,7 @@ export class MessageSearchService {
     };
     const [mediaCounts, linkCount, messages] = await Promise.all([
       Promise.all(
-        ['IMAGE', 'VIDEO', 'AUDIO'].map((kind) =>
+        ['IMAGE', 'VIDEO', 'AUDIO', 'MUSIC'].map((kind) =>
           this.prisma.uploadFile.count({
             where: { chatId, messageId: { not: null }, kind },
           }),
@@ -75,6 +75,7 @@ export class MessageSearchService {
           IMAGE: mediaCounts[0],
           VIDEO: mediaCounts[1],
           AUDIO: mediaCounts[2],
+          MUSIC: mediaCounts[3],
           LINK: linkCount,
         },
         messages: page,

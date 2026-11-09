@@ -13,20 +13,30 @@ import {
 } from "@/shared/ui/dialog";
 import type { MediaFile } from "./api";
 
+export async function fetchFileBlob(
+  id: string,
+  signal: AbortSignal,
+  onProgress?: (loaded: number, total?: number) => void,
+) {
+  return (
+    await api.get<Blob>(`files/${id}/content`, {
+      signal,
+      responseType: "blob",
+      timeout: 120_000,
+      ...(onProgress && {
+        onDownloadProgress: ({ loaded, total }) => onProgress(loaded, total),
+      }),
+    })
+  ).data;
+}
+
 // Revoke each consumer's URL on unmount/account change, while sharing authenticated Blob requests.
 export function useFileUrl(id?: string | null) {
   const identity = useSessionStore((s) => s.tokens?.refreshToken);
   const query = useQuery({
     queryKey: ["media", identity, id],
     enabled: !!id && !!identity,
-    queryFn: async ({ signal }) =>
-      (
-        await api.get<Blob>(`files/${id}/content`, {
-          signal,
-          responseType: "blob",
-          timeout: 120_000,
-        })
-      ).data,
+    queryFn: ({ signal }) => fetchFileBlob(id!, signal),
     staleTime: Infinity,
     gcTime: 60_000,
     retry: false,
@@ -170,12 +180,12 @@ function InlineMedia({ file }: { file: MediaFile }) {
     );
   return (
     <div className="max-w-full space-y-1">
-      {file.kind === "AUDIO" ? (
+      {(file.kind === "AUDIO" || file.kind === "MUSIC") ? (
         <audio
           src={media.url}
           controls
           preload="metadata"
-          aria-label="Voice message"
+          aria-label={file.kind === "MUSIC" ? "Music attachment" : "Voice message"}
           className="w-64 max-w-full"
         />
       ) : (
@@ -196,7 +206,7 @@ function InlineMedia({ file }: { file: MediaFile }) {
       )}
       <a
         href={media.url}
-        download={`batgram-${file.id}.${file.kind === "AUDIO" ? "m4a" : "webp"}`}
+        download={`batgram-${file.id}.${file.kind === "AUDIO" || file.kind === "MUSIC" ? "m4a" : "webp"}`}
         className="block text-xs underline"
       >
         Download · {(file.size / 1024 / 1024).toFixed(2)} MB

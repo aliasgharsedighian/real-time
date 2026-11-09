@@ -24,7 +24,9 @@ export function messagePreview(message: {
         ? '🎬 Video'
         : kind === 'AUDIO'
           ? '🎤 Voice message'
-          : '';
+          : kind === 'MUSIC'
+            ? '🎵 Music'
+            : '';
   const text = message.content.replace(/\s+/g, ' ').trim();
   return Array.from([label, text].filter(Boolean).join(' · ') || 'New message')
     .slice(0, 180)

@@ -37,6 +37,7 @@ import {
   VoicePlaybackBar,
   VoicePlaybackProvider,
 } from "@/features/chat/components/VoicePlayback";
+import { MusicPlaybackBar } from "@/features/chat/components/MusicPlayback";
 
 export default function ChatLayout() {
   const { user } = useSession();
@@ -145,7 +146,7 @@ function ChatLayoutContent() {
       className="chat-viewport min-h-0 overflow-hidden"
     >
       <ChatSidebar />
-      <MessageSearchProvider key={match?.params.chatId ?? "other"}>
+      <MessageSearchProvider scope={match?.params.chatId}>
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <header className="flex min-h-18 shrink-0 items-center gap-3 border-b border-border bg-card/50 px-3 pt-[env(safe-area-inset-top)] sm:px-5">
             {(match || profile || calls) && (
@@ -223,6 +224,7 @@ function ChatLayoutContent() {
             </div>
           </header>
           <VoicePlaybackBar />
+          <MusicPlaybackBar />
           <div
             className={`flex min-h-0 flex-1 flex-col ${match ? "overflow-hidden" : "overflow-y-auto"}`}
           >

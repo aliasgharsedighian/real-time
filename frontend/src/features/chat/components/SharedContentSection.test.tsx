@@ -7,7 +7,7 @@ vi.mock("../api", () => ({ getSharedContent: vi.fn() }));
 vi.mock("@/features/uploads/Media", () => ({
   Media: () => <p>Shared photo preview</p>,
 }));
-const counts = { IMAGE: 1, VIDEO: 0, AUDIO: 0, LINK: 21 };
+const counts = { IMAGE: 1, VIDEO: 0, AUDIO: 0, MUSIC: 0, LINK: 21 };
 it("shows real category counts and pages shared links beyond the first result set", async () => {
   vi.mocked(getSharedContent).mockImplementation(async (_id, kind, before) => ({
     counts,

@@ -538,7 +538,18 @@ describe("chat attachments", () => {
     await waitFor(() =>
       expect(mocks.send).toHaveBeenCalledWith("", "attachment-id"),
     );
+    expect(mocks.upload.mock.calls[0][0]).toBe("files/chats/3");
     expect(mocks.upload.mock.calls[0][1].type).toBe("audio/webm");
+  });
+  it("sends an audio file selected from the attachment picker as music", async () => {
+    setup();
+    const picker = await screen.findByLabelText("Choose chat photo, video or audio");
+    const music = new File(["track"], "song.webm", { type: "audio/webm" });
+    fireEvent.change(picker, { target: { files: [music] } });
+    await screen.findByText(/Music · up to/);
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith("", "attachment-id"));
+    expect(mocks.upload.mock.calls[0].slice(0, 2)).toEqual(["files/chats/3/music", music]);
   });
   it("previews, adds and removes photos before sending an ordered album with one caption", async () => {
     mocks.upload

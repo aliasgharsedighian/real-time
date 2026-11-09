@@ -483,6 +483,7 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
       IMAGE: 1,
       VIDEO: 0,
       AUDIO: 0,
+      MUSIC: 0,
       LINK: 25,
     });
     const images = await http(1)

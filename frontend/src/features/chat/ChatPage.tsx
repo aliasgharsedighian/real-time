@@ -28,6 +28,7 @@ import {
 import { getSocket } from "./socket";
 import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
 import { Media, LocalPreview } from "@/features/uploads/Media";
+import { MusicMessage } from "./components/MusicPlayback";
 import { VoiceMessage } from "./components/VoicePlayback";
 import { MessagePhotos, PhotoGallery } from "@/features/uploads/PhotoGallery";
 import {
@@ -186,6 +187,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
   }, [hasDraft, startTyping, stopTyping]);
   const policy = useUploadPolicy();
   const [file, setFile] = useState<File>();
+  const recordedFile = useRef<File>(undefined);
   const [uploaded, setUploaded] = useState<MediaFile>();
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState<{ file: File; caption: string }>();
@@ -216,6 +218,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
     maxSeconds: policy.data?.audioMaxSeconds ?? 300,
     maxBytes: policy.data?.audioMaxBytes ?? 20 * 1024 * 1024,
     onReady: (recording) => {
+      recordedFile.current = recording;
       setFile(recording);
       setUploaded(undefined);
       setSendError("");
@@ -414,7 +417,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
     setProgress(0);
     try {
       const uploaded = await uploadFile<MediaFile>(
-        `files/chats/${chatId}`,
+        `files/chats/${chatId}${file.type.startsWith("audio/") && file !== recordedFile.current ? "/music" : ""}`,
         file,
         signal,
         setProgress,
@@ -934,6 +937,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                         messageId={message.id}
                                         sender={displayName(sender)}
                                       />
+                                    ) : attachment.kind === "MUSIC" ? (
+                                      <MusicMessage
+                                        key={attachment.id}
+                                        file={attachment}
+                                        chatId={message.chatId}
+                                      />
                                     ) : (
                                       <Media key={attachment.id} file={attachment} />
                                     ),
@@ -1092,7 +1101,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
                 )}
                 {file?.type.startsWith("audio/") && (
                   <p className="mt-2 text-sm">
-                    Listen to your voice message, then send or discard it.
+                    {file === recordedFile.current
+                      ? "Listen to your voice message, then send or discard it."
+                      : `Music · up to ${(policy.data?.musicMaxSeconds ?? 600) / 60} min`}
                   </p>
                 )}
                 <p className="mt-1 truncate text-xs">

@@ -8,9 +8,11 @@ export const uploadPolicy = {
   videoMaxSeconds: 300,
   audioMaxBytes: 20 * 1024 * 1024,
   audioMaxSeconds: 300,
+  musicMaxSeconds: 600,
   audioMimeTypes: [
     'audio/webm',
     'audio/mp4',
+    'audio/x-m4a',
     'audio/ogg',
     'audio/mpeg',
     'audio/wav',
@@ -31,6 +33,8 @@ export const fileSelect = {
   width: true,
   height: true,
   duration: true,
+  title: true,
+  artist: true,
 } as const;
 
 export const maxAlbumPhotos = 10;

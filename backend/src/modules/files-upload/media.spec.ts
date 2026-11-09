@@ -22,6 +22,24 @@ const prisma = {
     deleteMany: jest.fn(),
   },
 };
+function wave(info = Buffer.alloc(0)) {
+  const wav = Buffer.alloc(44 + 16000 * 2 + info.length);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(16000, 24);
+  wav.writeUInt32LE(32000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(16000 * 2, 40);
+  info.copy(wav, 44 + 16000 * 2);
+  return wav;
+}
+
 describe('private media uploads', () => {
   let app: INestApplication;
   let directory: string;
@@ -89,19 +107,7 @@ describe('private media uploads', () => {
     await rm(join(directory, data.storageKey));
   });
   it('encodes real voice audio as M4A and removes the input', async () => {
-    const wav = Buffer.alloc(44 + 16000 * 2);
-    wav.write('RIFF', 0);
-    wav.writeUInt32LE(wav.length - 8, 4);
-    wav.write('WAVEfmt ', 8);
-    wav.writeUInt32LE(16, 16);
-    wav.writeUInt16LE(1, 20);
-    wav.writeUInt16LE(1, 22);
-    wav.writeUInt32LE(16000, 24);
-    wav.writeUInt32LE(32000, 28);
-    wav.writeUInt16LE(2, 32);
-    wav.writeUInt16LE(16, 34);
-    wav.write('data', 36);
-    wav.writeUInt32LE(wav.length - 44, 40);
+    const wav = wave();
     const response = await request(app.getHttpServer())
       .post('/api/v1/files/chats/3')
       .attach('file', wav, { filename: 'voice.wav', contentType: 'audio/wav' });
@@ -129,6 +135,33 @@ describe('private media uploads', () => {
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
     await rm(join(directory, data.storageKey));
   });
+  it('stores music metadata separately from voice audio', async () => {
+    const tags = Buffer.alloc(40);
+    tags.write('LIST', 0);
+    tags.writeUInt32LE(32, 4);
+    tags.write('INFOINAM', 8);
+    tags.writeUInt32LE(6, 16);
+    tags.write('Track', 20);
+    tags.write('IART', 26);
+    tags.writeUInt32LE(6, 30);
+    tags.write('Mina', 34);
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/chats/3/music')
+      .attach('file', wave(tags), {
+        filename: 'fallback.wav',
+        contentType: 'audio/wav',
+      });
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      kind: 'MUSIC',
+      mimeType: 'audio/mp4',
+      title: 'Track',
+      artist: 'Mina',
+    });
+    expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+    await rm(join(directory, response.body.storageKey));
+  });
+
   it('rejects forged audio and cleans temporary files', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/files/chats/3')

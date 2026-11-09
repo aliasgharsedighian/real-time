@@ -313,6 +313,8 @@ export class MessageActionsService {
                   width: file.width,
                   height: file.height,
                   duration: file.duration,
+                  title: file.title,
+                  artist: file.artist,
                   position: file.position,
                   ownerId: userId,
                   chatId: targetChatId,

@@ -4,12 +4,14 @@ import { useSessionStore } from "@/features/auth/session-store";
 
 export interface MediaFile {
   id: string;
-  kind: "IMAGE" | "VIDEO" | "AUDIO";
+  kind: "IMAGE" | "VIDEO" | "AUDIO" | "MUSIC";
   mimeType: string;
   size: number;
   width: number;
   height: number;
   duration?: number | null;
+  title?: string | null;
+  artist?: string | null;
 }
 export interface UploadPolicy {
   avatarMaxBytes: number;
@@ -18,6 +20,7 @@ export interface UploadPolicy {
   videoMaxSeconds: number;
   audioMaxBytes: number;
   audioMaxSeconds: number;
+  musicMaxSeconds?: number;
   audioMimeTypes: string[];
   imageMimeTypes: string[];
   videoMimeTypes: string[];

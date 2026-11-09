@@ -250,6 +250,34 @@ describe('media with real PostgreSQL, HTTP, JWT and Socket.IO', () => {
       });
     expect(badUpload.status).toBe(400);
   });
+  it('sends tagged music and returns it only in the source chat playlist', async () => {
+    const sender = await socket(0);
+    await sender.timeout(5000).emitWithAck('chat:join', { chatId });
+    const song = execFileSync(ffmpeg, [
+      '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440',
+      '-t', '1', '-metadata', 'title=Evening', '-metadata', 'artist=Mina',
+      '-f', 'mp3', 'pipe:1',
+    ]);
+    const response = await http()
+      .post(`/api/v1/files/chats/${chatId}/music`)
+      .attach('file', song, { filename: 'song.mp3', contentType: 'audio/mpeg' })
+      .expect(201);
+    const track = { id: response.body.id, kind: 'MUSIC', title: 'Evening', artist: 'Mina' };
+    expect(response.body).toMatchObject(track);
+    const playlist = `/api/v1/realtime/polling/${chatId}/shared?kind=MUSIC`;
+    expect((await http(1).get(playlist).expect(200)).body.data.messages).toEqual([]);
+    const message = await sender.timeout(5000).emitWithAck('message:send', {
+      chatId,
+      content: '',
+      attachmentId: track.id,
+    });
+    expect(message.attachments[0]).toMatchObject(track);
+    const shared = await http(1).get(playlist).expect(200);
+    expect(shared.body.data.counts.MUSIC).toBe(1);
+    expect(shared.body.data.messages[0].attachments[0]).toMatchObject(track);
+    await http(1).get(`/api/v1/files/${track.id}/content`).expect(200);
+    await http(2).get(playlist).expect(403);
+  });
   it('sends a photo album atomically and keeps its order in the live message and history', async () => {
     const sender = await socket(0);
     const receiver = await socket(1);
