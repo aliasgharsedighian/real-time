@@ -28,6 +28,7 @@ import {
 import { getSocket } from "./socket";
 import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
 import { Media, LocalPreview } from "@/features/uploads/Media";
+import { VoiceMessage } from "./components/VoicePlayback";
 import { MessagePhotos, PhotoGallery } from "@/features/uploads/PhotoGallery";
 import {
   maxAlbumPhotos,
@@ -788,6 +789,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
                     </Fragment>
                   );
                 const own = message.senderId === user?.id;
+                const sender = own
+                  ? user
+                  : (message.sender ??
+                    history.data?.users.find(
+                      (participant) => participant.userId === message.senderId,
+                    )?.user);
                 const photos =
                   message.attachments?.filter(
                     (file) => file.kind === "IMAGE",
@@ -827,24 +834,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
                           className={`flex max-w-[88%] items-end gap-2 sm:max-w-[75%] ${own ? "flex-row-reverse" : ""}`}
                         >
                           <IdentityAvatar
-                            avatarId={
-                              (own
-                                ? user
-                                : (message.sender ??
-                                  history.data?.users.find(
-                                    (p) => p.userId === message.senderId,
-                                  )?.user)
-                              )?.profile?.avatarId
-                            }
-                            name={displayName(
-                              own
-                                ? user
-                                : (message.sender ??
-                                    history.data?.users.find(
-                                      (participant) =>
-                                        participant.userId === message.senderId,
-                                    )?.user),
-                            )}
+                            avatarId={sender?.profile?.avatarId}
+                            name={displayName(sender)}
                             className="hidden size-7 text-[10px] sm:inline-flex"
                           />
                           <div
@@ -852,12 +843,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                           >
                             {history.data?.chat?.isGroup && !own && (
                               <span className="text-xs font-semibold text-brand">
-                                {displayName(
-                                  message.sender ??
-                                    history.data.users.find(
-                                      (p) => p.userId === message.senderId,
-                                    )?.user,
-                                )}
+                                {displayName(sender)}
                               </span>
                             )}
                             <MessageInteraction
@@ -940,12 +926,18 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 />
                                 {message.attachments
                                   ?.filter((file) => file.kind !== "IMAGE")
-                                  .map((attachment) => (
-                                    <Media
-                                      key={attachment.id}
-                                      file={attachment}
-                                    />
-                                  ))}
+                                  .map((attachment) =>
+                                    attachment.kind === "AUDIO" ? (
+                                      <VoiceMessage
+                                        key={attachment.id}
+                                        file={attachment}
+                                        messageId={message.id}
+                                        sender={displayName(sender)}
+                                      />
+                                    ) : (
+                                      <Media key={attachment.id} file={attachment} />
+                                    ),
+                                  )}
                                 {!!message.content && (
                                   <span
                                     className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"

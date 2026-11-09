@@ -32,11 +32,20 @@ import CallProvider from "@/features/calls/CallProvider";
 import { CallButton } from "@/features/calls/CallButton";
 import { ChatStatus } from "@/features/chat/components/ChatStatus";
 
+import { useSession } from "@/features/auth/session-context";
+import {
+  VoicePlaybackBar,
+  VoicePlaybackProvider,
+} from "@/features/chat/components/VoicePlayback";
+
 export default function ChatLayout() {
+  const { user } = useSession();
   return (
     <NotificationProvider>
       <CallProvider>
-        <ChatLayoutContent />
+        <VoicePlaybackProvider key={user?.id}>
+          <ChatLayoutContent />
+        </VoicePlaybackProvider>
       </CallProvider>
     </NotificationProvider>
   );
@@ -213,6 +222,7 @@ function ChatLayoutContent() {
               <ThemeToggle />
             </div>
           </header>
+          <VoicePlaybackBar />
           <div
             className={`flex min-h-0 flex-1 flex-col ${match ? "overflow-hidden" : "overflow-y-auto"}`}
           >
