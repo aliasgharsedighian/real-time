@@ -99,7 +99,7 @@ export function MessageInteraction({
   );
   return (
     <div
-      className={`group relative min-w-0 [touch-action:pan-y] select-none rounded-2xl sm:select-text ${selected ? "ring-2 ring-primary bg-primary/10" : ""}`}
+      className={`group relative min-w-0 max-w-full [touch-action:pan-y] select-none rounded-2xl sm:select-text ${selected ? "ring-2 ring-primary bg-primary/10" : ""}`}
       onContextMenu={(event) => {
         event.preventDefault();
         if (!selecting && !swipe.dragging)

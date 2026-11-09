@@ -66,7 +66,8 @@ export async function uploadFile<T>(
     signal,
     timeout: 240_000,
     onUploadProgress: (event) => {
-      if (event.total) progress(Math.round((event.loaded / event.total) * 100));
+      if (event.total)
+        progress(Math.min(100, Math.floor((event.loaded / event.total) * 100)));
     },
   });
   return response.data;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactEventHandler } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Play, X } from "lucide-react";
 import { useSessionStore } from "@/features/auth/session-store";
@@ -207,9 +207,11 @@ function InlineMedia({ file }: { file: MediaFile }) {
 export function LocalPreview({
   file,
   className,
+  onImageLoad,
 }: {
   file: File;
   className?: string;
+  onImageLoad?: ReactEventHandler<HTMLImageElement>;
 }) {
   const [resource, setResource] = useState<{ file: File; url: string }>();
   useEffect(() => {
@@ -237,6 +239,7 @@ export function LocalPreview({
     <img
       src={url}
       alt="Selected attachment preview"
+      onLoad={onImageLoad}
       className={className ?? "max-h-40 max-w-full rounded-lg object-contain"}
     />
   );

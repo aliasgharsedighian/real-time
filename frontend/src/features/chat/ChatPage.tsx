@@ -33,6 +33,8 @@ import {
   maxAlbumPhotos,
   PhotoPreview,
   UploadingMedia,
+  UploadingPhotos,
+  type SelectedPhoto,
 } from "./components/PhotoPreview";
 import {
   discardFile,
@@ -79,7 +81,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { useVoiceRecorder } from "./hooks/use-voice-recorder";
 const EmojiPicker = lazy(() => import("./components/ChatEmojiPicker"));
 
-type SelectedPhoto = { key: number; file: File; uploaded?: MediaFile };
+type PhotoBatch = {
+  photos: Map<number, SelectedPhoto>;
+  active?: { key: number; controller: AbortController };
+};
 
 export default function ChatPage() {
   const { chatId } = useParams();
@@ -185,6 +190,8 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const [uploading, setUploading] = useState<{ file: File; caption: string }>();
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [photoPreview, setPhotoPreview] = useState(false);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const photoBatch = useRef<PhotoBatch | null>(null);
   const [photoCaption, setPhotoCaption] = useState("");
   const [groupPhotos, setGroupPhotos] = useState(true);
   const [photoError, setPhotoError] = useState("");
@@ -217,7 +224,13 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const hasMessage = !!(input.trim() || file || uploaded);
   const picker = useRef<HTMLInputElement>(null);
   const uploadController = useRef<AbortController | null>(null);
-  useEffect(() => () => uploadController.current?.abort(), []);
+  useEffect(
+    () => () => {
+      uploadController.current?.abort();
+      photoBatch.current?.active?.controller.abort();
+    },
+    [],
+  );
   const [pending, setPending] = useState(false);
   const messages = history.data?.messages;
   const search = useMessageSearch();
@@ -363,6 +376,16 @@ function ChatRoom({ chatId }: { chatId: number }) {
     if (photos.length === 1) setPhotoPreview(false);
   }
 
+  function cancelPhotoUpload(key: number) {
+    const batch = photoBatch.current;
+    const photo = batch?.photos.get(key);
+    if (!batch || !photo || photo.sending) return;
+    batch.photos.delete(key);
+    if (batch.active?.key === key) batch.active.controller.abort();
+    if (photo.uploaded) void discardFile(photo.uploaded.id).catch(() => {});
+    setPhotos([...batch.photos.values()]);
+  }
+
   function closePhotoPreview() {
     for (const photo of photos)
       if (photo.uploaded) void discardFile(photo.uploaded.id).catch(() => {});
@@ -403,18 +426,36 @@ function ChatRoom({ chatId }: { chatId: number }) {
   }
 
   async function sendPhotos() {
-    if (!photos.length || pending || !room.connected) return;
+    if (!photos.length || pending || photoBatch.current || !room.connected)
+      return;
     const request = new AbortController();
+    const multiple = photos.length > 1;
+    const batch: PhotoBatch = {
+      photos: new Map(
+        photos.map((photo) => [
+          photo.key,
+          { ...photo, progress: undefined, sending: false },
+        ]),
+      ),
+    };
+    photoBatch.current = batch;
     uploadController.current = request;
     setPending(true);
     setPhotoPreview(false);
+    setUploadingPhotos(multiple);
     setPhotoError("");
     setSendError("");
-    const ids: string[] = [];
     let caption = photoCaption;
     let replyId = reply?.id;
-    let remaining = photos.length;
+    let sent = false;
     const draft = sourceDraft.current;
+    const refreshPhotos = () => setPhotos([...batch.photos.values()]);
+    const updatePhoto = (key: number, update: Partial<SelectedPhoto>) => {
+      const current = batch.photos.get(key);
+      if (!current) return;
+      batch.photos.set(key, { ...current, ...update });
+      refreshPhotos();
+    };
     const clearSentCaption = () => {
       setInput((current) => (current === draft ? "" : current));
       setPhotoCaption("");
@@ -423,43 +464,71 @@ function ChatRoom({ chatId }: { chatId: number }) {
     };
     try {
       scrollToBottom();
-      for (const photo of photos) {
+      refreshPhotos();
+      for (const { key } of photos) {
         request.signal.throwIfAborted();
-        const uploaded =
-          photo.uploaded ??
-          (await uploadAttachment(photo.file, caption, request.signal));
-        setPhotos((current) =>
-          current.map((item) =>
-            item.key === photo.key ? { ...item, uploaded } : item,
-          ),
-        );
-        if (groupPhotos) {
-          ids.push(uploaded.id);
-        } else {
+        const photo = batch.photos.get(key);
+        if (!photo) continue;
+        let uploaded = photo.uploaded;
+        if (!uploaded && multiple) {
+          const controller = new AbortController();
+          batch.active = { key, controller };
+          updatePhoto(key, { progress: 0 });
+          try {
+            uploaded = await uploadFile<MediaFile>(
+              `files/chats/${chatId}`,
+              photo.file,
+              controller.signal,
+              (progress) => {
+                if (!controller.signal.aborted) updatePhoto(key, { progress });
+              },
+            );
+          } catch (error) {
+            if (controller.signal.aborted && !request.signal.aborted) continue;
+            throw error;
+          } finally {
+            batch.active = undefined;
+          }
+          if (controller.signal.aborted) {
+            void discardFile(uploaded.id).catch(() => {});
+            continue;
+          }
+        }
+        uploaded ??= await uploadAttachment(photo.file, caption, request.signal);
+        updatePhoto(key, { uploaded });
+        if (!groupPhotos) {
+          updatePhoto(key, { sending: true });
           await room.send(caption, uploaded.id, replyId);
-          if (remaining === photos.length) clearSentCaption();
-          remaining--;
-          setPhotos((current) =>
-            current.filter((item) => item.key !== photo.key),
-          );
+          if (!sent) clearSentCaption();
+          sent = true;
+          batch.photos.delete(key);
+          refreshPhotos();
           caption = "";
           replyId = undefined;
         }
       }
-      if (groupPhotos) {
+      if (groupPhotos && batch.photos.size) {
         request.signal.throwIfAborted();
+        const ids: string[] = [];
+        for (const photo of batch.photos.values()) {
+          if (photo.uploaded) ids.push(photo.uploaded.id);
+          batch.photos.set(photo.key, { ...photo, sending: true });
+        }
+        refreshPhotos();
         await room.send(caption, ids.length === 1 ? ids[0] : ids, replyId);
-        remaining = 0;
-        setPhotos([]);
+        sent = true;
+        batch.photos.clear();
+        refreshPhotos();
         clearSentCaption();
       }
     } catch (error) {
       if (!request.signal.aborted) setPhotoError(errorMessage(error));
     } finally {
-      if (remaining < photos.length && !request.signal.aborted)
-        showSentMessage();
+      photoBatch.current = null;
+      if (sent && !request.signal.aborted) showSentMessage();
+      setUploadingPhotos(false);
       setPending(false);
-      if (remaining) setPhotoPreview(true);
+      if (batch.photos.size) setPhotoPreview(true);
     }
   }
 
@@ -923,6 +992,13 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   cancel={() => uploadController.current?.abort()}
                 />
               )}
+              {uploadingPhotos && photos.length > 0 && (
+                <UploadingPhotos
+                  photos={photos}
+                  caption={photoCaption}
+                  cancel={cancelPhotoUpload}
+                />
+              )}
               <div ref={bottom} />
             </div>
           </div>
@@ -1095,7 +1171,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
             >
               <Paperclip />
             </Button>
-            <div className="flex min-w-0 flex-1 items-end rounded-full border border-input bg-background/80 pr-1 shadow-inner focus-within:ring-2 focus-within:ring-ring">
+            <div className="flex min-w-0 flex-1 items-end rounded-md border border-input bg-background/80 pr-1 shadow-inner focus-within:ring-2 focus-within:ring-ring">
               <textarea
                 ref={mountComposer}
                 id="message-input"

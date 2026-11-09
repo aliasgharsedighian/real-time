@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Plus, Send, X } from "lucide-react";
 import { LocalPreview } from "@/features/uploads/Media";
 import { PhotoGrid } from "@/features/uploads/PhotoGallery";
+import type { MediaFile } from "@/features/uploads/api";
 import { Button } from "@/shared/ui/button";
 import {
   Dialog,
@@ -12,6 +13,14 @@ import {
 import { cn } from "@/shared/lib/utils";
 
 export const maxAlbumPhotos = 10;
+
+export type SelectedPhoto = {
+  key: number;
+  file: File;
+  uploaded?: MediaFile;
+  progress?: number;
+  sending?: boolean;
+};
 
 export function PhotoPreview({
   photos,
@@ -174,6 +183,117 @@ export function PhotoPreview({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function UploadingPhotos({
+  photos,
+  caption,
+  cancel,
+}: {
+  photos: SelectedPhoto[];
+  caption: string;
+  cancel: (key: number) => void;
+}) {
+  const [portraits, setPortraits] = useState<Record<number, boolean>>({});
+  const single = photos.length === 1;
+  return (
+    <div className="my-3 flex justify-end" aria-label="Photo uploads">
+      <div className="message-own min-w-0 max-w-[88%] rounded-2xl p-1 shadow-sm sm:max-w-[75%]">
+        <PhotoGrid
+          count={photos.length}
+          portrait={portraits[photos[0].key]}
+          className="w-[min(24rem,70vw)]"
+        >
+          {photos.map(({ key, file, progress, uploaded, sending }) => {
+            const transferred = uploaded ? 100 : progress;
+            const status = sending
+              ? "Sending…"
+              : uploaded
+                ? "Uploaded"
+                : progress === undefined
+                  ? "Queued"
+                  : progress === 100
+                    ? "Processing…"
+                    : `${progress}%`;
+            return (
+              <div
+                key={key}
+                className={cn(
+                  "relative min-h-0 min-w-0 overflow-hidden bg-muted",
+                  single && "grid min-h-24 place-items-center",
+                )}
+              >
+                <LocalPreview
+                  file={file}
+                  className={
+                    single
+                      ? "block h-auto max-h-96 max-w-full object-contain"
+                      : "absolute inset-0 size-full object-cover"
+                  }
+                  onImageLoad={({ currentTarget: image }) => {
+                    const portrait = image.naturalHeight > image.naturalWidth;
+                    setPortraits((current) =>
+                      current[key] === portrait
+                        ? current
+                        : { ...current, [key]: portrait },
+                    );
+                  }}
+                />
+                {!sending && (
+                  <div className="absolute top-1 right-1 grid size-11 place-items-center">
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="size-full rounded-full bg-black/75 text-white hover:bg-black/90"
+                      aria-label={`Cancel upload: ${file.name}`}
+                      onClick={() => cancel(key)}
+                    >
+                      <X />
+                    </Button>
+                    <svg
+                      className="pointer-events-none absolute inset-0 size-full -rotate-90 text-white"
+                      viewBox="0 0 44 44"
+                      role={transferred === undefined ? undefined : "progressbar"}
+                      aria-hidden={transferred === undefined}
+                      aria-label={`Upload progress: ${file.name}`}
+                      aria-valuenow={transferred}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <circle cx="22" cy="22" r="19" opacity=".35" />
+                      {!!transferred && (
+                        <circle
+                          cx="22"
+                          cy="22"
+                          r="19"
+                          pathLength="100"
+                          strokeDasharray={`${transferred} 100`}
+                        />
+                      )}
+                    </svg>
+                  </div>
+                )}
+                <span className="absolute right-1 bottom-1 max-w-full rounded bg-black/75 px-1.5 text-[11px] leading-5 text-white tabular-nums">
+                  {status}
+                </span>
+              </div>
+            );
+          })}
+        </PhotoGrid>
+        {caption.trim() && (
+          <p
+            className="whitespace-pre-wrap break-words px-2 py-1 text-sm [overflow-wrap:anywhere]"
+            dir="auto"
+          >
+            {caption}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   stopTyping: vi.fn(),
   send: vi.fn(),
   upload: vi.fn(),
+  discard: vi.fn(),
   history: vi.fn(),
   search: vi.fn(),
   window: vi.fn(),
@@ -91,6 +92,7 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
     },
   }),
   uploadFile: mocks.upload,
+  discardFile: mocks.discard,
 }));
 vi.mock("@/features/uploads/Media", () => ({
   useFileUrl: (id?: string) => ({ url: id ? `blob:${id}` : undefined }),
@@ -263,6 +265,7 @@ describe("chat attachments", () => {
       .getState()
       .setTokens({ accessToken: "access", refreshToken: "refresh" });
     mocks.upload.mockResolvedValue({ id: "attachment-id", kind: "VIDEO" });
+    mocks.discard.mockResolvedValue(undefined);
     mocks.send.mockResolvedValue(undefined);
   });
   afterEach(() => {
@@ -577,6 +580,73 @@ describe("chat attachments", () => {
       "one.jpg",
       "three.jpg",
     ]);
+  });
+
+  it("keeps the album visible and continues after cancelling an uploaded, active or queued photo", async () => {
+    let activeSignal!: AbortSignal;
+    let finishLast!: () => void;
+    mocks.upload
+      .mockResolvedValueOnce({ id: "first", kind: "IMAGE" })
+      .mockImplementationOnce((_path, _file, signal: AbortSignal, progress) => {
+        activeSignal = signal;
+        progress(50);
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      })
+      .mockResolvedValueOnce({ id: "fourth", kind: "IMAGE" })
+      .mockImplementationOnce((_path, _file, _signal, progress) => {
+        progress(100);
+        return new Promise((resolve) => {
+          finishLast = () => resolve({ id: "fifth", kind: "IMAGE" });
+        });
+      });
+    setup();
+    const picker = await screen.findByLabelText(
+      "Choose chat photo, video or audio",
+    );
+    const names = ["one", "two", "three", "four", "five"];
+    fireEvent.change(picker, {
+      target: {
+        files: names.map(
+          (name) => new File(["image"], `${name}.jpg`, { type: "image/jpeg" }),
+        ),
+      },
+    });
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Send" }),
+    );
+    const active = await screen.findByRole("progressbar", {
+      name: "Upload progress: two.jpg",
+    });
+    expect(active.getAttribute("aria-valuenow")).toBe("50");
+    const pending = within(screen.getByLabelText("Photo uploads"));
+    for (const name of names)
+      expect(pending.getByText(`Preview: ${name}.jpg`)).toBeTruthy();
+    for (const name of ["one", "three", "two"]) {
+      fireEvent.click(
+        pending.getByRole("button", { name: `Cancel upload: ${name}.jpg` }),
+      );
+    }
+    expect(activeSignal.aborted).toBe(true);
+    expect(mocks.discard).toHaveBeenCalledWith("first");
+    await pending.findByText("Processing…");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(pending.getByText("Preview: four.jpg")).toBeTruthy();
+    expect(pending.getByText("Preview: five.jpg")).toBeTruthy();
+    await act(async () => finishLast());
+    expect(mocks.upload.mock.calls.map(([, file]) => file.name)).toEqual([
+      "one.jpg",
+      "two.jpg",
+      "four.jpg",
+      "five.jpg",
+    ]);
+    expect(mocks.send.mock.calls).toEqual([
+      ["", ["fourth", "fifth"], undefined],
+    ]);
+    expect(screen.queryByLabelText("Photo uploads")).toBeNull();
   });
 
   it("continues separate photo sends after a partial failure without resending a delivered photo", async () => {
