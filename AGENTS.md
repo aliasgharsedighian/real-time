@@ -11,3 +11,7 @@
 ## Backend API documentation
 
 - For every new or changed HTTP endpoint or Socket.IO event, including service changes that affect the public contract, update the documentation in the same change. Follow [the backend documentation guide](docs/backend-api-documentation.md).
+
+## Linux deployment documentation
+
+- Keep [the frontend deployment guide](docs/deploy-frontend.md) and [the backend deployment guide](docs/deploy-backend.md) current. When a change requires server work, update the affected guide in the same change with the required configuration, dependencies, commands, verification, and recovery steps for manual deployment and CI/CD.
