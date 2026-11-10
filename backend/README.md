@@ -44,6 +44,13 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## API documentation
+
+Open `/v1/documentations` on the running backend for Swagger UI and the
+Socket.IO event reference. Follow the
+[backend API documentation guide](../docs/backend-api-documentation.md)
+when changing a public contract.
+
 ## Run tests
 
 ```bash

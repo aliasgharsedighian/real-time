@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { GetChatByIdParamsDto } from './polling.request.dto';
 import {
@@ -61,6 +62,7 @@ export class MessageReadersParamsDto extends GetChatByIdParamsDto {
 }
 
 export class SetReactionDto {
+  @ApiProperty({ type: String, nullable: true, example: '👍' })
   @ValidateIf((_body, value) => value !== null)
   @IsString()
   @MaxLength(32)

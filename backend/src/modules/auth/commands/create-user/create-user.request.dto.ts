@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
@@ -21,6 +22,7 @@ export class SignUpRequestDto {
   @IsNotEmpty()
   password: string;
 
+  @ApiProperty({ enum: UserRole })
   @IsEnum(UserRole)
   @IsNotEmpty()
   role: 'USER' | 'ADMIN';

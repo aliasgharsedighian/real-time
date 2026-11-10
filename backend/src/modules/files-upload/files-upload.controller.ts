@@ -1,3 +1,10 @@
+import { ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  DocumentBearerAuth,
+  DocumentEndpoint,
+  DocumentUpload,
+} from '../../documentation/http';
+import { integer, ref, uuid } from '../../documentation/schemas';
 import {
   Controller,
   Delete,
@@ -36,16 +43,31 @@ function interceptor(maxBytes: number) {
   });
 }
 
+@ApiTags('Files')
+@DocumentBearerAuth()
 @Controller('api/v1/files')
 @UseGuards(JwtGuard)
 export class FilesUploadController {
   constructor(private readonly files: FilesUploadService) {}
-  @Get('policy') policy() {
+  @Get('policy')
+  @DocumentEndpoint(
+    'Get accepted media types and upload limits',
+    200,
+    ref('UploadPolicy'),
+  )
+  policy() {
     return uploadPolicy;
   }
 
   @Post('avatar')
   @UseInterceptors(interceptor(uploadPolicy.avatarMaxBytes))
+  @DocumentEndpoint(
+    'Upload a profile avatar',
+    201,
+    ref('Profile'),
+    [400, 413, 503],
+  )
+  @DocumentUpload()
   avatar(
     @UploadedFile() file: Express.Multer.File,
     @GetUser() user: { id: number },
@@ -53,12 +75,21 @@ export class FilesUploadController {
     return this.files.upload(file, user.id);
   }
   @Delete('avatar')
+  @DocumentEndpoint('Remove the profile avatar', 200, ref('Profile'))
   removeAvatar(@GetUser() user: { id: number }) {
     return this.files.removeAvatar(user.id);
   }
 
   @Post('groups/:chatId/avatar')
   @UseInterceptors(interceptor(uploadPolicy.avatarMaxBytes))
+  @DocumentEndpoint(
+    'Upload a group avatar as owner',
+    201,
+    ref('Chat'),
+    [400, 403, 413, 503],
+  )
+  @DocumentUpload()
+  @ApiParam({ name: 'chatId', schema: integer })
   groupAvatar(
     @Param('chatId', ParseIntPipe) chatId: number,
     @UploadedFile() file: Express.Multer.File,
@@ -67,6 +98,13 @@ export class FilesUploadController {
     return this.files.upload(file, user.id, chatId, true);
   }
   @Delete('groups/:chatId/avatar')
+  @DocumentEndpoint(
+    'Remove a group avatar as owner',
+    200,
+    ref('Chat'),
+    [400, 403],
+  )
+  @ApiParam({ name: 'chatId', schema: integer })
   removeGroupAvatar(
     @Param('chatId', ParseIntPipe) chatId: number,
     @GetUser() user: { id: number },
@@ -76,6 +114,14 @@ export class FilesUploadController {
 
   @Post('chats/:chatId')
   @UseInterceptors(interceptor(uploadPolicy.videoMaxBytes))
+  @DocumentEndpoint(
+    'Upload a draft chat attachment',
+    201,
+    ref('Attachment'),
+    [400, 403, 413, 503],
+  )
+  @DocumentUpload()
+  @ApiParam({ name: 'chatId', schema: integer })
   chat(
     @Param('chatId', ParseIntPipe) chatId: number,
     @UploadedFile() file: Express.Multer.File,
@@ -85,6 +131,14 @@ export class FilesUploadController {
   }
   @Post('chats/:chatId/music')
   @UseInterceptors(interceptor(uploadPolicy.audioMaxBytes))
+  @DocumentEndpoint(
+    'Upload a draft music attachment',
+    201,
+    ref('Attachment'),
+    [400, 403, 413, 503],
+  )
+  @DocumentUpload()
+  @ApiParam({ name: 'chatId', schema: integer })
   music(
     @Param('chatId', ParseIntPipe) chatId: number,
     @UploadedFile() file: Express.Multer.File,
@@ -93,6 +147,13 @@ export class FilesUploadController {
     return this.files.upload(file, user.id, chatId, false, true);
   }
   @Delete(':id')
+  @DocumentEndpoint(
+    'Delete an unused draft attachment',
+    200,
+    undefined,
+    [400, 404],
+  )
+  @ApiParam({ name: 'id', schema: uuid })
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @GetUser() user: { id: number },
@@ -101,6 +162,22 @@ export class FilesUploadController {
   }
 
   @Get(':id/content')
+  @ApiResponse({
+    status: 200,
+    description: 'File bytes (media type determined by the stored file)',
+    content: {
+      'image/*': { schema: { type: 'string', format: 'binary' } },
+      'video/*': { schema: { type: 'string', format: 'binary' } },
+      'audio/*': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
+  @DocumentEndpoint(
+    'Download attachment or avatar content',
+    200,
+    undefined,
+    [400, 403, 404],
+  )
+  @ApiParam({ name: 'id', schema: uuid })
   async content(
     @Param('id', ParseUUIDPipe) id: string,
     @GetUser() user: { id: number },

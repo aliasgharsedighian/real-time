@@ -1,3 +1,6 @@
+import { ApiTags } from '@nestjs/swagger';
+import { DocumentEndpoint } from '../../../../documentation/http';
+import { envelope, ref } from '../../../../documentation/schemas';
 import {
   Body,
   Controller,
@@ -11,12 +14,19 @@ import { SignInRequestDto } from './signin-user.request.dto';
 import { SignInUserService } from './signin-user.service';
 import { Response } from 'express';
 
+@ApiTags('Auth')
 @Controller(routesV1.version)
 export class SignInUserHttpController {
   constructor(private signinAuth: SignInUserService) {}
 
   @HttpCode(HttpStatus.OK)
   @Post(routesV1.auth.signin)
+  @DocumentEndpoint(
+    'Sign in and issue JWTs',
+    200,
+    envelope(ref('Tokens'), 200),
+    [400, 403, 404],
+  )
   async signin(
     @Body() body: SignInRequestDto,
     @Res({ passthrough: true }) res: Response,

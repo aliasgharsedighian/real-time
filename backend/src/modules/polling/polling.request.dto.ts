@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { maxAlbumPhotos } from '../files-upload/upload.policy';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -28,6 +29,12 @@ export class SendMessageRequestDto {
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
+  @ApiPropertyOptional({
+    type: 'array',
+    minItems: 1,
+    maxItems: maxAlbumPhotos,
+    items: { type: 'string', format: 'uuid' },
+  })
   @ArrayMaxSize(maxAlbumPhotos)
   @IsUUID(undefined, { each: true })
   readonly attachmentIds?: string[];

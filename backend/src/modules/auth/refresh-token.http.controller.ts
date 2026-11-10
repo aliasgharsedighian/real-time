@@ -1,3 +1,6 @@
+import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { DocumentEndpoint } from '../../documentation/http';
+import { object, text } from '../../documentation/schemas';
 import {
   Controller,
   Post,
@@ -10,12 +13,20 @@ import { JwtService } from '@nestjs/jwt';
 import { routesV1 } from 'src/config/app.routes';
 import { get } from 'env-var';
 
+@ApiTags('Auth')
 @Controller(routesV1.version)
 export class AuthRefreshController {
   constructor(private readonly jwtService: JwtService) {}
 
   @HttpCode(HttpStatus.OK)
   @Post(routesV1.auth.refreshToken)
+  @DocumentEndpoint(
+    'Refresh an access token',
+    200,
+    object({ accessToken: text }),
+    [401],
+  )
+  @ApiBody({ required: true, schema: object({ refreshToken: text }) })
   async refresh(@Body() body: { refreshToken: string }) {
     try {
       const secret = process.env.JWT_SECRET;

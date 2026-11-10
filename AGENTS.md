@@ -7,3 +7,7 @@
 - Read `docs/frontend-context.md` and `frontend/README.md` for current frontend architecture and commands. `docs/nextjs-frontend-context.md` is a historical review of the backup, not the active frontend specification.
 - Local frontend endpoints: `VITE_API_URL=http://localhost:3333` and `VITE_SOCKET_URL=http://localhost:3333/chat` in `frontend/.env.local`.
 - Preserve protected routes under `/dashboard` and their API-backed session validation when modifying navigation or authentication.
+
+## Backend API documentation
+
+- For every new or changed HTTP endpoint or Socket.IO event, including service changes that affect the public contract, update the documentation in the same change. Follow [the backend documentation guide](docs/backend-api-documentation.md).

@@ -1,7 +1,9 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 export class SharedContentDto {
   @IsOptional()
+  @ApiPropertyOptional({ enum: ['IMAGE', 'VIDEO', 'AUDIO', 'MUSIC', 'LINK'] })
   @IsIn(['IMAGE', 'VIDEO', 'AUDIO', 'MUSIC', 'LINK'])
   kind?: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'MUSIC' | 'LINK';
   @IsOptional()

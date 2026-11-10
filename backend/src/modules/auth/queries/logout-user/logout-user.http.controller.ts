@@ -1,3 +1,9 @@
+import { ApiTags } from '@nestjs/swagger';
+import {
+  DocumentBearerAuth,
+  DocumentEndpoint,
+} from '../../../../documentation/http';
+import { integer, object, text } from '../../../../documentation/schemas';
 import {
   Controller,
   HttpCode,
@@ -13,6 +19,8 @@ import { GetUser } from 'src/libs/decorators';
 import { User } from '@prisma/client';
 import { Response } from 'express';
 
+@ApiTags('Auth')
+@DocumentBearerAuth()
 @Controller(routesV1.version)
 @UseGuards(JwtGuard)
 export class LogoutUserHttpController {
@@ -20,6 +28,12 @@ export class LogoutUserHttpController {
 
   @HttpCode(HttpStatus.OK)
   @Post(routesV1.auth.logout)
+  @DocumentEndpoint(
+    'Clear the sign-in cookie',
+    200,
+    object({ statusCode: { ...integer, example: 200 }, message: text }),
+    [404],
+  )
   async logout(
     @GetUser() user: User,
     @Res({ passthrough: true }) res: Response,
