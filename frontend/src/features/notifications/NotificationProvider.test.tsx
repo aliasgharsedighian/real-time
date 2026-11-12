@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { SessionContext } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
@@ -18,6 +19,16 @@ vi.mock("@/features/chat/socket", () => ({ getSocket: () => ({ connected: true,
   off: (name: string) => fake.events.delete(name),
 }) }));
 vi.mock("@/shared/lib/api", () => ({ api: { get: async () => ({ data: { pushConfigured: true } }) } }));
+vi.mock("@/features/chat/api", () => ({
+  chatKeys: { list: () => ["chats"] },
+  getChats: async () => [
+    { id: 7, isGroup: true, avatarId: "group-avatar", participants: [] },
+    { id: 8, isGroup: false, participants: [{ userId: 1, user: { profile: { avatarId: "sender-avatar" } } }] },
+  ],
+}));
+vi.mock("@/features/uploads/Media", () => ({
+  useFileUrl: (id?: string) => ({ url: id ? `blob:${id}` : undefined }),
+}));
 vi.mock("./config", () => ({ pushConfigured: true }));
 vi.mock("./browser-push", () => ({
   browserSupportsPush: () => true, preference: () => false, setPreference: vi.fn(),
@@ -27,9 +38,10 @@ vi.mock("./browser-push", () => ({
 const notification = { type: "chat.message", messageId: "99", chatId: "7", recipientId: "2", senderId: "1",
   title: "Bat family", body: "Bruce: 📷 Photo · Gotham", senderName: "Bruce", mediaKind: "IMAGE", createdAt: new Date().toISOString() };
 function mount() {
-  return render(<BrowserRouter><SessionContext value={{ user: { id: 2, email: "me@test.invalid", profile: null }, checking: false, error: null, retry: vi.fn() }}>
+  const cache = new QueryClient();
+  return render(<QueryClientProvider client={cache}><BrowserRouter><SessionContext value={{ user: { id: 2, email: "me@test.invalid", profile: null }, checking: false, error: null, retry: vi.fn() }}>
     <NotificationProvider><p>Chat works</p><NotificationSettings /></NotificationProvider>
-  </SessionContext></BrowserRouter>);
+  </SessionContext></BrowserRouter></QueryClientProvider>);
 }
 beforeEach(() => {
   fake.events.clear(); fake.emit.mockClear(); fake.deliver.mockClear(); fake.play.mockClear();
@@ -57,6 +69,23 @@ describe("in-app notifications with Firebase unavailable", () => {
     expect(window.location.pathname).toBe("/dashboard/websocket/7");
     await waitFor(() => expect(screen.queryByRole("button", { name: "Open conversation: Bat family" })).toBeNull());
     expect(fake.emit).toHaveBeenLastCalledWith("notification:presence", { active: true, chatId: 7 });
+  });
+  it("uses the group or sender photo and falls back to initials", async () => {
+    mount();
+    act(() => {
+      const receive = fake.events.get("notification:new")!;
+      receive(notification);
+      receive({ ...notification, chatId: "8", messageId: "100", title: "Bruce Wayne" });
+      receive({ ...notification, chatId: "9", messageId: "101", title: "Diana Prince" });
+    });
+    const avatarSrc = (title: string) => screen.getByRole("button", {
+      name: `Open conversation: ${title}`,
+    }).closest("article")?.querySelector("img")?.getAttribute("src");
+    await waitFor(() => {
+      expect(avatarSrc("Bat family")).toBe("blob:group-avatar");
+      expect(avatarSrc("Bruce Wayne")).toBe("blob:sender-avatar");
+    });
+    expect(screen.getByText("DP")).toBeTruthy();
   });
   it("closes with the X and expires the next toast automatically", async () => {
     mount();

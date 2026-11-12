@@ -1,12 +1,6 @@
-import {
-  Image,
-  MessageCircle,
-  Music2,
-  Mic,
-  Users,
-  Video,
-  X,
-} from "lucide-react";
+import { Users, X } from "lucide-react";
+import { useChatList } from "@/features/chat/hooks/use-chat-list";
+import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import type { ChatNotification } from "./types";
 
 export function NotificationCard({
@@ -20,21 +14,15 @@ export function NotificationCard({
   open: () => void;
   dismiss: () => void;
 }) {
-  const Icon =
-    notification.mediaKind === "IMAGE"
-      ? Image
-      : notification.mediaKind === "VIDEO"
-        ? Video
-        : notification.mediaKind === "AUDIO"
-          ? Mic
-          : notification.mediaKind === "MUSIC"
-            ? Music2
-            : MessageCircle;
+  const { data: chats } = useChatList();
+  const chat = chats?.find(({ id }) => String(id) === notification.chatId);
+  const avatarId = chat?.isGroup
+    ? chat.avatarId
+    : chat?.participants.find(({ userId }) => String(userId) === notification.senderId)
+        ?.user.profile?.avatarId;
   return (
     <article className="brand-panel relative flex w-full items-start gap-3 rounded-2xl border-primary/40 p-4 shadow-[0_12px_50px_#0005,0_0_24px_var(--brand-halo)]">
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-brand">
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
+      <IdentityAvatar name={notification.title} avatarId={avatarId} />
       <button
         type="button"
         onClick={(event) => {
@@ -50,7 +38,7 @@ export function NotificationCard({
           </span>
         </span>
         <span className="flex items-center gap-1.5 text-sm font-semibold">
-          {notification.title !== notification.senderName && (
+          {(chat?.isGroup ?? notification.title !== notification.senderName) && (
             <Users
               className="size-3.5 shrink-0 text-brand"
               aria-hidden="true"
