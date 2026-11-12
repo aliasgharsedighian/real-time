@@ -136,13 +136,26 @@ export class MessageSearchService {
             senderId: number;
             createdAt: Date;
             content: string;
+            music: { title: string | null; artist: string | null }[];
           }[]
         >(Prisma.sql`
         SELECT m."id", m."chatId", m."senderId", m."createdAt",
-          substring(m."content" FROM greatest(1, strpos(lower(m."content"), lower(${query.q})) - 80) FOR 320) AS "content"
+          substring(m."content" FROM greatest(1, strpos(lower(m."content"), lower(${query.q})) - 80) FOR 320) AS "content",
+          COALESCE((
+            SELECT json_agg(json_build_object('title', f."title", 'artist', f."artist") ORDER BY f."position", f."id")
+            FROM "UploadFile" f
+            WHERE f."messageId" = m."id" AND f."kind" = 'MUSIC'
+          ), '[]'::json) AS "music"
         FROM "Message" m
         WHERE m."chatId" = ${chatId} AND m."kind" = 'TEXT'
-          AND m."content" ILIKE ${pattern}
+          AND (
+            m."content" ILIKE ${pattern}
+            OR EXISTS (
+              SELECT 1 FROM "UploadFile" f
+              WHERE f."messageId" = m."id" AND f."kind" = 'MUSIC'
+                AND (f."title" ILIKE ${pattern} OR f."artist" ILIKE ${pattern})
+            )
+          )
           ${query.beforeId ? Prisma.sql`AND m."id" < ${query.beforeId}` : Prisma.empty}
           AND EXISTS (SELECT 1 FROM "ChatParticipant" p WHERE p."chatId" = m."chatId" AND p."userId" = ${userId})
         ORDER BY m."id" DESC LIMIT 21

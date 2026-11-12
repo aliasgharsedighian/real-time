@@ -100,7 +100,12 @@ export interface MessageWindow {
   afterId: number | null;
 }
 export interface MessageSearchPage {
-  messages: Message[];
+  messages: (Pick<
+    Message,
+    "id" | "chatId" | "senderId" | "createdAt" | "content" | "sender"
+  > & {
+    music?: { title: string | null; artist: string | null }[];
+  })[];
   nextCursor: number | null;
 }
 export interface TypingEvent {

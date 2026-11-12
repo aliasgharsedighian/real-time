@@ -246,7 +246,7 @@ export class PollingController {
   @Get('realtime/polling/:id/search')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @DocumentEndpoint(
-    'Search message text',
+    'Search message text, song titles and artists',
     200,
     envelope(ref('MessageSearch'), 200),
     [400, 403],

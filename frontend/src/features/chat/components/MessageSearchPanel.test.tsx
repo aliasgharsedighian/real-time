@@ -28,6 +28,7 @@ function mount(onSelect = vi.fn().mockResolvedValue(undefined)) {
       <MessageSearchProvider>
         <MessageSearchPanel
           chatId={7}
+          currentUserId={1}
           title="Project group"
           onSelect={onSelect}
         />
@@ -46,6 +47,39 @@ beforeEach(() => {
     .setTokens({ accessToken: "access", refreshToken: "refresh" });
 });
 describe("server message search panel", () => {
+  it("shows the loading icon and renders music metadata for your own message", async () => {
+    let resolveSearch: (
+      page: Awaited<ReturnType<typeof searchMessages>>,
+    ) => void = () => {};
+    search.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSearch = resolve;
+        }),
+    );
+    const { field } = mount();
+    fireEvent.change(field, { target: { value: "Pacific" } });
+    await waitFor(() =>
+      expect(
+        field.parentElement?.querySelector(".lucide-loader-circle"),
+      ).toBeTruthy(),
+    );
+    resolveSearch({
+      messages: [
+        {
+          ...message(15, ""),
+          senderId: 1,
+          sender: { id: 1, email: "me@test.invalid", profile: null },
+          music: [{ title: "Pacific", artist: "Whitewildbear" }],
+        },
+      ],
+      nextCursor: null,
+    });
+    await screen.findByText("You");
+    expect(screen.getByText("Pacific", { selector: "mark" })).toBeTruthy();
+    expect(screen.getByText("Whitewildbear")).toBeTruthy();
+    expect(field.parentElement?.querySelector(".lucide-search")).toBeTruthy();
+  });
   it("cancels an obsolete search and never renders its stale results", async () => {
     search
       .mockImplementationOnce(() => new Promise(() => {}))

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Search, X, ArrowUpRight } from "lucide-react";
+import { Search, X, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { useSessionStore } from "@/features/auth/session-store";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { BrandLoading } from "@/shared/components/BrandLoading";
@@ -37,11 +37,13 @@ function Highlight({ text, term }: { text: string; term: string }) {
 
 export function MessageSearchPanel({
   chatId,
+  currentUserId,
   title,
   selectedId,
   onSelect,
 }: {
   chatId: number;
+  currentUserId?: number;
   title: string;
   selectedId?: number;
   onSelect: (id: number) => Promise<void>;
@@ -89,6 +91,7 @@ export function MessageSearchPanel({
     refetchOnWindowFocus: false,
   });
   const messages = results.data?.pages.flatMap((p) => p.messages) ?? [];
+  const SearchIcon = results.isFetching ? LoaderCircle : Search;
   return (
     <aside
       id="message-search-panel"
@@ -115,7 +118,10 @@ export function MessageSearchPanel({
           </Button>
         </div>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
+          <SearchIcon
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground ${results.isFetching ? "motion-safe:animate-spin" : ""}`}
+          />
           <Input
             ref={field}
             aria-label="Search message text"
@@ -224,7 +230,9 @@ export function MessageSearchPanel({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-semibold">
-                      {displayName(message.sender)}
+                      {message.senderId === currentUserId
+                        ? "You"
+                        : displayName(message.sender)}
                     </span>
                     <time
                       dateTime={message.createdAt}
@@ -238,12 +246,30 @@ export function MessageSearchPanel({
                       </span>
                     </time>
                   </div>
-                  <p
-                    dir="auto"
-                    className="mt-1 line-clamp-3 break-words text-sm leading-6 text-muted-foreground"
-                  >
-                    <Highlight text={message.content} term={term} />
-                  </p>
+                  {message.music?.map((track, index) => (
+                    <div key={index} className="mt-1 text-sm">
+                      <p dir="auto" className="break-words font-medium">
+                        <Highlight text={track.title || "Music"} term={term} />
+                      </p>
+                      <p
+                        dir="auto"
+                        className="break-words text-muted-foreground"
+                      >
+                        <Highlight
+                          text={track.artist || "Unknown artist"}
+                          term={term}
+                        />
+                      </p>
+                    </div>
+                  ))}
+                  {message.content && (
+                    <p
+                      dir="auto"
+                      className="mt-1 line-clamp-3 break-words text-sm leading-6 text-muted-foreground"
+                    >
+                      <Highlight text={message.content} term={term} />
+                    </p>
+                  )}
                   {selecting === message.id && (
                     <span role="status" className="text-xs text-brand">
                       Opening message…

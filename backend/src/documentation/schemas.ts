@@ -232,6 +232,7 @@ export const schemas = {
       senderId: integer,
       createdAt: timestamp,
       content: text,
+      music: array(object({ title: nullable(text), artist: nullable(text) })),
       sender: component('ChatUser'),
     },
     ['sender'],

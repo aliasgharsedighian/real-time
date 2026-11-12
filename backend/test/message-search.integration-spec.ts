@@ -91,6 +91,7 @@ describe('message search with PostgreSQL and authenticated HTTP', () => {
   });
   afterAll(async () => {
     if (prisma) {
+      await prisma.uploadFile.deleteMany({ where: { chatId: { in: chats } } });
       await prisma.message.deleteMany({ where: { chatId: { in: chats } } });
       await prisma.chatParticipant.deleteMany({
         where: { chatId: { in: chats } },
@@ -156,6 +157,37 @@ describe('message search with PostgreSQL and authenticated HTTP', () => {
       `search?q=${encodeURIComponent("needle' OR true --")}`,
     ).expect(200);
     expect(injection.body.data.messages).toHaveLength(0);
+  });
+  it('finds a captionless music message by title or artist within its chat', async () => {
+    const track = { title: 'Pacific', artist: 'Whitewildbear' };
+    const message = await prisma.message.create({
+      data: {
+        chatId: chats[0],
+        senderId: users[0],
+        content: '',
+        attachments: {
+          create: {
+            ...track,
+            chatId: chats[0],
+            ownerId: users[0],
+            storageKey: `search-test-${chats[0]}.mp3`,
+            kind: 'MUSIC',
+            mimeType: 'audio/mpeg',
+            size: 1,
+            width: 0,
+            height: 0,
+          },
+        },
+      },
+    });
+    for (const term of ['PACIFIC', 'wildbear']) {
+      const hit = await get(chats[0], `search?q=${term}`).expect(200);
+      expect(hit.body.data.messages).toMatchObject([
+        { id: message.id, content: '', music: [track] },
+      ]);
+      const other = await get(chats[1], `search?q=${term}`).expect(200);
+      expect(other.body.data.messages).toEqual([]);
+    }
   });
   it('loads a bounded context around an old message and traverses both directions without gaps', async () => {
     const context = (

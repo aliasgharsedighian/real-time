@@ -1443,6 +1443,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
       {search.open && !pinsOpen && (
         <MessageSearchPanel
           chatId={chatId}
+          currentUserId={user?.id}
           title={
             history.data?.chat?.isGroup
               ? history.data.chat.name || "This group"
