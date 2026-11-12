@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast, Toaster } from "sonner";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
 import { getSocket } from "@/features/chat/socket";
 import { api } from "@/shared/lib/api";
+import { listenForSoundActivation, playAppSound } from "@/shared/lib/app-sounds";
 import { NotificationContext, type PushStatus } from "./context";
 import { NotificationCard } from "./NotificationCard";
 import { pushConfigured } from "./config";
@@ -11,14 +13,16 @@ import {
   browserSupportsPush, connectBrowserPush, deliverThroughWorker, disableBrowserPush,
   preference, setPreference, workerMessage,
 } from "./browser-push";
-import { isChatNotification, type ChatNotification } from "./types";
+import { isChatNotification } from "./types";
 
-interface Notice { data: ChatNotification; count: number; expiresAt: number }
+const messageToaster = "chat-notifications";
+interface Notice { id: string; messageId: string; count: number }
 function currentChatId() {
   return /^\/dashboard\/websocket\/(\d+)\/?$/.exec(window.location.pathname)?.[1] || null;
 }
 function isActive() {
-  return document.visibilityState === "visible" && document.hasFocus();
+  // A visible desktop window can still receive messages while another window has focus.
+  return document.visibilityState === "visible";
 }
 
 export default function NotificationProvider({ children }: { children: ReactNode }) {
@@ -28,30 +32,70 @@ export default function NotificationProvider({ children }: { children: ReactNode
   const navigate = useNavigate();
   const location = useLocation();
   const [status, setStatus] = useState<PushStatus>("off");
-  const [notices, setNotices] = useState<Notice[]>([]);
+  const notices = useRef(new Map<string, Notice>());
   const seen = useRef(new Set<string>());
   const generation = useRef(0);
   const stopPush = useRef<(() => void) | undefined>(undefined);
   const connecting = useRef(false);
   const configured = useRef(false);
 
+  useEffect(listenForSoundActivation, [identity]);
+
+  const dismissChat = useCallback((chatId: string) => {
+    const notice = notices.current.get(chatId);
+    if (!notice) return;
+    notices.current.delete(chatId);
+    toast.dismiss(notice.id);
+  }, []);
+
+  useEffect(() => {
+    const current = notices.current;
+    const received = seen.current;
+    return () => {
+      for (const { id } of current.values()) toast.dismiss(id);
+      current.clear();
+      received.clear();
+    };
+  }, [identity]);
+
   const show = useCallback((value: unknown) => {
     if (!isChatNotification(value) || value.recipientId !== String(userId) ||
       value.senderId === String(userId) || !isActive() || currentChatId() === value.chatId ||
-      !useSessionStore.getState().tokens) return;
+      !identity || useSessionStore.getState().tokens?.refreshToken !== identity) return;
     if (seen.current.has(value.messageId)) return;
     seen.current.add(value.messageId);
     if (seen.current.size > 500) seen.current.delete(seen.current.values().next().value!);
-    setNotices((old) => {
-      const existing = old.find((notice) => notice.data.chatId === value.chatId);
-      return [{ data: value, count: (existing?.count ?? 0) + 1, expiresAt: Date.now() + 8000 },
-        ...old.filter((notice) => notice.data.chatId !== value.chatId)].slice(0, 3);
+    playAppSound("messageReceived");
+    const previous = notices.current.get(value.chatId);
+    const id = previous?.id ?? `chat-message-${value.messageId}`;
+    const count = (previous?.count ?? 0) + 1;
+    const forget = () => {
+      if (notices.current.get(value.chatId)?.id === id) notices.current.delete(value.chatId);
+    };
+    notices.current.delete(value.chatId);
+    notices.current.set(value.chatId, { id, messageId: value.messageId, count });
+    if (notices.current.size > 3) dismissChat(notices.current.keys().next().value!);
+
+    toast.custom(() => (
+      <NotificationCard notification={value} count={count}
+        dismiss={() => dismissChat(value.chatId)}
+        open={() => {
+          dismissChat(value.chatId);
+          navigate(`/dashboard/websocket/${value.chatId}`);
+        }} />
+    ), {
+      id,
+      toasterId: messageToaster,
+      className: "w-[var(--width)]",
+      duration: 8000,
+      onDismiss: forget,
+      onAutoClose: forget,
     });
-  }, [userId]);
+  }, [dismissChat, identity, navigate, userId]);
 
   const receive = useCallback((value: unknown) => {
     if (!isChatNotification(value) || value.recipientId !== String(userId)) return;
-    // The worker arbitrates tabs, suppresses an open chat, and deduplicates socket/FCM.
+    // Firebase delivery can race a visibility change, so recheck through the worker.
     void deliverThroughWorker(value).catch(() => show(value));
   }, [show, userId]);
 
@@ -104,14 +148,14 @@ export default function NotificationProvider({ children }: { children: ReactNode
   useEffect(() => {
     const socket = getSocket();
     if (socket.connected) socket.emit("notification:presence", { active: isActive(), chatId: Number(currentChatId()) || null });
-    setNotices((old) => old.filter((notice) => notice.data.chatId !== currentChatId()));
-  }, [location.pathname]);
+    dismissChat(currentChatId() ?? "");
+  }, [dismissChat, location.pathname]);
 
   useEffect(() => {
     const socket = getSocket();
     const presence = () => {
       if (socket.connected) socket.emit("notification:presence", { active: isActive(), chatId: Number(currentChatId()) || null });
-      if (isActive()) setNotices((old) => old.filter((notice) => notice.data.chatId !== currentChatId()));
+      if (isActive()) dismissChat(currentChatId() ?? "");
     };
     const suspended = () => { if (socket.connected) socket.emit("notification:presence", { active: false, chatId: null }); };
     const workerEvent = (event: MessageEvent) => {
@@ -126,32 +170,34 @@ export default function NotificationProvider({ children }: { children: ReactNode
         event.data.recipientId === String(userId) && /^[1-9]\d*$/.test(event.data.chatId))
         navigate(`/dashboard/websocket/${event.data.chatId}`);
     };
-    const removed = ({ chatId }: { chatId: number }) => setNotices(old => old.filter(notice => notice.data.chatId !== String(chatId)));
-    const deleted = ({ chatId, messageIds }: { chatId: number; messageIds: number[] }) => setNotices(old => old.filter(notice => notice.data.chatId !== String(chatId) || !messageIds.includes(Number(notice.data.messageId))));
+    const removed = ({ chatId }: { chatId: number }) => dismissChat(String(chatId));
+    const deleted = ({ chatId, messageIds }: { chatId: number; messageIds: number[] }) => {
+      const notice = notices.current.get(String(chatId));
+      if (notice && messageIds.includes(Number(notice.messageId))) dismissChat(String(chatId));
+    };
     socket.on("chat:removed", removed);
     socket.on("message:deleted", deleted);
     socket.on("connect", presence);
     socket.on("chat:joined", presence);
-    socket.on("notification:new", receive);
+    socket.on("notification:new", show);
     document.addEventListener("visibilitychange", presence);
     window.addEventListener("focus", presence);
-    window.addEventListener("blur", presence);
+    window.addEventListener("pageshow", presence);
     window.addEventListener("pagehide", suspended);
     navigator.serviceWorker?.addEventListener("message", workerEvent);
     const heartbeat = setInterval(presence, 20_000);
-    const expiry = setInterval(() => setNotices((old) => old.filter((notice) => notice.expiresAt > Date.now() && notice.data.chatId !== currentChatId())), 1000);
     presence();
     return () => {
       suspended();
-      clearInterval(heartbeat); clearInterval(expiry);
+      clearInterval(heartbeat);
       socket.off("chat:removed", removed);
       socket.off("message:deleted", deleted);
-      socket.off("connect", presence); socket.off("chat:joined", presence); socket.off("notification:new", receive);
+      socket.off("connect", presence); socket.off("chat:joined", presence); socket.off("notification:new", show);
       document.removeEventListener("visibilitychange", presence);
-      window.removeEventListener("focus", presence); window.removeEventListener("blur", presence); window.removeEventListener("pagehide", suspended);
+      window.removeEventListener("focus", presence); window.removeEventListener("pageshow", presence); window.removeEventListener("pagehide", suspended);
       navigator.serviceWorker?.removeEventListener("message", workerEvent);
     };
-  }, [identity, userId, navigate, receive, show]);
+  }, [dismissChat, identity, userId, navigate, show]);
 
   useEffect(() => {
     const retry = () => {
@@ -186,13 +232,10 @@ export default function NotificationProvider({ children }: { children: ReactNode
   return (
     <NotificationContext value={{ status, enable, disable }}>
       {children}
-      <div role="status" aria-live="polite" aria-label="New messages" className="pointer-events-none fixed inset-x-3 top-[max(1rem,env(safe-area-inset-top))] z-[70] ml-auto flex max-w-sm flex-col gap-3 sm:right-5">
-        {notices.map(({ data, count }) => <div key={data.chatId} className="pointer-events-auto">
-          <NotificationCard notification={data} count={count}
-            dismiss={() => setNotices((old) => old.filter((notice) => notice.data.chatId !== data.chatId))}
-            open={() => { setNotices((old) => old.filter((notice) => notice.data.chatId !== data.chatId)); navigate(`/dashboard/websocket/${data.chatId}`); }} />
-        </div>)}
-      </div>
+      <Toaster id={messageToaster} position="top-right" swipeDirections={["top"]}
+        visibleToasts={3} expand gap={12} containerAriaLabel="New messages"
+        offset={{ top: "max(1rem, env(safe-area-inset-top))", right: 20 }}
+        mobileOffset={{ top: "max(1rem, env(safe-area-inset-top))", left: 12, right: 12 }} />
     </NotificationContext>
   );
 }

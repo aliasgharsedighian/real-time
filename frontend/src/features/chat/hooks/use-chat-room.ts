@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
+import { playAppSound } from "@/shared/lib/app-sounds";
 import { displayName } from "@/shared/lib/types";
 import { observeVisibleMessages } from "./observe-visible-messages";
 import { chatKeys } from "../api";
@@ -331,6 +332,7 @@ export function useChatRoom(chatId: number, enabled: boolean) {
         (message as unknown as { message?: string })?.message ||
           "The server did not accept your message.",
       );
+    if (useSessionStore.getState().tokens?.refreshToken === identity) playAppSound("messageSent");
     cache.setQueryData<History>(chatKeys.history(identity, chatId), (old) =>
       old && !old.window?.afterId
         ? { ...old, messages: mergeMessages(old.messages, [message]) }

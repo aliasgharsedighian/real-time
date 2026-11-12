@@ -11,11 +11,13 @@ import type { History, Message } from "../types";
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (...args: never[]) => void>(),
   emit: vi.fn(),
+  play: vi.fn(),
   emitWithAck: vi.fn(),
   intersect: (entries: unknown[]) => {
     void entries;
   },
 }));
+vi.mock("@/shared/lib/app-sounds", () => ({ playAppSound: fake.play }));
 vi.mock("../socket", () => ({
   getSocket: () => ({
     connected: true,
@@ -54,6 +56,22 @@ function mount() {
 }
 
 describe("chat room events", () => {
+  it("plays the send sound only after the server accepts the message", async () => {
+    const { result } = mount();
+    fake.play.mockClear();
+    fake.emitWithAck.mockRejectedValueOnce(new Error("Offline"));
+    await act(async () => {
+      await expect(result.current.send("Hello")).rejects.toThrow("No delivery confirmation");
+    });
+    expect(fake.play).not.toHaveBeenCalled();
+
+    fake.emitWithAck.mockResolvedValueOnce({
+      id: 8, chatId: 7, senderId: 1, content: "Hello", createdAt: "2026-11-04T10:00:00Z",
+    });
+    await act(() => result.current.send("Hello"));
+    expect(fake.play).toHaveBeenCalledExactlyOnceWith("messageSent");
+  });
+
   it("updates the room and inbox totals once per confirmed read, including with unloaded unread messages", () => {
     const { cache, key } = mount();
     const inbox = chatKeys.list("refresh");

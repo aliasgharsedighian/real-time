@@ -53,6 +53,8 @@ VITE_SOCKET_URL=https://chat.example.com/chat
 
 `VITE_API_URL` مبنای API است و کلاینت `/api/v1/` را اضافه می‌کند. `/chat` namespace سوکت است و مسیر انتقال شبکه `/socket.io/` است. برای اعلان مرورگر، مقادیر عمومی `VITE_FIREBASE_*` را از [نمونهٔ محیط](../frontend/.env.example) و [راهنمای اعلان‌ها](notifications.md) تکمیل کنید و همان پروژهٔ Firebase را سمت بک‌اند تنظیم کنید. Vite این مقادیر را داخل فایل‌های عمومی bundle می‌گذارد. با هر تغییر در آن‌ها دوباره build بگیرید.
 
+برای انتشار اعلان و افکت‌های چت، build عادی دستی یا CI را با کل `dist/` منتشر کنید. با `curl -fsSI` روی مسیرهای `/sounds/incoming-call.wav`، `/sounds/outgoing-call.wav`، `/sounds/message-received.wav` و `/sounds/message-sent.mp3` بررسی کنید که پاسخ از نوع صوتی و بدون `Content-Disposition: attachment` باشد. سپس با دو پنجرهٔ قابل مشاهده و دو حساب، رسیدن Toast به گفتگوی دیگر، بستن با × یا کشیدن به بالا و انقضای خودکار را بررسی کنید. زنگ تماس و افکت ارسال و دریافت را هم در مرورگر دسکتاپ آزمایش کنید. اگر فایل‌ها در دسترس نیستند، انتشار کامل `dist/` را تکرار کنید یا به بستهٔ قبلی برگردید.
+
 ## تنظیم فرایند فرانت در PM2
 
 با `sudoedit /etc/batgram-web/ecosystem.config.js` فایل زیر را بسازید. سرور استاتیک داخلی PM2 روی loopback از خروجی build سرو می‌کند و حالت SPA برای لینک مستقیم به مسیرهای React فعال است. [مستندات PM2 برای فایل‌های استاتیک](https://pm2.keymetrics.io/docs/usage/expose/)

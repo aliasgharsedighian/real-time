@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2 } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { useChatList } from "@/features/chat/hooks/use-chat-list";
+import { CallRing } from "./CallRing";
 import { displayName } from "@/shared/lib/types";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Button } from "@/shared/ui/button";
@@ -126,9 +127,7 @@ export default function CallPage() {
       aria-label="Call screen"
       className="chat-scene relative flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-hidden p-5"
     >
-      {view.phase === "ringing" && (
-        <audio autoPlay loop src="/sounds/outgoing-call.wav" />
-      )}
+      {view.phase === "ringing" && <CallRing sound="outgoingCall" />}
       {view.remote && !ended && (
         <Stream
           stream={view.remote}

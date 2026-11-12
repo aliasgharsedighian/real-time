@@ -39,7 +39,7 @@ Chat IDs and message IDs are positive integers. Call and attachment IDs are UUID
 | `message:send` | `{ chatId, content, attachmentId?, attachmentIds?, replyToId? }` | `Message`. Requires membership. Send text or a draft attachment. `content` is a string of at most 10,000 characters. Use only one attachment field. Multiple attachments must be images, up to 10. |
 | `message:read` | `{ chatId, messageIds }` | `Receipt[]`. Requires membership. Up to 1,000 message IDs. |
 | `message:read-through` | `{ chatId, throughMessageId }` | `{ unreadCount: number }`. Requires membership. The cursor identifies a message in the chat. |
-| `notification:presence` | `{ active: boolean, chatId: number \| null }` | `{ ok: true }`, or `{ ok: false }` on failure. An invalid `active` is ignored without acknowledgement. A chat counts as open only when the socket has joined its room. |
+| `notification:presence` | `{ active: boolean, chatId: number \| null }` | `{ ok: true }`, or `{ ok: false }` on failure. An invalid `active` is ignored without acknowledgement. The web client reports a visible dashboard as active, including an unfocused visible window. A chat counts as open only when the socket has joined its room. |
 | `call:list` | None | `Call[]`. Up to 100 records, newest first, for calls in chats the user still belongs to. |
 | `call:config` | None | `{ iceServers: [{ urls, username?, credential? }] }`. `urls` is a string or array of strings. TURN credentials, when configured, are short-lived. |
 | `call:pending` | None | Incoming ringing `Call` or `null`. |
@@ -73,7 +73,7 @@ to 65,536 characters.
 | `message:reactions` | `ReactionState` | Chat participants' devices |
 | `message:updated` | `Message` | Chat participants' devices |
 | `message:deleted` | `{ chatId, messageIds: number[] }` | Chat participants' devices |
-| `notification:new` | `ChatNotification` | Eligible recipient's devices, subject to mute and active-chat rules |
+| `notification:new` | `ChatNotification` | One socket reporting a visible dashboard for an unmuted recipient, when no active socket for that account has joined and reported the target chat as open. The server rechecks routing before each FCM batch. |
 | `call:updated` | `Call` | Caller and callee devices |
 | `call:accepted` | `Call` | Caller and accepting callee sockets |
 | `call:signal` | `{ id, signal }` | Other participating call socket |

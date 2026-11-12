@@ -264,6 +264,84 @@ describe('message notification integration', () => {
       extraTab.disconnect();
     },
   );
+  it('switches to a socket banner if the recipient opens the app during the push lookup', async () => {
+    const chatId = chatIds[0];
+    const sender = await socket(0);
+    const recipient = await socket(1);
+    const banner = jest.fn();
+    recipient.on('notification:new', banner);
+    let completeLookup!: () => void;
+    const pending = new Promise<[]>((resolve) => {
+      completeLookup = () => resolve([]);
+    });
+    const lookup = jest
+      .spyOn(prisma.pushSubscription, 'findMany')
+      .mockImplementationOnce(() => pending as never);
+    const baseline = sent.length;
+    try {
+      const message = await sender.timeout(3000).emitWithAck('message:send', {
+        chatId,
+        content: 'Opened app during push lookup',
+      });
+      await until(() => lookup.mock.calls.length > 0);
+      await recipient.timeout(3000).emitWithAck('notification:presence', {
+        active: true,
+        chatId: null,
+      });
+      completeLookup();
+      await until(() => banner.mock.calls.length > 0);
+      expect(banner).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: String(message.id) }),
+      );
+      expect(sent).toHaveLength(baseline);
+    } finally {
+      completeLookup();
+      lookup.mockRestore();
+      sender.disconnect();
+      recipient.disconnect();
+    }
+  });
+
+  it('keeps unread updates when a recipient mutes foreground and background notifications', async () => {
+    const chatId = chatIds[0];
+    const sender = await socket(0);
+    const recipient = await socket(1);
+    const banners = jest.fn();
+    const inboxUpdates = jest.fn();
+    recipient.on('notification:new', banners);
+    recipient.on('chat:updated', inboxUpdates);
+    const mute = (muted: boolean) =>
+      request(base)
+        .patch(`/api/v1/realtime/chats/${chatId}/mute`)
+        .auth(tokens[1], { type: 'bearer' })
+        .send({ muted })
+        .expect(200);
+    try {
+      await mute(true);
+      const baseline = sent.length;
+      for (const active of [true, false]) {
+        inboxUpdates.mockClear();
+        await recipient.timeout(3000).emitWithAck('notification:presence', {
+          active,
+          chatId: null,
+        });
+        const message = await sender.timeout(3000).emitWithAck('message:send', {
+          chatId,
+          content: 'Muted but unread',
+        });
+        expect(message.id).toBeGreaterThan(0);
+        await until(() => inboxUpdates.mock.calls.length > 0);
+        expect(inboxUpdates).toHaveBeenCalledWith({ chatId });
+      }
+      expect(banners).not.toHaveBeenCalled();
+      expect(sent).toHaveLength(baseline);
+    } finally {
+      sender.disconnect();
+      recipient.disconnect();
+      await mute(false);
+    }
+  });
+
   it('REST sends use the same pipeline, and Firebase failure cannot reject a saved message', async () => {
     send.mockRejectedValueOnce(new Error('Google blocked'));
     const response = await request(base)

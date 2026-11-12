@@ -106,17 +106,20 @@ export class NotificationsService {
       mediaKind: message.attachments?.[0]?.kind || 'TEXT',
       createdAt: message.createdAt.toISOString(),
     });
-    for (const { userId, muted } of chat.participants) {
-      server
-        .to(`user:${userId}`)
-        .emit('chat:updated', { chatId: message.chatId });
-      if (userId === message.senderId || muted) continue;
+    const route = (userId: number) => {
       const destination = this.presence.destination(userId, message.chatId);
       if (destination.mode === 'in-app')
         server
           .to(destination.socketId)
           .emit('notification:new', notification(userId));
-      if (destination.mode === 'push') pushRecipients.push(userId);
+      return destination.mode;
+    };
+    for (const { userId, muted } of chat.participants) {
+      server
+        .to(`user:${userId}`)
+        .emit('chat:updated', { chatId: message.chatId });
+      if (userId === message.senderId || muted) continue;
+      if (route(userId) === 'push') pushRecipients.push(userId);
     }
     if (!this.push.configured || !pushRecipients.length) return;
     const subscriptions = await this.prisma.pushSubscription.findMany({
@@ -127,11 +130,12 @@ export class NotificationsService {
     });
     // FCM requires one recipientId per user's payload, and <=500 tokens per request.
     for (const userId of pushRecipients) {
-      // Recheck presence before enqueueing an external request.
-      if (this.presence.destination(userId, message.chatId).mode !== 'push')
-        continue;
       const devices = subscriptions.filter((s) => s.userId === userId);
+      // Opening the app during the subscription lookup still earns a banner,
+      // including when the account has no registered device.
+      if (route(userId) !== 'push') continue;
       for (let start = 0; start < devices.length; start += 500) {
+        if (start > 0 && route(userId) !== 'push') break;
         const batch = devices.slice(start, start + 500);
         const response = await this.push.send({
           tokens: batch.map((s) => s.token),

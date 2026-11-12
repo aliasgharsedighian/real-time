@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useSession } from "@/features/auth/session-context";
 import { getSocket } from "@/features/chat/socket";
 import { useChatList } from "@/features/chat/hooks/use-chat-list";
+import { CallRing } from "./CallRing";
 import { displayName } from "@/shared/lib/types";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Button } from "@/shared/ui/button";
@@ -58,7 +59,7 @@ export default function CallProvider({ children }: { children: ReactNode }) {
           role="alert"
           className="brand-panel fixed inset-x-3 top-4 z-50 mx-auto max-w-sm rounded-2xl p-5 shadow-2xl"
         >
-          <audio autoPlay loop src="/sounds/incoming-call.wav" />
+          <CallRing sound="incomingCall" />
           <div className="flex items-center gap-3">
             <IdentityAvatar
               avatarId={incomingPeer?.profile?.avatarId}
