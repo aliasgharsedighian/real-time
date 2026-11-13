@@ -1,7 +1,8 @@
+import { ConversationPreview } from "./ConversationPreview";
 import { useHorizontalSwipe } from "../hooks/use-horizontal-swipe";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellOff, MoreHorizontal, Trash2 } from "lucide-react";
+import { Bell, BellOff, Eye, MoreHorizontal, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -192,6 +193,15 @@ export function ConversationActions({
   children: ReactNode;
 }) {
   const [position, setPosition] = useState<{ x: number; y: number }>();
+  const [preview, setPreview] = useState<"touch" | "menu">();
+  const hold = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const start = useRef<{ x: number; y: number } | undefined>(undefined);
+  const held = useRef(false);
+  function cancelHold() {
+    clearTimeout(hold.current);
+    start.current = undefined;
+  }
+  useEffect(() => cancelHold, []);
   const [swiped, setSwiped] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -203,7 +213,7 @@ export function ConversationActions({
     minOffset: -(canDelete ? 144 : 76),
     maxOffset: 0,
     threshold: 45,
-    enabled: !position && !confirm,
+    enabled: !position && !confirm && !preview,
     onCommit: (direction) => setSwiped(direction === "left"),
   });
   async function toggleMute() {
@@ -219,110 +229,202 @@ export function ConversationActions({
     }
   }
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        setPosition({ x: event.clientX, y: event.clientY });
-      }}
-    >
+    <>
       <div
-        aria-hidden={!swiped}
-        className={`absolute inset-y-0 right-0 flex items-stretch gap-1 p-1 ${swiped ? "" : "pointer-events-none"}`}
+        className="relative overflow-hidden rounded-2xl"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          if (
+            (event.nativeEvent as PointerEvent).pointerType === "touch" ||
+            start.current ||
+            held.current
+          )
+            return;
+          setPosition({ x: event.clientX, y: event.clientY });
+        }}
       >
-        <Button
-          tabIndex={swiped ? 0 : -1}
-          className="h-full w-16 flex-col gap-1 bg-amber-500 text-white hover:bg-amber-600"
-          disabled={busy}
-          onClick={() => void toggleMute()}
+        <div
+          aria-hidden={!swiped}
+          className={`absolute inset-y-0 right-0 flex items-stretch gap-1 p-1 ${swiped ? "" : "pointer-events-none"}`}
         >
-          {chat.muted ? <Bell /> : <BellOff />}
-          <span className="text-xs">{chat.muted ? "Unmute" : "Mute"}</span>
-        </Button>
-        {canDelete && (
           <Button
             tabIndex={swiped ? 0 : -1}
-            variant="destructive"
-            className="h-full w-16 flex-col gap-1"
-            onClick={() => setConfirm(true)}
+            className="h-full w-16 flex-col gap-1 bg-amber-500 text-white hover:bg-amber-600"
+            disabled={busy}
+            onClick={() => void toggleMute()}
           >
-            <Trash2 />
-            <span className="text-xs">Delete</span>
+            {chat.muted ? <Bell /> : <BellOff />}
+            <span className="text-xs">{chat.muted ? "Unmute" : "Mute"}</span>
           </Button>
-        )}
-      </div>
-      <div
-        className={`relative bg-sidebar [touch-action:pan-y] ${swipe.dragging ? "transition-none" : "transition-transform duration-200 ease-out motion-reduce:transition-none"}`}
-        style={{ transform: `translateX(${swipe.offset}px)` }}
-        {...swipe.handlers}
-        onClickCapture={(event) => {
-          if (swipe.suppressClick.current || swiped) {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!swipe.suppressClick.current) setSwiped(false);
-          }
-        }}
-      >
-        {children}
-        <button
-          type="button"
-          aria-label="Conversation actions"
-          className="absolute right-2 bottom-1 rounded p-1 text-muted-foreground hover:bg-muted"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const box = event.currentTarget.getBoundingClientRect();
-            setPosition({ x: box.left, y: box.bottom });
+          {canDelete && (
+            <Button
+              tabIndex={swiped ? 0 : -1}
+              variant="destructive"
+              className="h-full w-16 flex-col gap-1"
+              onClick={() => setConfirm(true)}
+            >
+              <Trash2 />
+              <span className="text-xs">Delete</span>
+            </Button>
+          )}
+        </div>
+        <div
+          className={`relative bg-sidebar [touch-action:pan-y] ${swipe.dragging ? "transition-none" : "transition-transform duration-200 ease-out motion-reduce:transition-none"}`}
+          style={{ transform: `translateX(${swipe.offset}px)` }}
+          {...swipe.handlers}
+          onPointerDown={(event) => {
+            swipe.handlers.onPointerDown(event);
+            held.current = false;
+            cancelHold();
+            if (
+              event.pointerType !== "touch" ||
+              event.isPrimary === false ||
+              swiped ||
+              position ||
+              confirm ||
+              preview ||
+              (event.target as HTMLElement).closest("button")
+            )
+              return;
+            start.current = { x: event.clientX, y: event.clientY };
+            hold.current = setTimeout(() => {
+              held.current = true;
+              setPreview("touch");
+            }, 500);
+          }}
+          onPointerMove={(event) => {
+            swipe.handlers.onPointerMove(event);
+            if (
+              start.current &&
+              Math.hypot(
+                event.clientX - start.current.x,
+                event.clientY - start.current.y,
+              ) > 8
+            )
+              cancelHold();
+          }}
+          onPointerUp={(event) => {
+            cancelHold();
+            swipe.handlers.onPointerUp(event);
+          }}
+          onPointerCancel={(event) => {
+            cancelHold();
+            swipe.handlers.onPointerCancel(event);
+          }}
+          onLostPointerCapture={(event) => {
+            cancelHold();
+            swipe.handlers.onLostPointerCapture(event);
+          }}
+          onClickCapture={(event) => {
+            if (held.current || swipe.suppressClick.current || swiped) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!swipe.suppressClick.current) setSwiped(false);
+            }
           }}
         >
-          <MoreHorizontal className="size-4" />
-        </button>
+          {children}
+          <button
+            type="button"
+            aria-label="Conversation actions"
+            className="absolute right-2 bottom-1 rounded p-1 text-muted-foreground hover:bg-muted"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const box = event.currentTarget.getBoundingClientRect();
+              setPosition({ x: box.left, y: box.bottom });
+            }}
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </div>
+        {position && (
+          <ActionMenu
+            position={position}
+            onClose={() => setPosition(undefined)}
+            actions={[
+              {
+                label: "Preview message",
+                icon: <Eye className="size-4" />,
+                run: () => setPreview("menu"),
+              },
+              {
+                label: chat.muted
+                  ? "Unmute notifications"
+                  : "Mute notifications",
+                icon: <BellOff className="size-4" />,
+                run: () => void toggleMute(),
+              },
+              ...(canDelete
+                ? [
+                    {
+                      label: chat.isGroup ? "Delete group" : "Delete chat",
+                      icon: <Trash2 className="size-4" />,
+                      destructive: true,
+                      run: () => setConfirm(true),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        )}
+        <ConfirmDelete
+          open={confirm}
+          onClose={() => setConfirm(false)}
+          description={
+            chat.isGroup
+              ? "This group, all messages and media will be removed for every member. This cannot be undone."
+              : "This conversation, all messages and media will be removed for both people. This cannot be undone."
+          }
+          onConfirm={async () => {
+            await deleteChat(chat.id);
+            cache.removeQueries({
+              queryKey: ["messages"],
+              predicate: (query) => query.queryKey[2] === chat.id,
+            });
+            await cache.invalidateQueries({ queryKey: ["chats"] });
+            for (const key of Object.keys(sessionStorage))
+              if (key.startsWith("beam-draft:") && key.endsWith(`:${chat.id}`))
+                sessionStorage.removeItem(key);
+            if (window.location.pathname === `/dashboard/websocket/${chat.id}`)
+              navigate("/dashboard", { replace: true });
+          }}
+        />
       </div>
-      {position && (
-        <ActionMenu
-          position={position}
-          onClose={() => setPosition(undefined)}
-          actions={[
-            {
-              label: chat.muted ? "Unmute notifications" : "Mute notifications",
-              icon: <BellOff className="size-4" />,
-              run: () => void toggleMute(),
-            },
-            ...(canDelete
-              ? [
-                  {
-                    label: chat.isGroup ? "Delete group" : "Delete chat",
-                    icon: <Trash2 className="size-4" />,
-                    destructive: true,
-                    run: () => setConfirm(true),
-                  },
-                ]
-              : []),
-          ]}
+      {preview && (
+        <ConversationPreview
+          chat={chat}
+          onClose={() => setPreview(undefined)}
+          actions={
+            preview === "touch" ? (
+              <>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                  disabled={busy}
+                  onClick={() => void toggleMute()}
+                >
+                  {chat.muted ? <Bell /> : <BellOff />}
+                  {chat.muted ? "Unmute" : "Mute"}
+                </Button>
+                {canDelete && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-destructive"
+                    onClick={() => {
+                      setPreview(undefined);
+                      setConfirm(true);
+                    }}
+                  >
+                    <Trash2 />
+                    Delete
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
         />
       )}
-      <ConfirmDelete
-        open={confirm}
-        onClose={() => setConfirm(false)}
-        description={
-          chat.isGroup
-            ? "This group, all messages and media will be removed for every member. This cannot be undone."
-            : "This conversation, all messages and media will be removed for both people. This cannot be undone."
-        }
-        onConfirm={async () => {
-          await deleteChat(chat.id);
-          cache.removeQueries({
-            queryKey: ["messages"],
-            predicate: (query) => query.queryKey[2] === chat.id,
-          });
-          await cache.invalidateQueries({ queryKey: ["chats"] });
-          for (const key of Object.keys(sessionStorage))
-            if (key.startsWith("beam-draft:") && key.endsWith(`:${chat.id}`))
-              sessionStorage.removeItem(key);
-          if (window.location.pathname === `/dashboard/websocket/${chat.id}`)
-            navigate("/dashboard", { replace: true });
-        }}
-      />
-    </div>
+    </>
   );
 }

@@ -1,13 +1,24 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationActions } from "./ChatActions";
-import { muteChat } from "../api";
-vi.mock("../api", () => ({ muteChat: vi.fn(), deleteChat: vi.fn() }));
+import { getHistory, muteChat } from "../api";
+vi.mock("../api", () => ({
+  muteChat: vi.fn(),
+  deleteChat: vi.fn(),
+  getHistory: vi.fn(),
+}));
 function mount(isGroup = false, myRole: "MEMBER" | "OWNER" = "MEMBER") {
+  const cache = new QueryClient();
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={cache}>
       <MemoryRouter>
         <ConversationActions
           chat={{
@@ -17,6 +28,7 @@ function mount(isGroup = false, myRole: "MEMBER" | "OWNER" = "MEMBER") {
             createdAt: "2026-11-05T00:00:00Z",
             participants: [],
             messages: [],
+            _count: { messages: 24 },
           }}
         >
           <a href="/dashboard/websocket/1">Conversation</a>
@@ -24,6 +36,7 @@ function mount(isGroup = false, myRole: "MEMBER" | "OWNER" = "MEMBER") {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return cache;
 }
 function touch(element: HTMLElement, type: string, x: number, y = 100) {
   const event = new Event(type, { bubbles: true });
@@ -32,6 +45,57 @@ function touch(element: HTMLElement, type: string, x: number, y = 100) {
 }
 describe("conversation actions", () => {
   beforeEach(() => vi.clearAllMocks());
+  it("previews history in a separate cache and keeps the unread badge when scrolling", async () => {
+    vi.mocked(getHistory).mockResolvedValue({
+      messages: [
+        {
+          id: 5,
+          chatId: 1,
+          senderId: 2,
+          createdAt: "2026-11-05T00:00:00Z",
+          content: "Unread message",
+        },
+      ],
+      unreadCount: 24,
+      unreadIds: [5],
+      users: [],
+      nextPage: null,
+    });
+    const cache = mount();
+    fireEvent.contextMenu(screen.getByRole("link", { name: "Conversation" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Preview message" }));
+    await screen.findByText("Unread message");
+    fireEvent.scroll(screen.getByRole("region", { name: "Preview messages" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to latest preview messages" }),
+    );
+    expect(screen.getByLabelText("24 unread messages").textContent).toBe("24");
+    expect(cache.getQueriesData({ queryKey: ["messages"] })).toEqual([]);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+  it("opens touch preview with the available actions and consumes the long-press click", async () => {
+    vi.mocked(getHistory).mockResolvedValue({
+      messages: [],
+      users: [],
+      unreadIds: [],
+      nextPage: null,
+    });
+    mount(true);
+    const link = screen.getByRole("link", { name: "Conversation" });
+    vi.useFakeTimers();
+    try {
+      touch(link, "pointerdown", 100);
+      act(() => vi.advanceTimersByTime(500));
+      touch(link, "pointerup", 100);
+      expect(fireEvent.click(link)).toBe(false);
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Mute" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("reveals mute and delete after a left swipe and suppresses navigation", async () => {
     vi.mocked(muteChat).mockResolvedValue(undefined);
     mount();
@@ -48,7 +112,7 @@ describe("conversation actions", () => {
     const link = screen.getByRole("link", { name: "Conversation" });
     link.focus();
     fireEvent.contextMenu(link);
-    const first = screen.getByRole("menuitem", { name: "Mute notifications" });
+    const first = screen.getByRole("menuitem", { name: "Preview message" });
     expect(document.activeElement).toBe(first);
     fireEvent.keyDown(first, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
