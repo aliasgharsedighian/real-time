@@ -74,6 +74,94 @@ describe("conversation actions", () => {
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
+  it("loads earlier preview messages on scroll and keeps the visible message in place", async () => {
+    const message = (id: number, content: string) => ({
+      id,
+      content,
+      chatId: 1,
+      senderId: 2,
+      createdAt: "2026-11-05T00:00:00Z",
+    });
+    vi.mocked(getHistory)
+      .mockResolvedValueOnce({
+        messages: [message(5, "Visible message")],
+        unreadCount: 24,
+        unreadIds: [5],
+        users: [],
+        nextPage: 2,
+      })
+      .mockResolvedValueOnce({
+        messages: [message(4, "Earlier message")],
+        unreadCount: 24,
+        unreadIds: [],
+        users: [],
+        nextPage: null,
+      });
+
+    let intersect: IntersectionObserverCallback | undefined;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          intersect = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const height = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(200);
+    const total = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(600);
+    try {
+      const cache = mount();
+      fireEvent.contextMenu(screen.getByRole("link", { name: "Conversation" }));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Preview message" }),
+      );
+      const visible = (
+        await screen.findByText("Visible message")
+      ).closest<HTMLElement>("[data-message-id]")!;
+      const region = screen.getByRole("region", { name: "Preview messages" });
+      Object.defineProperties(region, {
+        clientHeight: { value: 200 },
+        scrollHeight: { value: 600 },
+      });
+      visible.getBoundingClientRect = () => {
+        const insertedHeight = region.querySelector('[data-message-id="4"]')
+          ? 120
+          : 0;
+        const top = 40 + insertedHeight - region.scrollTop;
+        return new DOMRect(0, top, 100, 100);
+      };
+      // The first measured layout starts at the end, then the user scrolls up.
+      region.scrollTop = 400;
+      fireEvent.scroll(region);
+      region.scrollTop = 30;
+      fireEvent.scroll(region);
+      await waitFor(() => expect(intersect).toBeDefined());
+      // Trigger the same observer used by the normal conversation.
+      await act(async () =>
+        intersect?.(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        ),
+      );
+      await screen.findByText("Earlier message");
+      expect(getHistory).toHaveBeenCalledWith(1, expect.any(AbortSignal), 2);
+      expect(region.scrollTop).toBe(150);
+      expect(screen.getByLabelText("24 unread messages").textContent).toBe(
+        "24",
+      );
+      expect(cache.getQueriesData({ queryKey: ["messages"] })).toEqual([]);
+    } finally {
+      height.mockRestore();
+      total.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
   it("opens touch preview with the available actions and consumes the long-press click", async () => {
     vi.mocked(getHistory).mockResolvedValue({
       messages: [],
