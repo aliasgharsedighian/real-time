@@ -246,7 +246,7 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
                       {!!chat._count?.messages && (
                         <span
                           aria-label={`${chat._count.messages} unread messages`}
-                          className="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
+                          className={`flex min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold ${chat.muted ? "bg-neutral-500 text-white dark:bg-neutral-700" : "bg-primary text-primary-foreground"}`}
                         >
                           {chat._count.messages}
                         </span>
