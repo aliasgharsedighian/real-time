@@ -7,7 +7,6 @@ import {
   nullData,
   object,
   ref,
-  text,
 } from '../../documentation/schemas';
 import { SharedContentDto } from './shared-content.dto';
 import { MessageActionsService } from './message-actions.service';
@@ -95,7 +94,7 @@ export class PollingController {
 
   @Put('realtime/chats/:id/messages/:messageId/reaction')
   @DocumentEndpoint(
-    'Set or remove a reaction',
+    'Set or remove a reaction on a regular message or group photo change',
     200,
     envelope(ref('ReactionState')),
     [400, 404],

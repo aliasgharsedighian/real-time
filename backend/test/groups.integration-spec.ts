@@ -202,7 +202,7 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     ).toBe(100);
   });
 
-  it('restricts group photos to the owner, shares with members, retains active files and cleans replacements', async () => {
+  it('restricts group photos to the owner, shares with members, publishes reactable photo history and keeps previous photos', async () => {
     const chat = await create({
       participant: [ids[1]],
       isGroup: true,
@@ -234,10 +234,28 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
       .auth(tokens[0], { type: 'bearer' })
       .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), 'big.png')
       .expect(413);
+    await member.timeout(5000).emitWithAck('chat:join', { chatId: chat.id });
     const update = once(member, 'chat:updated');
+    const photoActivity = once(member, 'message:new');
     const first = await upload(0).expect(201);
     expect((await update).chatId).toBe(chat.id);
     const firstId = first.body.avatarId;
+    const event = await photoActivity;
+    expect(event).toMatchObject({
+      kind: 'GROUP_PHOTO_CHANGED',
+      content: 'Member 0 changed the group photo.',
+      attachments: [{ id: firstId }],
+    });
+    const react = (index: number) =>
+      request(base)
+        .put(`/api/v1/realtime/chats/${chat.id}/messages/${event.id}/reaction`)
+        .auth(tokens[index], { type: 'bearer' })
+        .send({ emoji: '👍' });
+    await react(2).expect(404);
+    const reaction = await react(1).expect(200);
+    expect(reaction.body.data.reactions).toMatchObject([
+      { emoji: '👍', userId: ids[1] },
+    ]);
     const read = (index: number, id = firstId) =>
       request(base)
         .get(`/api/v1/files/${id}/content`)
@@ -265,7 +283,7 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     await request(base)
       .delete(`/api/v1/files/${firstId}`)
       .auth(tokens[0], { type: 'bearer' })
-      .expect(200);
+      .expect(404);
     await read(1).expect(200);
     const stored = await prisma.uploadFile.update({
       where: { id: firstId },
@@ -273,23 +291,49 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
     });
     await app.get(FilesUploadService).cleanup();
     await read(1).expect(200);
+    const replacement = once(member, 'message:new');
     const second = await upload(0).expect(201);
+    expect((await replacement).attachments[0].id).toBe(second.body.avatarId);
     expect(second.body.avatarId).not.toBe(firstId);
     expect(
       await prisma.uploadFile.findUnique({ where: { id: firstId } }),
-    ).toBeNull();
-    await expect(access(join(directory, stored.storageKey))).rejects.toThrow();
+    ).toMatchObject({ messageId: event.id });
+    await access(join(directory, stored.storageKey));
+    await read(1).expect(200);
+    await read(2).expect(403);
+    const history = await http(1).get(`polling/${chat.id}`).expect(200);
+    expect(history.body.data.chats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: event.id,
+          attachments: [expect.objectContaining({ id: firstId })],
+          reactions: [expect.objectContaining({ emoji: '👍', userId: ids[1] })],
+        }),
+      ]),
+    );
     await http().post(`groups/${chat.id}/owner/${ids[1]}`).expect(201);
     await upload(0).expect(403);
     await request(base)
       .delete(`/api/v1/files/groups/${chat.id}/avatar`)
       .auth(tokens[0], { type: 'bearer' })
       .expect(403);
-    await request(base)
-      .delete(`/api/v1/files/groups/${chat.id}/avatar`)
-      .auth(tokens[1], { type: 'bearer' })
-      .expect(200);
-    await read(1, second.body.avatarId).expect(404);
+    const removal = once(member, 'message:new');
+    for (let attempt = 0; attempt < 2; attempt++)
+      await request(base)
+        .delete(`/api/v1/files/groups/${chat.id}/avatar`)
+        .auth(tokens[1], { type: 'bearer' })
+        .expect(200);
+    expect(await removal).toMatchObject({
+      kind: 'GROUP_PHOTO_REMOVED',
+      content: 'Member 1 removed the group photo.',
+      attachments: [],
+    });
+    expect(
+      await prisma.message.count({
+        where: { chatId: chat.id, kind: 'GROUP_PHOTO_REMOVED' },
+      }),
+    ).toBe(1);
+    await read(1, second.body.avatarId).expect(200);
     expect(
       (await prisma.chat.findUniqueOrThrow({ where: { id: chat.id } }))
         .avatarId,
@@ -372,13 +416,11 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
       second = await socket(2),
       outsider = await socket(3);
     const read = (client: any, messageIds: number[], extra: object = {}) =>
-      client
-        .timeout(5000)
-        .emitWithAck('message:read', {
-          chatId: group.id,
-          messageIds,
-          ...extra,
-        });
+      client.timeout(5000).emitWithAck('message:read', {
+        chatId: group.id,
+        messageIds,
+        ...extra,
+      });
     await read(outsider, [message.id], { userId: ids[1] });
     expect(
       await prisma.messageReadStatus.count({

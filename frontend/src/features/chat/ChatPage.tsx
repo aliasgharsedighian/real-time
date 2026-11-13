@@ -27,7 +27,7 @@ import {
 } from "./components/MessageActions";
 import { getSocket } from "./socket";
 import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
-import { Media, LocalPreview } from "@/features/uploads/Media";
+import { Media, LocalPreview, useFileUrl } from "@/features/uploads/Media";
 import { MusicMessage } from "./components/MusicPlayback";
 import { VoiceMessage } from "./components/VoicePlayback";
 import { MessagePhotos, PhotoGallery } from "@/features/uploads/PhotoGallery";
@@ -87,6 +87,32 @@ type PhotoBatch = {
   photos: Map<number, SelectedPhoto>;
   active?: { key: number; controller: AbortController };
 };
+
+function GroupPhotoActivityImage({ file }: { file: MediaFile }) {
+  const photo = useFileUrl(file.id);
+  if (photo.isError)
+    return (
+      <Button variant="ghost" size="sm" onClick={() => void photo.refetch()}>
+        Retry group photo
+      </Button>
+    );
+  if (!photo.url)
+    return (
+      <div
+        role="status"
+        aria-label="Loading group photo"
+        className="size-24 animate-pulse rounded-full bg-muted"
+      />
+    );
+  return (
+    <img
+      src={photo.url}
+      alt="Updated group photo"
+      draggable={false}
+      className="size-24 rounded-full object-cover"
+    />
+  );
+}
 
 export default function ChatPage() {
   const { chatId } = useParams();
@@ -506,7 +532,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
             continue;
           }
         }
-        uploaded ??= await uploadAttachment(photo.file, caption, request.signal);
+        uploaded ??= await uploadAttachment(
+          photo.file,
+          caption,
+          request.signal,
+        );
         updatePhoto(key, { uploaded });
         if (!groupPhotos) {
           updatePhoto(key, { sending: true });
@@ -755,10 +785,17 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   localDateKey(messages[index - 1].createdAt) !== day ? (
                     <DaySeparator day={day} />
                   ) : null;
+                const pickReaction = (emoji: string) =>
+                  void reactToMessage(message, emoji);
+                const ownReaction = message.reactions?.find(
+                  (reaction) => reaction.userId === user?.id,
+                )?.emoji;
                 if (
                   message.kind === "MEMBER_LEFT" ||
                   message.kind === "MEMBER_REMOVED" ||
-                  message.kind === "MEMBER_ADDED"
+                  message.kind === "MEMBER_ADDED" ||
+                  message.kind === "GROUP_PHOTO_CHANGED" ||
+                  message.kind === "GROUP_PHOTO_REMOVED"
                 )
                   return (
                     <Fragment key={message.id}>
@@ -771,7 +808,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                             ? prefetch
                             : undefined
                         }
-                        className="my-4 flex justify-center"
+                        className="my-4 flex flex-col items-center gap-2"
                         aria-label="Group activity"
                       >
                         <div className="max-w-[90%] rounded-xl border border-border/60 bg-card/80 px-4 py-2 text-center text-xs leading-5 text-muted-foreground">
@@ -788,6 +825,24 @@ function ChatRoom({ chatId }: { chatId: number }) {
                             {formatMessageTime(message.createdAt)}
                           </time>
                         </div>
+                        {message.kind === "GROUP_PHOTO_CHANGED" &&
+                          message.attachments?.[0] && (
+                            <MessageInteraction
+                              message={message}
+                              onReact={pickReaction}
+                              ownReaction={ownReaction}
+                            >
+                              <GroupPhotoActivityImage
+                                file={message.attachments[0]}
+                              />
+                              <ReactionChips
+                                reactions={message.reactions}
+                                selected={ownReaction}
+                                selecting={false}
+                                onPick={pickReaction}
+                              />
+                            </MessageInteraction>
+                          )}
                       </div>
                     </Fragment>
                   );
@@ -802,14 +857,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   message.attachments?.filter(
                     (file) => file.kind === "IMAGE",
                   ) ?? [];
-                const ownReaction = message.reactions?.find(
-                  (reaction) => reaction.userId === user?.id,
-                )?.emoji;
                 const pinned = pins.data
                   ? pinnedIds.has(message.id)
                   : !!message.pinnedAt;
-                const pickReaction = (emoji: string) =>
-                  void reactToMessage(message, emoji);
                 return (
                   <Fragment key={message.id}>
                     {separator}
@@ -944,7 +994,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                         chatId={message.chatId}
                                       />
                                     ) : (
-                                      <Media key={attachment.id} file={attachment} />
+                                      <Media
+                                        key={attachment.id}
+                                        file={attachment}
+                                      />
                                     ),
                                   )}
                                 {!!message.content && (
@@ -1016,7 +1069,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
               <div ref={bottom} />
             </div>
           </div>
-          {(!atBottom || !!history.data?.window?.afterId || unreadCount > 0) && (
+          {(!atBottom ||
+            !!history.data?.window?.afterId ||
+            unreadCount > 0) && (
             <Button
               type="button"
               variant="secondary"

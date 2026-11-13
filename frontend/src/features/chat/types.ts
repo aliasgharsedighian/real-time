@@ -34,7 +34,13 @@ export type PinnedMessage = Pick<
 >;
 
 export interface Message {
-  kind?: "TEXT" | "MEMBER_LEFT" | "MEMBER_REMOVED" | "MEMBER_ADDED";
+  kind?:
+    | "TEXT"
+    | "MEMBER_LEFT"
+    | "MEMBER_REMOVED"
+    | "MEMBER_ADDED"
+    | "GROUP_PHOTO_CHANGED"
+    | "GROUP_PHOTO_REMOVED";
   id: number;
   chatId: number;
   senderId: number;

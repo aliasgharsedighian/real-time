@@ -83,7 +83,7 @@ export class FilesUploadController {
   @Post('groups/:chatId/avatar')
   @UseInterceptors(interceptor(uploadPolicy.avatarMaxBytes))
   @DocumentEndpoint(
-    'Upload a group avatar as owner',
+    'Upload a group avatar as owner and publish a photo activity message',
     201,
     ref('Chat'),
     [400, 403, 413, 503],
@@ -99,7 +99,7 @@ export class FilesUploadController {
   }
   @Delete('groups/:chatId/avatar')
   @DocumentEndpoint(
-    'Remove a group avatar as owner',
+    'Remove a group avatar as owner and publish activity if a photo was set',
     200,
     ref('Chat'),
     [400, 403],

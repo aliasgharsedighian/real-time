@@ -365,6 +365,48 @@ describe("chat attachments", () => {
     expect(screen.getAllByLabelText("Group activity")).toHaveLength(3);
     expect(screen.queryByLabelText("Sent")).toBeNull();
   });
+  it("shows the historical group photo and opens its reaction picker", async () => {
+    mocks.history.mockResolvedValue({
+      users: [],
+      unreadIds: [],
+      messages: [
+        {
+          id: 15,
+          chatId: 3,
+          senderId: 2,
+          kind: "GROUP_PHOTO_CHANGED",
+          content: "Alice changed the group photo.",
+          createdAt: "2026-11-13T10:00:00Z",
+          attachments: [{ id: "historical-photo", kind: "IMAGE" }],
+        },
+        {
+          id: 16,
+          chatId: 3,
+          senderId: 2,
+          kind: "GROUP_PHOTO_REMOVED",
+          content: "Alice removed the group photo.",
+          createdAt: "2026-11-13T10:01:00Z",
+        },
+      ],
+    });
+    mocks.reaction.mockResolvedValue({
+      messageId: 15,
+      chatId: 3,
+      reactionVersion: 1,
+      reactions: [],
+    });
+    setup();
+    const photo = await screen.findByRole("img", {
+      name: "Updated group photo",
+    });
+    expect(photo.getAttribute("src")).toBe("blob:historical-photo");
+    expect(screen.getByText("Alice removed the group photo.")).toBeTruthy();
+    fireEvent.contextMenu(photo);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Like" }));
+    await waitFor(() =>
+      expect(mocks.reaction).toHaveBeenCalledWith(3, 15, "👍"),
+    );
+  });
   it("focuses the composer when history finishes loading, without refocusing on draft updates", async () => {
     let finish!: (value: unknown) => void;
     mocks.history.mockImplementationOnce(

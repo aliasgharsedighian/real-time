@@ -47,10 +47,10 @@ export function messageSummary(
 }
 export function MessageInteraction({
   message,
-  own,
-  canDelete,
-  selecting,
-  selected,
+  own = false,
+  canDelete = false,
+  selecting = false,
+  selected = false,
   onToggle,
   onReply,
   onEdit,
@@ -63,15 +63,15 @@ export function MessageInteraction({
   children,
 }: {
   message: Message;
-  own: boolean;
-  canDelete: boolean;
-  selecting: boolean;
-  selected: boolean;
-  onToggle: () => void;
-  onReply: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onForward: () => void;
+  own?: boolean;
+  canDelete?: boolean;
+  selecting?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onForward?: () => void;
   onPin?: () => void;
   pinned?: boolean;
   onReact?: (emoji: string) => void;
@@ -87,8 +87,8 @@ export function MessageInteraction({
     minOffset: -96,
     maxOffset: 0,
     threshold: 64,
-    enabled: !selecting && !position,
-    onCommit: () => onReply(),
+    enabled: !!onReply && !selecting && !position,
+    onCommit: () => onReply?.(),
   });
   const replyReady = swipe.offset <= -64;
   function cancel() {
@@ -157,7 +157,7 @@ export function MessageInteraction({
         if (held.current || swipe.suppressClick.current || selecting) {
           event.preventDefault();
           event.stopPropagation();
-          if (!held.current && !swipe.suppressClick.current) onToggle();
+          if (!held.current && !swipe.suppressClick.current) onToggle?.();
         }
       }}
     >
@@ -229,12 +229,16 @@ export function MessageInteraction({
           }
           footer={own ? <MessageReaders message={message} /> : undefined}
           actions={[
-            {
-              label: "Reply",
-              icon: <Reply className="size-4" />,
-              run: onReply,
-            },
-            ...(own
+            ...(onReply
+              ? [
+                  {
+                    label: "Reply",
+                    icon: <Reply className="size-4" />,
+                    run: onReply,
+                  },
+                ]
+              : []),
+            ...(own && onEdit
               ? [
                   {
                     label: "Edit",
@@ -256,11 +260,15 @@ export function MessageInteraction({
                   },
                 ]
               : []),
-            {
-              label: "Forward",
-              icon: <Forward className="size-4" />,
-              run: onForward,
-            },
+            ...(onForward
+              ? [
+                  {
+                    label: "Forward",
+                    icon: <Forward className="size-4" />,
+                    run: onForward,
+                  },
+                ]
+              : []),
             ...(onPin
               ? [
                   {
@@ -274,7 +282,7 @@ export function MessageInteraction({
                   },
                 ]
               : []),
-            ...(canDelete
+            ...(canDelete && onDelete
               ? [
                   {
                     label: "Delete",
@@ -284,11 +292,15 @@ export function MessageInteraction({
                   },
                 ]
               : []),
-            {
-              label: "Select",
-              icon: <CheckCircle className="size-4" />,
-              run: onToggle,
-            },
+            ...(onToggle
+              ? [
+                  {
+                    label: "Select",
+                    icon: <CheckCircle className="size-4" />,
+                    run: onToggle,
+                  },
+                ]
+              : []),
           ]}
         />
       )}

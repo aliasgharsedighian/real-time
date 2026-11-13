@@ -67,10 +67,10 @@ to 65,536 characters.
 | `typing:list` | `TypingEntry[]` | Requesting socket |
 | `typing:start` | `TypingEntry` | Chat participants and joined sockets, or the joining socket during replay |
 | `typing:stop` | `TypingEntry` | Chat participants and joined sockets |
-| `message:new` | `Message` | Joined chat room |
+| `message:new` | `Message` | Joined chat room. Group avatar uploads emit `GROUP_PHOTO_CHANGED` with the historical image in `attachments`. Removing a set avatar emits `GROUP_PHOTO_REMOVED` with empty attachments. |
 | `message:read` | `Receipt` | Joined chat room, one event per changed receipt |
 | `message:pins` | `{ chatId }` | Chat participants' devices. Refresh the pinned messages. |
-| `message:reactions` | `ReactionState` | Chat participants' devices |
+| `message:reactions` | `ReactionState` | Chat participants' devices after a reaction changes on a regular message or a group photo change. |
 | `message:updated` | `Message` | Chat participants' devices |
 | `message:deleted` | `{ chatId, messageIds: number[] }` | Chat participants' devices |
 | `notification:new` | `ChatNotification` | One socket reporting a visible dashboard for an unmuted recipient, when no active socket for that account has joined and reported the target chat as open. The server rechecks routing before each FCM batch. |

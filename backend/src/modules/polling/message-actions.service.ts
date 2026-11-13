@@ -103,7 +103,11 @@ export class MessageActionsService {
     const { users, data } = await this.prisma.$transaction(async (tx) => {
       const { users } = await this.member(tx, chatId, userId);
       const message = await tx.message.findFirst({
-        where: { id: messageId, chatId, kind: 'TEXT' },
+        where: {
+          id: messageId,
+          chatId,
+          kind: { in: ['TEXT', 'GROUP_PHOTO_CHANGED'] },
+        },
         select: { id: true },
       });
       if (!message) throw new NotFoundException('Message unavailable.');

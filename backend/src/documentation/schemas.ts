@@ -80,7 +80,14 @@ const message = {
   replyToId: nullable(integer),
   kind: {
     type: 'string',
-    enum: ['TEXT', 'MEMBER_LEFT', 'MEMBER_REMOVED', 'MEMBER_ADDED'],
+    enum: [
+      'TEXT',
+      'MEMBER_LEFT',
+      'MEMBER_REMOVED',
+      'MEMBER_ADDED',
+      'GROUP_PHOTO_CHANGED',
+      'GROUP_PHOTO_REMOVED',
+    ],
   },
   reactionVersion: integer,
 };

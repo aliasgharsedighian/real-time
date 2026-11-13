@@ -71,7 +71,7 @@ Migration `20261104110000_group_avatar` adds nullable unique `Chat.avatarId` ref
 - `POST /api/v1/files/groups/:chatId/avatar`: multipart `file`, owner only; JPEG/PNG/WebP, maximum 5 MiB, re-encoded with the existing avatar image pipeline. Ownership is checked before processing and again under the group row lock when saving.
 - `DELETE /api/v1/files/groups/:chatId/avatar`: owner only; removes the current photo.
 - `GET /api/v1/files/:id/content`: group photos require current membership, including for the original uploader. Photos are never public and cannot be claimed as message attachments.
-- Replacements/removal clear the previous record and physical file. Active group photos are excluded from draft cleanup. `chat:updated` invalidates member inbox/history metadata on changes.
+- New uploads are attached to a `GROUP_PHOTO_CHANGED` history message. Members can react to that message and still view its image after the avatar changes or is cleared. Removing a set photo creates a `GROUP_PHOTO_REMOVED` message without an attachment. Previous avatars without a history attachment are cleaned up when replaced or removed. `chat:updated` invalidates member inbox/history metadata on changes.
 
 Verification after this addition: 44 frontend tests, 14 backend unit tests, four real group integration scenarios and the media integration scenario passed. Group-photo integration covers owner/member/outsider permissions, malformed/oversized files, metadata/events, retained active photos, replacement/removal, ownership changes and revoked access after departure.
 

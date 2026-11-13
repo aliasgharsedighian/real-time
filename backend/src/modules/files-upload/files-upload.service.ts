@@ -1,3 +1,4 @@
+import { messageInclude } from '../polling/message-include';
 import {
   BadRequestException,
   ForbiddenException,
@@ -112,21 +113,30 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
         return record;
       }
       if (groupAvatar) {
-        const { chat, oldId } = await this.prisma.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId!} FOR UPDATE`;
-          const old = await this.ensureGroupOwner(tx, chatId!, ownerId);
-          const record = await tx.uploadFile.create({
-            data: { ...metadata, storageKey, ownerId, chatId },
-          });
-          const chat = await tx.chat.update({
-            where: { id: chatId },
-            data: { avatarId: record.id },
-          });
-          return { chat, oldId: old.avatarId };
-        });
+        const { chat, oldId, event } = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId!} FOR UPDATE`;
+            const old = await this.ensureGroupOwner(tx, chatId!, ownerId);
+            const record = await tx.uploadFile.create({
+              data: { ...metadata, storageKey, ownerId, chatId },
+            });
+            const chat = await tx.chat.update({
+              where: { id: chatId },
+              data: { avatarId: record.id },
+            });
+            const event = await this.recordGroupPhotoActivity(
+              tx,
+              chat.id,
+              ownerId,
+              record.id,
+            );
+            return { chat, oldId: old.avatarId, event };
+          },
+        );
         saved = true;
         if (oldId)
           await this.removeUnused(oldId).catch((e) => this.logger.error(e));
+        this.gateway.broadcast(event);
         await this.notifyGroup(chat.id);
         return chat;
       }
@@ -188,19 +198,60 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async removeGroupAvatar(chatId: number, userId: number) {
-    const { chat, oldId } = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
-      const old = await this.ensureGroupOwner(tx, chatId, userId);
-      const chat = await tx.chat.update({
-        where: { id: chatId },
-        data: { avatarId: null },
-      });
-      return { chat, oldId: old.avatarId };
+  private async recordGroupPhotoActivity(
+    tx: Prisma.TransactionClient,
+    chatId: number,
+    userId: number,
+    photoId?: string,
+  ) {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        email: true,
+        profile: { select: { firstname: true, lastname: true } },
+      },
     });
+    const name =
+      [user.profile?.firstname, user.profile?.lastname]
+        .filter(Boolean)
+        .join(' ') ||
+      user.email ||
+      `User #${userId}`;
+    return tx.message.create({
+      data: {
+        chatId,
+        senderId: userId,
+        kind: photoId ? 'GROUP_PHOTO_CHANGED' : 'GROUP_PHOTO_REMOVED',
+        content: photoId
+          ? `${name} changed the group photo.`
+          : `${name} removed the group photo.`,
+        attachments: photoId ? { connect: { id: photoId } } : undefined,
+      },
+      include: messageInclude,
+    });
+  }
+
+  async removeGroupAvatar(chatId: number, userId: number) {
+    const { chat, oldId, event } = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Chat" WHERE id = ${chatId} FOR UPDATE`;
+        const old = await this.ensureGroupOwner(tx, chatId, userId);
+        const chat = await tx.chat.update({
+          where: { id: chatId },
+          data: { avatarId: null },
+        });
+        const event = old.avatarId
+          ? await this.recordGroupPhotoActivity(tx, chatId, userId)
+          : null;
+        return { chat, oldId: old.avatarId, event };
+      },
+    );
     if (oldId)
       await this.removeUnused(oldId).catch((e) => this.logger.error(e));
-    await this.notifyGroup(chatId);
+    if (event) {
+      this.gateway.broadcast(event);
+      await this.notifyGroup(chatId);
+    }
     return chat;
   }
 
