@@ -15,10 +15,11 @@ import {
   editMessage,
   forwardMessages,
   getPinnedMessages,
+  getMessageWindow,
   setMessagePin,
   setMessageReaction,
 } from "./api";
-import type { History, Message } from "./types";
+import type { Chat, History, Message } from "./types";
 import { ConfirmDelete } from "./components/ChatActions";
 import {
   MessageInteraction,
@@ -26,7 +27,7 @@ import {
   messageSummary,
 } from "./components/MessageActions";
 import { getSocket } from "./socket";
-import { Reply, Pencil, Forward, Trash2 } from "lucide-react";
+import { Reply, Pencil, Forward, Trash2, ArrowUpRight } from "lucide-react";
 import { Media, LocalPreview, useFileUrl } from "@/features/uploads/Media";
 import { MusicMessage } from "./components/MusicPlayback";
 import { VoiceMessage } from "./components/VoicePlayback";
@@ -54,7 +55,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { SendIcon, Paperclip, X, Mic, Smile, ChevronDown } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { Button } from "@/shared/ui/button";
@@ -123,8 +124,11 @@ export default function ChatPage() {
 
 function ChatRoom({ chatId }: { chatId: number }) {
   const { user } = useSession();
+  const location = useLocation();
+  const navigate = useNavigate();
   const history = useChatHistory(chatId, user?.id);
   const room = useChatRoom(chatId, history.isSuccess && !history.opening);
+  const saved = !!history.data?.chat?.savedOwnerId;
   const [input, setInput] = useState(
     () => sessionStorage.getItem(`beam-draft:${user?.id}:${chatId}`) ?? "",
   );
@@ -208,9 +212,9 @@ function ChatRoom({ chatId }: { chatId: number }) {
   const hasDraft = input.length > 0;
   const { startTyping, stopTyping } = room;
   useEffect(() => {
-    if (hasDraft) startTyping();
+    if (hasDraft && !saved) startTyping();
     else stopTyping();
-  }, [hasDraft, startTyping, stopTyping]);
+  }, [hasDraft, saved, startTyping, stopTyping]);
   const policy = useUploadPolicy();
   const [file, setFile] = useState<File>();
   const recordedFile = useRef<File>(undefined);
@@ -312,13 +316,69 @@ function ChatRoom({ chatId }: { chatId: number }) {
     nearBottom.current = false;
   });
 
-  async function focusMessage(id: number, align?: "start") {
-    await history.openMessage(id);
-    setFocusedMessage((current) => ({
-      id,
-      requestId: (current?.requestId ?? 0) + 1,
-      align,
-    }));
+  const openMessage = history.openMessage;
+  const focusMessage = useCallback(
+    async (id: number, align?: "start") => {
+      await openMessage(id);
+      setFocusedMessage((current) => ({
+        id,
+        requestId: (current?.requestId ?? 0) + 1,
+        align,
+      }));
+    },
+    [openMessage],
+  );
+
+  const sourceMessageId = location.state?.savedSourceMessageId;
+  const handledSource = useRef<string>(undefined);
+  useEffect(() => {
+    if (
+      !history.isSuccess ||
+      history.opening ||
+      typeof sourceMessageId !== "number" ||
+      handledSource.current === location.key
+    )
+      return;
+
+    handledSource.current = location.key;
+    void focusMessage(sourceMessageId).catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast.error(errorMessage(error));
+    });
+  }, [
+    focusMessage,
+    history.isSuccess,
+    history.opening,
+    location.key,
+    sourceMessageId,
+  ]);
+
+  const sourceRequest = useRef<AbortController>(null);
+  useEffect(() => () => sourceRequest.current?.abort(), []);
+
+  async function openSavedSource(source: NonNullable<Message["savedFrom"]>) {
+    sourceRequest.current?.abort();
+    const request = new AbortController();
+    sourceRequest.current = request;
+    try {
+      // Check access and existence before leaving the saved copy.
+      await getMessageWindow(
+        source.chatId,
+        { aroundId: source.id },
+        request.signal,
+      );
+      if (request.signal.aborted) return;
+      if (source.chatId === chatId) await focusMessage(source.id);
+      else {
+        navigate(`/dashboard/websocket/${source.chatId}`, {
+          state: { savedSourceMessageId: source.id },
+        });
+      }
+    } catch (error) {
+      if (!request.signal.aborted) toast.error(errorMessage(error));
+    } finally {
+      if (sourceRequest.current === request) sourceRequest.current = null;
+    }
   }
 
   async function jumpToPin(id: number) {
@@ -857,6 +917,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                   message.attachments?.filter(
                     (file) => file.kind === "IMAGE",
                   ) ?? [];
+                const savedSource = saved ? message.savedFrom : null;
                 const pinned = pins.data
                   ? pinnedIds.has(message.id)
                   : !!message.pinnedAt;
@@ -874,6 +935,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
                     <div
                       data-message-id={message.id}
                       data-message-day={day}
+                      className={
+                        sourceMessageId === message.id &&
+                        focusedMessage?.id === message.id
+                          ? "rounded-xl outline outline-primary/35"
+                          : undefined
+                      }
                       ref={
                         index === Math.min(9, messages.length - 1)
                           ? prefetch
@@ -903,6 +970,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               message={message}
                               own={own}
                               canDelete={own}
+                              showReaders={own && !saved}
                               selecting={selected.length > 0}
                               selected={selected.includes(message.id)}
                               onToggle={() => toggleSelected(message.id)}
@@ -935,7 +1003,12 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                 {message.forwarded && (
                                   <span className="flex items-center gap-1 text-xs text-brand">
                                     <Forward className="size-3" />
-                                    {message.forwardedFrom ? (
+                                    {saved && message.forwardedFrom ? (
+                                      <span dir="auto">
+                                        Forwarded from{" "}
+                                        {displayName(message.forwardedFrom)}
+                                      </span>
+                                    ) : message.forwardedFrom ? (
                                       <UserInfoDialog
                                         userId={message.forwardedFrom.id}
                                         label={`View profile of ${displayName(message.forwardedFrom)}`}
@@ -1020,7 +1093,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                     <time dateTime={message.createdAt}>
                                       {formatMessageTime(message.createdAt)}
                                     </time>
-                                    {own && (
+                                    {own && !saved && (
                                       <MessageReaders
                                         message={message}
                                         compact
@@ -1031,6 +1104,19 @@ function ChatRoom({ chatId }: { chatId: number }) {
                               </div>
                             </MessageInteraction>
                           </div>
+                          {savedSource && !selected.length && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="icon"
+                              className="size-9 shrink-0 rounded-full"
+                              title="Go to original message"
+                              aria-label="Go to original message"
+                              onClick={() => void openSavedSource(savedSource)}
+                            >
+                              <ArrowUpRight />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1476,7 +1562,14 @@ function ChatRoom({ chatId }: { chatId: number }) {
             void cache.invalidateQueries({
               queryKey: chatKeys.history(identity, target),
             });
-            toast.success("Messages forwarded");
+            const destination = cache
+              .getQueryData<Chat[]>(chatKeys.list(identity))
+              ?.find((chat) => chat.id === target);
+            toast.success(
+              destination?.savedOwnerId
+                ? "Saved to Saved Messages"
+                : "Messages forwarded",
+            );
           }}
         />
       )}

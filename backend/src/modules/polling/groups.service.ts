@@ -53,6 +53,7 @@ export class GroupsService {
         const existing = await tx.chat.findFirst({
           where: {
             isGroup: false,
+            savedOwnerId: null,
             AND: ids.map((id) => ({ participants: { some: { userId: id } } })),
           },
           include: includeMembers,

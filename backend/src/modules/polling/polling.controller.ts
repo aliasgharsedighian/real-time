@@ -143,7 +143,7 @@ export class PollingController {
   }
   @Delete('realtime/chats/:id')
   @DocumentEndpoint(
-    'Permanently delete a conversation',
+    'Permanently delete a direct or group conversation',
     200,
     envelope(nullData),
     [400, 403, 404],
@@ -195,7 +195,7 @@ export class PollingController {
   }
   @Post('realtime/chats/:id/forward')
   @DocumentEndpoint(
-    'Forward messages to another chat',
+    'Forward messages to a chat, including private Saved Messages',
     201,
     envelope(array(ref('Message'))),
     [400, 403, 404],
@@ -275,7 +275,7 @@ export class PollingController {
 
   @Get(routesV1.polling.message)
   @DocumentEndpoint(
-    'List conversations',
+    'List conversations, including the account’s private Saved Messages',
     200,
     envelope(array(ref('ChatListEntry')), 200),
   )

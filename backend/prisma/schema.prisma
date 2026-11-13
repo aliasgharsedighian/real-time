@@ -39,6 +39,7 @@ model User {
   role        Role             @default(USER)
   profile     Profile?
   chats       ChatParticipant[]
+  savedChat   Chat? @relation("SavedChatOwner")
   messages    Message[]
   reactions MessageReaction[]
   forwardedMessages Message[] @relation("ForwardOrigin")
@@ -78,6 +79,8 @@ model Chat {
   name         String?           @db.VarChar(100)
   avatarId     String?           @unique
   avatar       UploadFile?       @relation("GroupAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  savedOwnerId Int? @unique
+  savedOwner   User? @relation("SavedChatOwner", fields: [savedOwnerId], references: [id], onDelete: Restrict)
   participants  ChatParticipant[]
   messages      Message[]
   calls         Call[]
@@ -133,6 +136,9 @@ model Message {
   forwarded Boolean @default(false)
   forwardedFromId Int?
   forwardedFrom User? @relation("ForwardOrigin", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  savedFromId Int?
+  savedFrom Message? @relation("SavedMessageSource", fields: [savedFromId], references: [id], onDelete: SetNull)
+  savedCopies Message[] @relation("SavedMessageSource")
   replyToId Int?
   replyTo Message? @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies Message[] @relation("Replies")
@@ -147,6 +153,7 @@ model Message {
   reactionVersion Int @default(0)
 
   @@index([replyToId])
+  @@index([savedFromId])
   @@index([chatId, id])
   @@index([chatId, createdAt, id])
 }

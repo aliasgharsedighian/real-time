@@ -16,7 +16,27 @@ import type { MessageReadStatus, Prisma } from '@prisma/client';
 export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async ensureSavedChat(userId: number) {
+    const where = { savedOwnerId: userId };
+    if (await this.prisma.chat.findUnique({ where, select: { id: true } }))
+      return;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Serialize first-time provisioning for this account across HTTP and sockets.
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      if (await tx.chat.findUnique({ where, select: { id: true } })) return;
+      await tx.chat.create({
+        data: {
+          savedOwnerId: userId,
+          name: 'Saved Messages',
+          participants: { create: { userId } },
+        },
+      });
+    });
+  }
+
   async getAllUserChats(userId: number) {
+    await this.ensureSavedChat(userId);
     const chats = await this.prisma.chat.findMany({
       where: {
         participants: {

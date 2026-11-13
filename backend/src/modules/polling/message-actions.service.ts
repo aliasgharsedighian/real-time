@@ -178,6 +178,8 @@ export class MessageActionsService {
   async deleteChat(chatId: number, userId: number) {
     const result = await this.prisma.$transaction(async (tx) => {
       const { chat, member, users } = await this.member(tx, chatId, userId);
+      if (chat.savedOwnerId !== null)
+        throw new ForbiddenException('Delete individual saved messages instead.');
       if (chat.isGroup && member.role !== 'OWNER')
         throw new ForbiddenException(
           'Only the group owner can delete the group.',
@@ -270,10 +272,14 @@ export class MessageActionsService {
     try {
       const messages = await this.prisma.$transaction(
         async (tx) => {
-          for (const id of [...new Set([chatId, targetChatId])].sort(
+          const chatIds = [...new Set([chatId, targetChatId])].sort(
             (a, b) => a - b,
-          ))
-            await this.member(tx, id, userId);
+          );
+          let saving = false;
+          for (const id of chatIds) {
+            const { chat } = await this.member(tx, id, userId);
+            if (id === targetChatId) saving = chat.savedOwnerId === userId;
+          }
           const source = await tx.message.findMany({
             where: { chatId, id: { in: ids }, kind: 'TEXT' },
             orderBy: { id: 'asc' },
@@ -296,6 +302,7 @@ export class MessageActionsService {
                 senderId: userId,
                 content: message.content,
                 forwarded: true,
+                savedFromId: saving ? message.id : null,
                 forwardedFromId: message.forwarded
                   ? message.forwardedFromId
                   : message.senderId,

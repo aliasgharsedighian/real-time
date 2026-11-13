@@ -43,7 +43,7 @@ vi.mock("@/features/auth/session-context", () => ({
 }));
 vi.mock("./api", () => ({
   chatKeys: {
-    history: () => ["history"],
+    history: (_: unknown, chatId: number) => ["history", chatId],
     list: () => ["chats"],
     pins: (_: unknown, chatId: number) => ["pinned-messages", chatId],
     readers: (_: unknown, chatId: number, id: number) => [
@@ -269,6 +269,65 @@ describe("chat attachments", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+  it("opens the original chat at an older saved source after confirming access", async () => {
+    const original = {
+      id: 19,
+      chatId: 7,
+      senderId: 2,
+      content: "Original message",
+      createdAt: new Date().toISOString(),
+    };
+    mocks.history.mockImplementation(async (chatId: number) => ({
+      chat: {
+        id: chatId,
+        isGroup: false,
+        savedOwnerId: chatId === 3 ? 1 : null,
+      },
+      messages:
+        chatId === 3
+          ? [
+              {
+                ...original,
+                id: 81,
+                chatId: 3,
+                senderId: 1,
+                content: "Saved copy",
+                forwarded: true,
+                forwardedFrom: { id: 2, email: "author@example.test" },
+                savedFrom: { id: 19, chatId: 7 },
+              },
+            ]
+          : [],
+      users: [],
+      unreadIds: [],
+    }));
+    mocks.window.mockRejectedValueOnce(new Error("Message unavailable"));
+    mocks.window.mockResolvedValue({
+      messages: [original],
+      beforeId: null,
+      afterId: null,
+    });
+    setup();
+    await screen.findByText("Forwarded from author@example.test");
+    const jump = screen.getByRole("button", { name: "Go to original message" });
+    fireEvent.click(jump);
+    await waitFor(() => expect(mocks.window).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Saved copy")).toBeTruthy();
+    expect(mocks.history).not.toHaveBeenCalledWith(7, expect.anything());
+
+    fireEvent.click(jump);
+    await screen.findByText("Original message");
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-message-id="19"]')?.className,
+      ).toContain("outline-primary"),
+    );
+    expect(mocks.window).toHaveBeenCalledWith(
+      7,
+      { aroundId: 19 },
+      expect.any(AbortSignal),
+    );
   });
   it("prefetches at the tenth oldest row, shows the existing compact loader and stops at the end", async () => {
     vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(500);
@@ -1113,7 +1172,7 @@ describe("chat attachments", () => {
     expect(within(jump).getByText("2")).toBeTruthy();
     const remaining = { ...history, unreadIds: [2], unreadCount: 1 };
     act(() => {
-      cache.setQueryData(["history"], remaining);
+      cache.setQueryData(["history", 3], remaining);
     });
     await within(jump).findByText("1");
     expect(screen.getByText("Unread messages")).toBe(divider);
@@ -1127,7 +1186,7 @@ describe("chat attachments", () => {
       (await screen.findByText("Unread messages")).getAttribute("data-unread-for"),
     ).toBe("2");
     act(() => {
-      cache.setQueryData(["history"], { ...history, unreadIds: [], unreadCount: 0 });
+      cache.setQueryData(["history", 3], { ...history, unreadIds: [], unreadCount: 0 });
     });
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Go to latest messages" })).toBeNull(),

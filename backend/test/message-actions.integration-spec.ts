@@ -59,6 +59,11 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
   afterAll(async () => {
     for (const socket of sockets) socket.disconnect();
     if (prisma) {
+      const savedChats = await prisma.chat.findMany({
+        where: { savedOwnerId: { in: ids } },
+        select: { id: true },
+      });
+      chatIds.push(...savedChats.map((chat) => chat.id));
       await prisma.uploadFile.deleteMany({
         where: { chatId: { in: chatIds } },
       });
@@ -390,6 +395,111 @@ describe('message actions with PostgreSQL, HTTP authentication and Socket.IO', (
       await prisma.uploadFile.findUnique({ where: { id: copyId } }),
     ).toBeNull();
   });
+  it('provisions a private saved chat and keeps a forwarded attachment after its author deletes the source', async () => {
+    const owner = await socket(0);
+    const other = await socket(1);
+    const [listed, socketList, otherList] = await Promise.all([
+      http(0).get('polling').expect(200),
+      owner.emitWithAck('chat:list'),
+      http(1).get('polling').expect(200),
+    ]);
+    const saved = listed.body.data.filter(
+      (chat: any) => chat.savedOwnerId === ids[0],
+    );
+    expect(saved).toHaveLength(1);
+    const savedId = saved[0].id;
+    expect(
+      socketList
+        .filter((chat: any) => chat.savedOwnerId === ids[0])
+        .map((chat: any) => chat.id),
+    ).toEqual([savedId]);
+    expect(otherList.body.data.some((chat: any) => chat.id === savedId)).toBe(
+      false,
+    );
+    await http(1).get(`polling/${savedId}`).expect(403);
+    expect(
+      await other.emitWithAck('chat:join', { chatId: savedId }),
+    ).toHaveProperty('message');
+    expect(await owner.emitWithAck('chat:join', { chatId: savedId })).toEqual({
+      chatId: savedId,
+    });
+    const note = await owner.emitWithAck('message:send', {
+      chatId: savedId,
+      content: 'Private note',
+    });
+    expect(note).toMatchObject({ chatId: savedId, content: 'Private note' });
+
+    const source = await create({ participant: [ids[1]] });
+    const upload = await request(base)
+      .post(`/api/v1/files/chats/${source.id}`)
+      .auth(tokens[1], { type: 'bearer' })
+      .attach(
+        'file',
+        await sharp({
+          create: { width: 8, height: 8, channels: 3, background: '#fff' },
+        })
+          .png()
+          .toBuffer(),
+        'photo.png',
+      )
+      .expect(201);
+    const original = await other.emitWithAck('message:send', {
+      chatId: source.id,
+      content: 'Keep this photo',
+      attachmentId: upload.body.id,
+    });
+    await http(1)
+      .post(`chats/${source.id}/forward`)
+      .send({ messageIds: [original.id], targetChatId: savedId })
+      .expect(404);
+    const forwarded = await http(0)
+      .post(`chats/${source.id}/forward`)
+      .send({ messageIds: [original.id], targetChatId: savedId })
+      .expect(201);
+    const copy = forwarded.body.data[0];
+    expect(copy).toMatchObject({
+      content: original.content,
+      senderId: ids[0],
+      forwardedFrom: { id: ids[1] },
+      savedFrom: { id: original.id, chatId: source.id },
+    });
+    expect(copy.attachments[0].id).not.toBe(upload.body.id);
+    const originalPath = `polling/${source.id}/window?aroundId=${original.id}`;
+    await http(0).get(originalPath).expect(200);
+    await http(1)
+      .delete(`chats/${source.id}/messages`)
+      .send({ messageIds: [original.id] })
+      .expect(200);
+    await http(0).get(originalPath).expect(404);
+    const history = await http(0).get(`polling/${savedId}`).expect(200);
+    expect(
+      history.body.data.chats.find((message: any) => message.id === copy.id),
+    ).toMatchObject({
+      content: original.content,
+      forwardedFrom: { id: ids[1] },
+      savedFrom: null,
+      attachments: [{ id: copy.attachments[0].id }],
+    });
+    const file = `/api/v1/files/${copy.attachments[0].id}/content`;
+    await request(base)
+      .get(file)
+      .auth(tokens[0], { type: 'bearer' })
+      .expect(200);
+    await request(base)
+      .get(file)
+      .auth(tokens[1], { type: 'bearer' })
+      .expect(403);
+    await http(0).delete(`chats/${savedId}`).expect(403);
+    await http(0)
+      .delete(`chats/${savedId}/messages`)
+      .send({ messageIds: [copy.id] })
+      .expect(200);
+    await request(base)
+      .get(file)
+      .auth(tokens[0], { type: 'bearer' })
+      .expect(404);
+  });
+
   it('keeps the original author through chained forwards, source deletion and history reloads', async () => {
     const source = await create({ participant: [ids[1]] });
     const target = await create({ participant: [ids[2]] });

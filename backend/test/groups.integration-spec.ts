@@ -59,6 +59,11 @@ describe('groups with PostgreSQL, HTTP authentication and Socket.IO', () => {
   afterAll(async () => {
     for (const socket of sockets) socket.disconnect();
     if (prisma) {
+      const savedChats = await prisma.chat.findMany({
+        where: { savedOwnerId: { in: ids } },
+        select: { id: true },
+      });
+      chatIds.push(...savedChats.map((chat) => chat.id));
       await prisma.uploadFile.deleteMany({
         where: { chatId: { in: chatIds } },
       });

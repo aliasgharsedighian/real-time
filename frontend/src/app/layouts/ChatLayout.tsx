@@ -31,6 +31,15 @@ import { Button } from "@/shared/ui/button";
 import CallProvider from "@/features/calls/CallProvider";
 import { CallButton } from "@/features/calls/CallButton";
 import { ChatStatus } from "@/features/chat/components/ChatStatus";
+import { SavedMessagesAvatar } from "@/features/chat/components/SavedMessagesAvatar";
+import { SharedContentSection } from "@/features/chat/components/SharedContentSection";
+import { savedMessagesTitle } from "@/features/chat/chat-identity";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/shared/ui/dialog";
 
 import { useSession } from "@/features/auth/session-context";
 import {
@@ -66,14 +75,13 @@ function ChatLayoutContent() {
   const cache = useQueryClient();
   const navigate = useNavigate();
   const group = history.data?.chat?.isGroup ? history.data.chat : undefined;
+  const saved = !!history.data?.chat?.savedOwnerId;
   const participants = history.data?.users ?? [];
-  const title = profile
-    ? "Profile"
-    : match
-      ? group
-        ? group.name || "Group"
-        : displayName(participants[0]?.user)
-      : "BatGram";
+  const title = saved
+    ? savedMessagesTitle
+    : group
+      ? group.name || "Group"
+      : displayName(participants[0]?.user);
   useEffect(() => {
     const socket = getSocket();
     const updated = ({ chatId }: { chatId: number }) => {
@@ -166,7 +174,23 @@ function ChatLayoutContent() {
             />
             <Separator orientation="vertical" className="hidden h-6 md:block" />
             {match ? (
-              group ? (
+              saved ? (
+                <Dialog>
+                  <DialogTrigger className="flex min-w-0 items-center gap-3 rounded-xl py-2 text-left hover:bg-muted/60">
+                    <SavedMessagesAvatar className="size-10" />
+                    <h1 className="truncate text-sm font-semibold">{title}</h1>
+                  </DialogTrigger>
+                  <DialogContent
+                    aria-describedby={undefined}
+                    className="max-h-[85dvh] overflow-y-auto"
+                  >
+                    <DialogTitle>{savedMessagesTitle}</DialogTitle>
+                    <SharedContentSection
+                      chatId={Number(match.params.chatId)}
+                    />
+                  </DialogContent>
+                </Dialog>
+              ) : group ? (
                 <GroupInfoDialog
                   chat={group}
                   trigger={
@@ -216,7 +240,7 @@ function ChatLayoutContent() {
               <Brand className="w-36" />
             )}
             <div className="ml-auto flex shrink-0 items-center gap-1">
-              {match && history.data?.chat && !group && (
+              {match && history.data?.chat && !group && !saved && (
                 <CallButton chatId={Number(match.params.chatId)} />
               )}
               {match && <SearchMessagesButton />}

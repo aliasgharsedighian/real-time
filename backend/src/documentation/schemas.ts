@@ -63,6 +63,7 @@ const chatUser = object({
 const chat = {
   id: integer,
   isGroup: boolean,
+  savedOwnerId: nullable(integer),
   name: nullable(text),
   avatarId: nullable(uuid),
   createdAt: timestamp,
@@ -77,6 +78,7 @@ const message = {
   pinnedAt: nullable(timestamp),
   forwarded: boolean,
   forwardedFromId: nullable(integer),
+  savedFromId: nullable(integer),
   replyToId: nullable(integer),
   kind: {
     type: 'string',
@@ -220,6 +222,7 @@ export const schemas = {
       readStatuses: array(component('Receipt')),
       reactions: array(component('Reaction')),
       forwardedFrom: nullable(chatUser),
+      savedFrom: nullable(object({ id: integer, chatId: integer })),
       replyTo: component('ReplyMessage'),
     },
     ['readStatuses'],

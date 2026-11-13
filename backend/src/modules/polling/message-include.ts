@@ -12,6 +12,7 @@ export const reactionSelect = {
 } as const;
 export const messageRelations = {
   reactions: { select: reactionSelect, orderBy: { userId: 'asc' } },
+  savedFrom: { select: { id: true, chatId: true } },
   forwardedFrom: { select: { id: true, email: true, profile: true } },
   replyTo: {
     include: {

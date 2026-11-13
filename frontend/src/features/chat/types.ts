@@ -49,6 +49,7 @@ export interface Message {
   forwarded?: boolean;
   forwardedFromId?: number | null;
   forwardedFrom?: User | null;
+  savedFrom?: { id: number; chatId: number } | null;
   replyToId?: number | null;
   replyTo?: Message | null;
   attachments?: MediaFile[];
@@ -70,6 +71,7 @@ export interface Participant {
 export interface Chat {
   id: number;
   isGroup: boolean;
+  savedOwnerId?: number | null;
   muted?: boolean;
   myRole?: "OWNER" | "MEMBER";
   name?: string | null;

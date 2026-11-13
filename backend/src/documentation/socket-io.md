@@ -29,7 +29,7 @@ Chat IDs and message IDs are positive integers. Call and attachment IDs are UUID
 
 | Event | Payload | Successful acknowledgement and behavior |
 | --- | --- | --- |
-| `chat:list` | None | `ChatListEntry[]`. Also emits `chat:list` to the requesting socket. |
+| `chat:list` | None | `ChatListEntry[]`. Includes the authenticated account’s private Saved Messages room, created on the first list request. Also emits `chat:list` to the requesting socket. |
 | `chat:join` | `{ chatId }` | `{ chatId }`. Requires membership. Emits `chat:joined` and replays active typing entries to the requester. |
 | `chat:leave` | `{ chatId }` | `{ ok: true }`. Leaves the socket room and clears that socket's typing state. |
 | `chat:presence` | `{ chatId }` | `PresenceSnapshot`. Requires membership. Also emits the snapshot to the requester. |
@@ -123,3 +123,14 @@ type ChatNotification = {
 
 Dates are serialized as ISO 8601 strings. Presence uses a coarse `lastSeen`
 value when the user's exact timestamp is private.
+
+### Saved Messages
+
+The chat list and history identify a saved chat by its non-null `savedOwnerId`.
+Only that account belongs to the room and receives its message events and inbox
+updates. Sending to it uses the existing `message:send` payload and emits
+`message:new` to the owner’s joined sockets, without push or in-app notifications.
+Message payloads include nullable `savedFromId` and `savedFrom`
+(`{ id, chatId }`), set for forwards into Saved Messages. Source deletion
+clears the reference in later HTTP reads. The usual room membership check
+applies when retrieving the original message window.

@@ -25,7 +25,8 @@ import {
 } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { useChatList } from "../hooks/use-chat-list";
-import { displayName } from "@/shared/lib/types";
+import { chatTitle } from "../chat-identity";
+import { SavedMessagesAvatar } from "./SavedMessagesAvatar";
 import { errorMessage } from "@/shared/lib/api";
 import type { Message } from "../types";
 
@@ -49,6 +50,7 @@ export function MessageInteraction({
   message,
   own = false,
   canDelete = false,
+  showReaders = own,
   selecting = false,
   selected = false,
   onToggle,
@@ -65,6 +67,7 @@ export function MessageInteraction({
   message: Message;
   own?: boolean;
   canDelete?: boolean;
+  showReaders?: boolean;
   selecting?: boolean;
   selected?: boolean;
   onToggle?: () => void;
@@ -227,7 +230,9 @@ export function MessageInteraction({
               />
             )
           }
-          footer={own ? <MessageReaders message={message} /> : undefined}
+          footer={
+            showReaders ? <MessageReaders message={message} /> : undefined
+          }
           actions={[
             ...(onReply
               ? [
@@ -351,10 +356,7 @@ export function ForwardDialog({
           )}
           {chats.data
             ?.filter((chat) =>
-              (chat.isGroup
-                ? chat.name || "Group"
-                : displayName(chat.participants[0]?.user)
-              )
+              chatTitle(chat)
                 .toLocaleLowerCase()
                 .includes(query.toLocaleLowerCase()),
             )
@@ -376,9 +378,10 @@ export function ForwardDialog({
                   }
                 }}
               >
-                {chat.isGroup
-                  ? chat.name || "Group"
-                  : displayName(chat.participants[0]?.user)}
+                {chat.savedOwnerId && (
+                  <SavedMessagesAvatar className="size-7" />
+                )}
+                {chatTitle(chat)}
               </Button>
             ))}
           {chats.isSuccess && !chats.data?.length && (
