@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactEventHandler } from "react";
+import { useEffect, useRef, useState, type ReactEventHandler } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, FileText, Play, X } from "lucide-react";
 import { useSessionStore } from "@/features/auth/session-store";
@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/shared/ui/dialog";
+import { formatFileSize, TransferProgress } from "./TransferProgress";
 import type { MediaFile } from "./api";
 
 export async function fetchFileBlob(
@@ -54,6 +55,7 @@ export function useFileUrl(id?: string | null) {
   };
 }
 export function Media({ file }: { file: MediaFile }) {
+  if (file.kind === "MUSIC") return <DeferredMusic key={file.id} file={file} />;
   if (file.kind === "DOCUMENT") return <DocumentAttachment file={file} />;
   return file.kind === "VIDEO" ? (
     <VideoAttachment file={file} />
@@ -62,42 +64,82 @@ export function Media({ file }: { file: MediaFile }) {
   );
 }
 
+function DeferredMusic({ file }: { file: MediaFile }) {
+  const [requested, setRequested] = useState(false);
+  if (requested) return <InlineMedia file={file} />;
+  return (
+    <Button type="button" variant="ghost" onClick={() => setRequested(true)}>
+      <Play />
+      <span className="truncate" dir="auto">{file.title || "Music"}</span>
+    </Button>
+  );
+}
+
 function DocumentAttachment({ file }: { file: MediaFile }) {
   const filename = file.title || "download";
+  const request = useRef<AbortController>(null);
+  const [percent, setPercent] = useState(0);
+  useEffect(() => () => request.current?.abort(), []);
   const download = useMutation({
     mutationFn: async () => {
-      const blob = await fetchFileBlob(file.id, new AbortController().signal);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      const controller = request.current;
+      if (!controller) return;
+      try {
+        const blob = await fetchFileBlob(file.id, controller.signal, (loaded, total) => {
+          if (!controller.signal.aborted)
+            setPercent(Math.min(99, Math.floor(100 * loaded / (total || file.size || 1))));
+        });
+        controller.signal.throwIfAborted();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } finally {
+        request.current = null;
+      }
     },
   });
 
   return (
-    <div className="min-w-0 max-w-64">
-      <Button
-        type="button"
-        variant="ghost"
-        className="h-auto w-full justify-start px-2 py-2 text-left"
-        aria-label={`Download ${filename}`}
-        disabled={download.isPending}
-        onClick={() => download.mutate()}
-      >
-        <FileText className="shrink-0" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate" dir="auto">{filename}</span>
-          <span className="block text-xs">
-            {download.isPending ? "Downloading…" : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
-          </span>
-        </span>
-        <Download className="shrink-0" />
-      </Button>
-      {download.isError && <p role="alert" className="px-2 text-xs">Unable to download file. Try again.</p>}
+    <div className="w-[min(16rem,62vw)] max-w-full">
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          size="icon"
+          className="group size-11 shrink-0 rounded-full p-0"
+          aria-label={`Download ${filename}`}
+          aria-busy={download.isPending}
+          disabled={download.isPending}
+          onClick={() => {
+            if (request.current) return;
+            request.current = new AbortController();
+            setPercent(0);
+            download.mutate();
+          }}
+        >
+          {download.isPending ? (
+            <TransferProgress percent={percent} />
+          ) : (
+            <>
+              <FileText className="group-hover:hidden group-focus-visible:hidden" />
+              <Download className="hidden group-hover:block group-focus-visible:block" />
+            </>
+          )}
+        </Button>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium" dir="auto" title={filename}>{filename}</p>
+          <p className="text-xs text-muted-foreground">
+            {download.isPending ? "Downloading…" : formatFileSize(file.size)}
+          </p>
+        </div>
+      </div>
+      {download.isError && (
+        <p role="alert" className="mt-1 text-xs">Unable to download file. Try again.</p>
+      )}
     </div>
   );
 }

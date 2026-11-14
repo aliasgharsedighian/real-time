@@ -1,3 +1,4 @@
+import { MessageAttachmentList } from "./components/MessageAttachmentList";
 import { ReactionChips } from "./components/ReactionPicker";
 import { MessageReaders } from "./components/MessageReaders";
 import { UserInfoDialog } from "./components/UserInfoDialog";
@@ -1119,9 +1120,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                     setGallery({ photos, index, trigger })
                                   }
                                 />
-                                {message.attachments
-                                  ?.filter((file) => file.kind !== "IMAGE")
-                                  .map((attachment) =>
+                                <MessageAttachmentList
+                                  files={message.attachments?.filter((file) => file.kind !== "IMAGE")}
+                                >
+                                  {(attachment) =>
                                     attachment.kind === "AUDIO" ? (
                                       <VoiceMessage
                                         key={attachment.id}
@@ -1136,12 +1138,10 @@ function ChatRoom({ chatId }: { chatId: number }) {
                                         chatId={message.chatId}
                                       />
                                     ) : (
-                                      <Media
-                                        key={attachment.id}
-                                        file={attachment}
-                                      />
-                                    ),
-                                  )}
+                                      <Media key={attachment.id} file={attachment} />
+                                    )
+                                  }
+                                </MessageAttachmentList>
                                 {!!message.content && (
                                   <span
                                     className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
@@ -1209,7 +1209,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
               {uploading && (
                 <UploadingMedia
                   file={uploading.file}
-                  document={uploading.file === documentFile.current}
+                  compact={
+                    uploading.file === documentFile.current ||
+                    (uploading.file !== recordedFile.current &&
+                      uploading.file.type.startsWith("audio/"))
+                  }
                   caption={uploading.caption}
                   progress={progress}
                   cancel={() => uploadController.current?.abort()}

@@ -74,6 +74,35 @@ describe("conversation actions", () => {
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
+  it("shows incoming music as a Play button in the conversation preview", async () => {
+    vi.mocked(getHistory).mockResolvedValue({
+      messages: [{
+        id: 5,
+        chatId: 1,
+        senderId: 2,
+        createdAt: "2026-11-05T00:00:00Z",
+        content: "",
+        attachments: [{
+          id: "incoming-music",
+          kind: "MUSIC",
+          title: "Incoming song",
+          mimeType: "audio/mp4",
+          size: 100,
+          width: 0,
+          height: 0,
+        }],
+      }],
+      unreadCount: 1,
+      unreadIds: [5],
+      users: [],
+      nextPage: null,
+    });
+    mount();
+    fireEvent.contextMenu(screen.getByRole("link", { name: "Conversation" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Preview message" }));
+    expect(await screen.findByRole("button", { name: "Play Incoming song" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Preview messages" }).querySelector("audio")).toBeNull();
+  });
   it("loads earlier preview messages on scroll and keeps the visible message in place", async () => {
     const message = (id: number, content: string) => ({
       id,

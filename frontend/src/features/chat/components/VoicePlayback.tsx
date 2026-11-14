@@ -27,6 +27,8 @@ interface Playback {
   playing: boolean;
   elapsed: number;
   loading?: boolean;
+  transferPercent?: number;
+  needsPlayGesture?: boolean;
   ended?: boolean;
   duration: number;
 }
@@ -90,7 +92,11 @@ export function VoicePlaybackProvider({ children }: { children: ReactNode }) {
           if (error.name === "NotAllowedError" && track.music) {
             // A browser can require a second tap after the authenticated download.
             if (player.current?.audio === audio)
-              setCurrent((value) => value && { ...value, playing: false });
+              setCurrent((value) =>
+                value?.track === track
+                  ? { ...value, playing: false, needsPlayGesture: true }
+                  : value,
+              );
             return;
           }
         }
@@ -118,6 +124,8 @@ export function VoicePlaybackProvider({ children }: { children: ReactNode }) {
             ? audio.duration
             : track.duration,
           ended: previous?.track === track && previous.ended && audio.ended,
+          needsPlayGesture:
+            audio.paused && previous?.track === track && previous.needsPlayGesture,
         }));
       }
       audio.onplay = sync;
@@ -158,7 +166,13 @@ export function VoicePlaybackProvider({ children }: { children: ReactNode }) {
         duration: track.duration,
       };
       setCurrent({ ...pending, loading: true });
-      void fetchFileBlob(file.id, controller.signal)
+      void fetchFileBlob(file.id, controller.signal, (loaded, total) => {
+        if (request.current !== controller) return;
+        const transferPercent = Math.min(99, Math.floor(100 * loaded / (total || file.size || 1)));
+        setCurrent((value) =>
+          value?.track === track && value.loading ? { ...value, transferPercent } : value,
+        );
+      })
         .then((blob) => {
           if (request.current === controller) start(track, blob);
         })

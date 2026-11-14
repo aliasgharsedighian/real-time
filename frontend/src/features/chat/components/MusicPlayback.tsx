@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { useSessionStore } from "@/features/auth/session-store";
 import { fetchFileBlob } from "@/features/uploads/Media";
+import { TransferProgress } from "@/features/uploads/TransferProgress";
 import type { MediaFile } from "@/features/uploads/api";
 import { Button } from "@/shared/ui/button";
 import {
@@ -116,17 +117,7 @@ function MusicDownload({ file }: { file: MediaFile }) {
       {percent === null ? (
         <Download />
       ) : (
-        <span className="relative grid size-9 place-items-center text-[10px] tabular-nums">
-          <span
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: `conic-gradient(var(--brand) ${percent}%, var(--border) 0)`,
-            }}
-          />
-          <span className="z-10 grid size-8 place-items-center rounded-full bg-card">
-            {percent}%
-          </span>
-        </span>
+        <TransferProgress percent={percent} />
       )}
     </Button>
   );
@@ -152,12 +143,17 @@ export function MusicMessage({
         size="icon"
         className="size-11 shrink-0 rounded-full ring-4 ring-primary/15"
         aria-label={`${active?.playing ? "Pause" : "Play"} ${trackTitle(file)}`}
+        aria-busy={active?.loading}
         disabled={!playback || active?.loading}
         onClick={() =>
           active ? playback?.toggle() : playback?.startMusic(chatId, file)
         }
       >
-        <Icon className={active?.loading ? "animate-spin" : "fill-current"} />
+        {active?.loading && active.transferPercent !== undefined ? (
+          <TransferProgress percent={active.transferPercent} />
+        ) : (
+          <Icon className={active?.loading ? "animate-spin" : "fill-current"} />
+        )}
       </Button>
       <div className="min-w-0 flex-1 leading-tight">
         <p className="truncate font-semibold text-brand" dir="auto">
@@ -166,6 +162,11 @@ export function MusicMessage({
         <p className="truncate text-xs text-muted-foreground" dir="auto">
           {trackArtist(file)} · {formatPlaybackTime(file.duration ?? 0)}
         </p>
+        {active?.needsPlayGesture && (
+          <p role="status" className="text-xs text-muted-foreground">
+            Ready to play. Tap Play.
+          </p>
+        )}
       </div>
       <MusicDownload file={file} />
     </div>
@@ -226,6 +227,7 @@ function MusicPlayer({
   const playlist = useQuery({
     queryKey: ["shared-content", identity, chatId, "playlist"],
     queryFn: ({ signal }) => getPlaylist(chatId, signal),
+    enabled: open || repeat === "all",
     staleTime: 30_000,
   });
   const queue = useMemo(() => {
@@ -250,10 +252,10 @@ function MusicPlayer({
   const ended = current?.ended;
 
   useEffect(() => {
-    if (!ended || (playlist.isPending && repeat !== "one")) return;
+    if (!ended || (repeat === "all" && playlist.isPending)) return;
     acknowledgeEnd();
     if (repeat === "one" || next?.id === file.id) toggle();
-    else if (next) startMusic(chatId, next);
+    else if (repeat === "all" && next) startMusic(chatId, next);
   }, [
     acknowledgeEnd,
     chatId,

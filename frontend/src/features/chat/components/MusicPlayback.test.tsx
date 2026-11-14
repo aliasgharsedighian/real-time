@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -17,7 +18,10 @@ import { VoicePlaybackProvider } from "./VoicePlayback";
 vi.mock("@/features/uploads/Media", () => ({ fetchFileBlob: vi.fn() }));
 vi.mock("../api", () => ({ getSharedContent: vi.fn() }));
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const track = (id: string, title: string): MediaFile => ({
   id,
@@ -97,6 +101,7 @@ it("plays adjacent music from the source chat across pages and keeps playing whe
   const { rerender } = render(dashboard(true));
   fireEvent.click(screen.getByRole("button", { name: "Play Second song" }));
   await screen.findByRole("button", { name: "Pause music" });
+  expect(getSharedContent).not.toHaveBeenCalled();
   rerender(dashboard(false));
   expect(players[0].paused).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Open music playlist" }));
@@ -116,6 +121,8 @@ it("plays adjacent music from the source chat across pages and keeps playing whe
     players[1].paused = true;
     players[1].onended?.();
   });
+  expect(players).toHaveLength(2);
+  fireEvent.click(sheet.getByRole("button", { name: "Next track" }));
   await sheet.findByRole("button", { name: "Pause Second song" });
   fireEvent.click(sheet.getByRole("button", { name: "Next track" }));
   await sheet.findByRole("button", { name: "Pause Third song" });
@@ -172,6 +179,65 @@ it("plays adjacent music from the source chat across pages and keeps playing whe
     screen.getByRole("button", { name: "Stop music and close player" }),
   );
   expect(players[3].paused).toBe(true);
+});
+
+it("fetches music for in-site playback only after Play and shows progress on Play", async () => {
+  const file = track("playback", "Evening");
+  let report!: (loaded: number, total?: number) => void;
+  vi.mocked(fetchFileBlob).mockClear();
+  vi.mocked(fetchFileBlob).mockImplementationOnce((_id, _signal, onProgress) => {
+    report = onProgress!;
+    return new Promise(() => {});
+  });
+  render(
+    <VoicePlaybackProvider>
+      <MusicMessage file={file} chatId={7} />
+    </VoicePlaybackProvider>,
+  );
+  const play = screen.getByRole("button", { name: "Play Evening" });
+  expect(fetchFileBlob).not.toHaveBeenCalled();
+  fireEvent.click(play);
+  act(() => report(35, 100));
+  expect(play.getAttribute("aria-busy")).toBe("true");
+  expect(within(play).getByText("35%")).toBeTruthy();
+  expect(fetchFileBlob).toHaveBeenCalledTimes(1);
+});
+
+it("reuses received audio when the browser requires a second Play tap", async () => {
+  const file = track("gesture", "Evening");
+  vi.mocked(fetchFileBlob).mockClear();
+  vi.mocked(fetchFileBlob).mockResolvedValueOnce(new Blob());
+  vi.stubGlobal("URL", Object.assign(class extends URL {}, {
+    createObjectURL: () => "blob:music",
+    revokeObjectURL: vi.fn(),
+  }));
+  vi.stubGlobal("Audio", class {
+    paused = true;
+    currentTime = 0;
+    duration = 30;
+    onplay?: () => void;
+    async play() {
+      if (this.onplay && playAttempts++ === 0)
+        throw new DOMException("User gesture required", "NotAllowedError");
+      this.paused = false;
+      this.onplay?.();
+    }
+    pause() {}
+    removeAttribute() {}
+    load() {}
+  });
+  let playAttempts = 0;
+  render(
+    <VoicePlaybackProvider>
+      <MusicMessage file={file} chatId={7} />
+    </VoicePlaybackProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Play Evening" }));
+  expect(await screen.findByText("Ready to play. Tap Play.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Play Evening" }));
+  expect(await screen.findByRole("button", { name: "Pause Evening" })).toBeTruthy();
+  expect(screen.queryByText("Ready to play. Tap Play.")).toBeNull();
+  expect(fetchFileBlob).toHaveBeenCalledTimes(1);
 });
 
 it("shows transfer progress and saves the authenticated music download", async () => {

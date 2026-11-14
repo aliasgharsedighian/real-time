@@ -1,6 +1,10 @@
 import { useRef, useState } from "react";
 import { Plus, Send, X } from "lucide-react";
 import { LocalPreview } from "@/features/uploads/Media";
+import {
+  formatFileSize,
+  TransferProgress,
+} from "@/features/uploads/TransferProgress";
 import { PhotoGrid } from "@/features/uploads/PhotoGallery";
 import type { MediaFile } from "@/features/uploads/api";
 import { Button } from "@/shared/ui/button";
@@ -299,13 +303,13 @@ export function UploadingPhotos({
 
 export function UploadingMedia({
   file,
-  document,
+  compact,
   progress,
   caption,
   cancel,
 }: {
   file: File;
-  document: boolean;
+  compact: boolean;
   progress: number;
   caption: string;
   cancel: () => void;
@@ -313,39 +317,65 @@ export function UploadingMedia({
   return (
     <div className="my-3 flex justify-end">
       <div className="max-w-[85%] overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="relative grid min-h-28 min-w-36 place-items-center bg-black">
-          {document ? (
-            <span className="max-w-56 truncate px-3 pb-14 pt-2 text-sm text-white" dir="auto">
-              {file.name}
-            </span>
-          ) : (
-            <LocalPreview
-              file={file}
-              className="block max-h-64 max-w-full object-contain"
+        {compact ? (
+          <div className="flex w-[min(16rem,65vw)] items-center gap-3 p-3">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-11 shrink-0 rounded-full p-0"
+              aria-label="Cancel upload"
+              onClick={cancel}
+            >
+              <TransferProgress percent={progress}>
+                <X />
+              </TransferProgress>
+            </Button>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium" dir="auto">{file.name}</p>
+              <p
+                role="progressbar"
+                aria-label="Upload progress"
+                aria-valuenow={progress}
+                className="text-xs tabular-nums text-muted-foreground"
+              >
+                {progress < 100
+                  ? `${formatFileSize((file.size * progress) / 100)} / ${formatFileSize(file.size)}`
+                  : "Processing…"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="relative grid min-h-28 min-w-36 place-items-center bg-black">
+              <LocalPreview
+                file={file}
+                className="block max-h-64 max-w-full object-contain"
+              />
+              <Button
+                type="button"
+                size="icon"
+                className="absolute size-12 rounded-full bg-black/70 text-white hover:bg-black/85"
+                aria-label="Cancel upload"
+                onClick={cancel}
+              >
+                <X />
+              </Button>
+              <span
+                role="status"
+                className="absolute right-2 bottom-2 rounded bg-black/70 px-2 text-xs text-white"
+              >
+                {progress < 100 ? `${progress}%` : "Processing…"}
+              </span>
+            </div>
+            <progress
+              className="block h-1 w-full accent-primary"
+              aria-label="Upload progress"
+              value={progress}
+              max={100}
             />
-          )}
-          <Button
-            type="button"
-            size="icon"
-            className="absolute size-12 rounded-full bg-black/70 text-white hover:bg-black/85"
-            aria-label="Cancel upload"
-            onClick={cancel}
-          >
-            <X />
-          </Button>
-          <span
-            role="status"
-            className="absolute right-2 bottom-2 rounded bg-black/70 px-2 text-xs text-white"
-          >
-            {progress < 100 ? `${progress}%` : "Processing…"}
-          </span>
-        </div>
-        <progress
-          className="block h-1 w-full accent-primary"
-          aria-label="Upload progress"
-          value={progress}
-          max={100}
-        />
+          </>
+        )}
         {caption.trim() && (
           <p
             className="whitespace-pre-wrap break-words px-3 py-2 text-sm [overflow-wrap:anywhere]"

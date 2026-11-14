@@ -1,9 +1,11 @@
+import { MessageAttachmentList } from "./MessageAttachmentList";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Content } from "@radix-ui/react-dialog";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ChevronDown, X } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { useSessionStore } from "@/features/auth/session-store";
+import { MusicMessage } from "./MusicPlayback";
 import { Media } from "@/features/uploads/Media";
 import { IdentityAvatar } from "@/shared/components/IdentityAvatar";
 import { Button } from "@/shared/ui/button";
@@ -187,9 +189,15 @@ export function ConversationPreview({
                                 {displayName(message.sender)}
                               </p>
                             )}
-                            {message.attachments?.map((file) => (
-                              <Media key={file.id} file={file} />
-                            ))}
+                            <MessageAttachmentList files={message.attachments}>
+                              {(file) =>
+                                file.kind === "MUSIC" ? (
+                                  <MusicMessage key={file.id} file={file} chatId={chat.id} />
+                                ) : (
+                                  <Media key={file.id} file={file} />
+                                )
+                              }
+                            </MessageAttachmentList>
                             <p
                               dir="auto"
                               className="whitespace-pre-wrap [overflow-wrap:anywhere]"
