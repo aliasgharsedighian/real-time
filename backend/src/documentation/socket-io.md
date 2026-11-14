@@ -36,7 +36,7 @@ Chat IDs and message IDs are positive integers. Call and attachment IDs are UUID
 | `typing:list` | None | `TypingEntry[]` for the user's chats. Also emits `typing:list` to the requester. |
 | `typing:start` | `{ chatId }` | `{ ok: true }` when applied. Requires membership and a joined room. Acknowledgement may be skipped if the socket has left or a newer update supersedes it. The server derives the display name. |
 | `typing:stop` | `{ chatId }` | Same acknowledgement rules as `typing:start`. |
-| `message:send` | `{ chatId, content, attachmentId?, attachmentIds?, replyToId? }` | `Message`. Requires membership. Send text or a draft attachment. `content` is a string of at most 10,000 characters. Use only one attachment field. Multiple attachments must be images, up to 10. |
+| `message:send` | `{ chatId, content, attachmentId?, attachmentIds?, replyToId? }` | `Message`. Requires membership. Send text or a draft attachment. `content` is a string of at most 10,000 characters. Use only one attachment field. Multiple attachments must be images, up to 10. Documents uploaded via REST use the single attachment field. |
 | `message:read` | `{ chatId, messageIds }` | `Receipt[]`. Requires membership. Up to 1,000 message IDs. |
 | `message:read-through` | `{ chatId, throughMessageId }` | `{ unreadCount: number }`. Requires membership. The cursor identifies a message in the chat. |
 | `notification:presence` | `{ active: boolean, chatId: number \| null }` | `{ ok: true }`, or `{ ok: false }` on failure. An invalid `active` is ignored without acknowledgement. The web client reports a visible dashboard as active, including an unfocused visible window. A chat counts as open only when the socket has joined its room. |
@@ -67,7 +67,7 @@ to 65,536 characters.
 | `typing:list` | `TypingEntry[]` | Requesting socket |
 | `typing:start` | `TypingEntry` | Chat participants and joined sockets, or the joining socket during replay |
 | `typing:stop` | `TypingEntry` | Chat participants and joined sockets |
-| `message:new` | `Message` | Joined chat room. Group avatar uploads emit `GROUP_PHOTO_CHANGED` with the historical image in `attachments`. Removing a set avatar emits `GROUP_PHOTO_REMOVED` with empty attachments. |
+| `message:new` | `Message` | Joined chat room. Document attachments use `kind: DOCUMENT` and carry the original filename in `title`. Group avatar uploads emit `GROUP_PHOTO_CHANGED` with the historical image in `attachments`. Removing a set avatar emits `GROUP_PHOTO_REMOVED` with empty attachments. |
 | `message:read` | `Receipt` | Joined chat room, one event per changed receipt |
 | `message:pins` | `{ chatId }` | Chat participants' devices. Refresh the pinned messages. |
 | `message:reactions` | `ReactionState` | Chat participants' devices after a reaction changes on a regular message or a group photo change. |

@@ -44,6 +44,7 @@ import {
   uploadFile,
   useUploadPolicy,
   validateUpload,
+  validateDocument,
   type MediaFile,
 } from "@/features/uploads/api";
 import {
@@ -56,7 +57,7 @@ import {
   useState,
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { SendIcon, Paperclip, X, Mic, Smile, ChevronDown } from "lucide-react";
+import { SendIcon, Paperclip, X, Mic, Smile, ChevronDown, Image, FileText, Music } from "lucide-react";
 import { useSession } from "@/features/auth/session-context";
 import { Button } from "@/shared/ui/button";
 import { BrandLoading } from "@/shared/components/BrandLoading";
@@ -256,7 +257,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
     onError: setSendError,
   });
   const hasMessage = !!(input.trim() || file || uploaded);
-  const picker = useRef<HTMLInputElement>(null);
+  const mediaPicker = useRef<HTMLInputElement>(null);
+  const musicPicker = useRef<HTMLInputElement>(null);
+  const documentPicker = useRef<HTMLInputElement>(null);
+  const documentFile = useRef<File>(undefined);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const uploadController = useRef<AbortController | null>(null);
   useEffect(
     () => () => {
@@ -491,6 +496,39 @@ function ChatRoom({ chatId }: { chatId: number }) {
     setPhotos([]);
   }
 
+  function chooseAttachment(files: File[], kind: "media" | "document" | "music") {
+    const chosen = files[0];
+    if (!chosen || !policy.data) return;
+    if (
+      kind === "media" &&
+      (files.length > 1 || policy.data.imageMimeTypes.includes(chosen.type))
+    ) {
+      addPhotos(files);
+      return;
+    }
+    try {
+      if (kind === "document") {
+        validateDocument(chosen, policy.data);
+      } else {
+        validateUpload(chosen, policy.data);
+        const mime = chosen.type.split(";")[0];
+        const allowed =
+          kind === "music" ? policy.data.audioMimeTypes : policy.data.videoMimeTypes;
+        if (!allowed.includes(mime))
+          throw new Error(
+            kind === "music" ? "Choose an audio file." : "Choose a photo or video.",
+          );
+      }
+      if (uploaded) void discardFile(uploaded.id).catch(() => {});
+      documentFile.current = kind === "document" ? chosen : undefined;
+      setFile(chosen);
+      setUploaded(undefined);
+      setSendError("");
+    } catch (error) {
+      setSendError(errorMessage(error));
+    }
+  }
+
   async function uploadAttachment(
     file: File,
     caption: string,
@@ -498,12 +536,19 @@ function ChatRoom({ chatId }: { chatId: number }) {
   ) {
     if (!policy.data)
       throw new Error("Upload settings are unavailable. Please try again.");
-    validateUpload(file, policy.data);
+    const document = file === documentFile.current;
+    if (document) validateDocument(file, policy.data);
+    else validateUpload(file, policy.data);
+    const suffix = document
+      ? "/document"
+      : file.type.startsWith("audio/") && file !== recordedFile.current
+        ? "/music"
+        : "";
     setUploading({ file, caption });
     setProgress(0);
     try {
       const uploaded = await uploadFile<MediaFile>(
-        `files/chats/${chatId}${file.type.startsWith("audio/") && file !== recordedFile.current ? "/music" : ""}`,
+        `files/chats/${chatId}${suffix}`,
         file,
         signal,
         setProgress,
@@ -705,6 +750,30 @@ function ChatRoom({ chatId }: { chatId: number }) {
       </div>
     );
 
+  const attachmentDisabled = pending || voice.active || !!editing || !policy.data;
+  const attachmentOptions = [
+    {
+      kind: "media",
+      label: "Photo or video",
+      icon: Image,
+      picker: mediaPicker,
+      accept: [...(policy.data?.imageMimeTypes ?? []), ...(policy.data?.videoMimeTypes ?? [])],
+    },
+    {
+      kind: "document",
+      label: "Document",
+      icon: FileText,
+      picker: documentPicker,
+      accept: policy.data?.documentExtensions ?? [],
+    },
+    {
+      kind: "music",
+      label: "Music",
+      icon: Music,
+      picker: musicPicker,
+      accept: policy.data?.audioMimeTypes ?? [],
+    },
+  ] as const;
   const latestPin = pins.data?.[0];
   const pinnedIds = new Set(pins.data?.map((message) => message.id));
   return (
@@ -1140,6 +1209,7 @@ function ChatRoom({ chatId }: { chatId: number }) {
               {uploading && (
                 <UploadingMedia
                   file={uploading.file}
+                  document={uploading.file === documentFile.current}
                   caption={uploading.caption}
                   progress={progress}
                   cancel={() => uploadController.current?.abort()}
@@ -1236,11 +1306,11 @@ function ChatRoom({ chatId }: { chatId: number }) {
             <div className="mb-3 flex items-start gap-3 rounded-xl border border-border p-3">
               <div className="min-w-0 flex-1">
                 {file ? (
-                  <LocalPreview file={file} />
+                  file === documentFile.current ? <FileText /> : <LocalPreview file={file} />
                 ) : (
                   uploaded && <Media file={uploaded} />
                 )}
-                {file?.type.startsWith("audio/") && (
+                {file !== documentFile.current && file?.type.startsWith("audio/") && (
                   <p className="mt-2 text-sm">
                     {file === recordedFile.current
                       ? "Listen to your voice message, then send or discard it."
@@ -1267,45 +1337,23 @@ function ChatRoom({ chatId }: { chatId: number }) {
               </Button>
             </div>
           )}
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            className="sr-only"
-            aria-label="Choose chat photo, video or audio"
-            disabled={pending || voice.active || !!editing || !policy.data}
-            accept={
-              policy.data
-                ? [
-                    ...policy.data.imageMimeTypes,
-                    ...policy.data.videoMimeTypes,
-                    ...(policy.data.audioMimeTypes ?? []),
-                  ].join(",")
-                : ""
-            }
-            onChange={(event) => {
-              const files = Array.from(event.currentTarget.files ?? []);
-              event.currentTarget.value = "";
-              const chosen = files[0];
-              if (!chosen || !policy.data) return;
-              if (
-                files.length > 1 ||
-                policy.data.imageMimeTypes.includes(chosen.type)
-              ) {
-                addPhotos(files);
-                return;
-              }
-              try {
-                validateUpload(chosen, policy.data);
-                if (uploaded) void discardFile(uploaded.id).catch(() => {});
-                setFile(chosen);
-                setUploaded(undefined);
-                setSendError("");
-              } catch (error) {
-                setSendError(errorMessage(error));
-              }
-            }}
-          />
+          {attachmentOptions.map(({ kind, label, picker, accept }) => (
+            <input
+              key={kind}
+              ref={picker}
+              type="file"
+              hidden
+              aria-label={`Choose chat ${label.toLowerCase()}`}
+              multiple={kind === "media"}
+              accept={accept.join(",")}
+              disabled={attachmentDisabled || !accept.length}
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                chooseAttachment(files, kind);
+              }}
+            />
+          ))}
           {voice.active && (
             <div
               role="status"
@@ -1328,17 +1376,38 @@ function ChatRoom({ chatId }: { chatId: number }) {
             Message
           </label>
           <div className="flex items-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-11 shrink-0 rounded-full border border-input bg-background/80 text-brand"
-              aria-label="Attach photo, video or audio"
-              disabled={pending || voice.active || !!editing || !policy.data}
-              onClick={() => picker.current?.click()}
-            >
-              <Paperclip />
-            </Button>
+            <Popover open={attachmentsOpen} onOpenChange={setAttachmentsOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 shrink-0 rounded-full border border-input bg-background/80 text-brand"
+                  aria-label="Attach to message"
+                  disabled={attachmentDisabled}
+                >
+                  <Paperclip />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-44 p-1" aria-label="Attachments">
+                {attachmentOptions.map(({ kind, label, icon: Icon, picker, accept }) => (
+                  <Button
+                    key={kind}
+                    type="button"
+                    variant="ghost"
+                    disabled={attachmentDisabled || !accept.length}
+                    className="w-full justify-start gap-3 px-3"
+                    onClick={() => {
+                      picker.current?.click();
+                      setAttachmentsOpen(false);
+                    }}
+                  >
+                    <Icon />
+                    {label}
+                  </Button>
+                ))}
+              </PopoverContent>
+            </Popover>
             <div className="flex min-w-0 flex-1 items-end rounded-md border border-input bg-background/80 pr-1 shadow-inner focus-within:ring-2 focus-within:ring-ring">
               <textarea
                 ref={mountComposer}

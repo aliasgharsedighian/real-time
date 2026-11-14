@@ -36,6 +36,8 @@ export function messageSummary(
   if (message.content) return message.content;
   const file = message.attachments?.[0];
   switch (file?.kind) {
+    case "DOCUMENT":
+      return file.title || "File";
     case "MUSIC":
       return file.title || "Music";
     case "AUDIO":

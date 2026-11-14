@@ -4,7 +4,7 @@ import { useSessionStore } from "@/features/auth/session-store";
 
 export interface MediaFile {
   id: string;
-  kind: "IMAGE" | "VIDEO" | "AUDIO" | "MUSIC";
+  kind: "IMAGE" | "VIDEO" | "AUDIO" | "MUSIC" | "DOCUMENT";
   mimeType: string;
   size: number;
   width: number;
@@ -14,6 +14,8 @@ export interface MediaFile {
   artist?: string | null;
 }
 export interface UploadPolicy {
+  documentMaxBytes?: number;
+  documentExtensions?: string[];
   avatarMaxBytes: number;
   imageMaxBytes: number;
   videoMaxBytes: number;
@@ -57,6 +59,16 @@ export function validateUpload(
   if (!file.size || file.size > max)
     throw new Error(`File must be between 1 byte and ${max / 1024 / 1024} MB.`);
 }
+export function validateDocument(file: File, policy: UploadPolicy) {
+  const dot = file.name.lastIndexOf(".");
+  const extension = dot > 0 ? file.name.slice(dot).toLowerCase() : "";
+  if (!policy.documentExtensions?.includes(extension))
+    throw new Error("Choose a supported file format.");
+  const max = policy.documentMaxBytes ?? 0;
+  if (!file.size || file.size > max)
+    throw new Error(`File must be between 1 byte and ${max / 1024 / 1024} MB.`);
+}
+
 export async function uploadFile<T>(
   path: string,
   file: File,

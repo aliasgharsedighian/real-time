@@ -146,6 +146,24 @@ export class FilesUploadController {
   ) {
     return this.files.upload(file, user.id, chatId, false, true);
   }
+  @Post('chats/:chatId/document')
+  @UseInterceptors(interceptor(uploadPolicy.documentMaxBytes))
+  @DocumentEndpoint(
+    'Upload a draft document as a chat member. Allowed filename extensions and size are listed in the upload policy.',
+    201,
+    ref('Attachment'),
+    [400, 403, 413],
+  )
+  @DocumentUpload()
+  @ApiParam({ name: 'chatId', schema: integer })
+  document(
+    @Param('chatId', ParseIntPipe) chatId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @GetUser() user: { id: number },
+  ) {
+    return this.files.uploadDocument(file, user.id, chatId);
+  }
+
   @Delete(':id')
   @DocumentEndpoint(
     'Delete an unused draft attachment',
@@ -164,10 +182,14 @@ export class FilesUploadController {
   @Get(':id/content')
   @ApiResponse({
     status: 200,
-    description: 'File bytes (media type determined by the stored file)',
+    description:
+      'File bytes. Documents use application/octet-stream and attachment disposition with the original filename.',
     content: {
       'image/*': { schema: { type: 'string', format: 'binary' } },
       'video/*': { schema: { type: 'string', format: 'binary' } },
+      'application/octet-stream': {
+        schema: { type: 'string', format: 'binary' },
+      },
       'audio/*': { schema: { type: 'string', format: 'binary' } },
     },
   })
@@ -190,6 +212,10 @@ export class FilesUploadController {
       'X-Content-Type-Options': 'nosniff',
       'Content-Disposition': 'inline',
     });
+    if (file.downloadName) {
+      response.attachment(file.downloadName);
+      response.type('application/octet-stream');
+    }
     response.sendFile(file.path, (error) => {
       if (error && !response.headersSent) response.status(404).end();
     });

@@ -152,16 +152,27 @@ export const schemas = {
   }),
   Attachment: object({
     id: uuid,
-    kind: text,
+    kind: {
+      type: 'string',
+      enum: ['IMAGE', 'VIDEO', 'AUDIO', 'MUSIC', 'DOCUMENT'],
+    },
     mimeType: text,
     size: integer,
     width: integer,
     height: integer,
     duration: nullable({ type: 'number' }),
-    title: nullable(text),
+    title: {
+      ...nullable(text),
+      description: 'Track title or original document filename',
+    },
     artist: nullable(text),
   }),
   UploadPolicy: object({
+    documentMaxBytes: { ...integer, example: uploadPolicy.documentMaxBytes },
+    documentExtensions: {
+      ...array(text),
+      example: uploadPolicy.documentExtensions,
+    },
     avatarMaxBytes: { ...integer, example: uploadPolicy.avatarMaxBytes },
     imageMaxBytes: { ...integer, example: uploadPolicy.imageMaxBytes },
     videoMaxBytes: { ...integer, example: uploadPolicy.videoMaxBytes },

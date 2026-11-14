@@ -12,11 +12,18 @@ import {
 import { Prisma } from '@prisma/client';
 import { ChatGateway } from '../../gateway/chat/gateway';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PrismaService } from '../../libs/db/prisma/prisma.service';
 import { MediaProcessorService } from './media-processor.service';
-import { fileSelect, uploadPolicy, uploadRoot } from './upload.policy';
+import {
+  fileSelect,
+  uploadPolicy,
+  uploadRoot,
+  validateDocumentFormat,
+  validateUploadFormat,
+  validateUploadSize,
+} from './upload.policy';
 
 @Injectable()
 export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
@@ -51,6 +58,45 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('You are not a participant of this chat.');
   }
 
+  async uploadDocument(
+    file: Express.Multer.File | undefined,
+    ownerId: number,
+    chatId: number,
+  ) {
+    if (!file) throw new BadRequestException('Choose a file to upload.');
+    let output: string | undefined;
+    let saved = false;
+    try {
+      await this.ensureParticipant(chatId, ownerId);
+      const title = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const filename = title.includes('�') ? file.originalname : title;
+      validateDocumentFormat(filename);
+      validateUploadSize(file.size, uploadPolicy.documentMaxBytes);
+      const storageKey = `media/${randomUUID()}`;
+      output = join(uploadRoot(), storageKey);
+      await rename(file.path, output);
+      const record = await this.prisma.uploadFile.create({
+        data: {
+          kind: 'DOCUMENT',
+          mimeType: 'application/octet-stream',
+          title: filename,
+          size: file.size,
+          width: 0,
+          height: 0,
+          storageKey,
+          ownerId,
+          chatId,
+        },
+        select: fileSelect,
+      });
+      saved = true;
+      return record;
+    } finally {
+      await rm(file.path, { force: true });
+      if (output && !saved) await rm(output, { force: true });
+    }
+  }
+
   async upload(
     file: Express.Multer.File | undefined,
     ownerId: number,
@@ -67,15 +113,11 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
       if (groupAvatar)
         await this.ensureGroupOwner(this.prisma, chatId!, ownerId);
       else if (!avatar) await this.ensureParticipant(chatId, ownerId);
-      const image = uploadPolicy.imageMimeTypes.includes(file.mimetype);
-      const video = uploadPolicy.videoMimeTypes.includes(file.mimetype);
-      const audio = uploadPolicy.audioMimeTypes.includes(file.mimetype);
-      if (
-        (!image && !video && !audio) ||
-        (avatar && !image) ||
-        (music && !audio)
-      )
-        throw new BadRequestException('Unsupported file type.');
+      const { image, audio } = validateUploadFormat(
+        file.mimetype,
+        avatar,
+        music,
+      );
       const max = avatar
         ? uploadPolicy.avatarMaxBytes
         : image
@@ -83,10 +125,7 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
           : audio
             ? uploadPolicy.audioMaxBytes
             : uploadPolicy.videoMaxBytes;
-      if (!file.size || file.size > max)
-        throw new BadRequestException(
-          `File must be between 1 byte and ${max / 1024 / 1024} MB.`,
-        );
+      validateUploadSize(file.size, max);
       if (this.active >= 2)
         throw new ServiceUnavailableException(
           'Media processor is busy. Please try again shortly.',
@@ -310,6 +349,8 @@ export class FilesUploadService implements OnModuleInit, OnModuleDestroy {
     return {
       path: join(uploadRoot(), file.storageKey),
       mimeType: file.mimeType,
+      downloadName:
+        file.kind === 'DOCUMENT' ? (file.title ?? 'download') : undefined,
     };
   }
 

@@ -299,11 +299,13 @@ export function UploadingPhotos({
 
 export function UploadingMedia({
   file,
+  document,
   progress,
   caption,
   cancel,
 }: {
   file: File;
+  document: boolean;
   progress: number;
   caption: string;
   cancel: () => void;
@@ -312,10 +314,16 @@ export function UploadingMedia({
     <div className="my-3 flex justify-end">
       <div className="max-w-[85%] overflow-hidden rounded-2xl border border-border bg-card">
         <div className="relative grid min-h-28 min-w-36 place-items-center bg-black">
-          <LocalPreview
-            file={file}
-            className="block max-h-64 max-w-full object-contain"
-          />
+          {document ? (
+            <span className="max-w-56 truncate px-3 pb-14 pt-2 text-sm text-white" dir="auto">
+              {file.name}
+            </span>
+          ) : (
+            <LocalPreview
+              file={file}
+              className="block max-h-64 max-w-full object-contain"
+            />
+          )}
           <Button
             type="button"
             size="icon"

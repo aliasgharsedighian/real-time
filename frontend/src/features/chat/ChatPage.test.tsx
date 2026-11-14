@@ -87,6 +87,8 @@ vi.mock("@/features/uploads/api", async (importOriginal) => ({
       audioMaxSeconds: 300,
       audioMaxBytes: 20e6,
       audioMimeTypes: ["audio/webm"],
+      documentExtensions: [".zip"],
+      documentMaxBytes: 100 * 1024 * 1024,
       imageMimeTypes: ["image/jpeg"],
       videoMimeTypes: ["video/mp4"],
     },
@@ -133,7 +135,7 @@ function setup(
 }
 async function select(type = "video/mp4") {
   const picker = await screen.findByLabelText(
-    "Choose chat photo, video or audio",
+    "Choose chat photo or video",
   );
   fireEvent.change(picker, {
     target: { files: [new File(["media"], "clip.mp4", { type })] },
@@ -642,9 +644,28 @@ describe("chat attachments", () => {
     expect(mocks.upload.mock.calls[0][0]).toBe("files/chats/3");
     expect(mocks.upload.mock.calls[0][1].type).toBe("audio/webm");
   });
+  it("offers three attachment options and sends a document through its own upload route", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Attach to message" }));
+    const menu = screen.getByRole("dialog", { name: "Attachments" });
+    expect(within(menu).getAllByRole("button").map((button) => button.textContent))
+      .toEqual(["Photo or video", "Document", "Music"]);
+
+    const picker = screen.getByLabelText("Choose chat document");
+    const openPicker = vi.spyOn(picker, "click");
+    fireEvent.click(within(menu).getByRole("button", { name: "Document" }));
+    expect(openPicker).toHaveBeenCalledOnce();
+
+    const file = new File(["archive"], "project.ZIP");
+    fireEvent.change(picker, { target: { files: [file] } });
+    expect(await screen.findByText("project.ZIP")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith("", "attachment-id"));
+    expect(mocks.upload.mock.calls[0].slice(0, 2)).toEqual(["files/chats/3/document", file]);
+  });
   it("sends an audio file selected from the attachment picker as music", async () => {
     setup();
-    const picker = await screen.findByLabelText("Choose chat photo, video or audio");
+    const picker = await screen.findByLabelText("Choose chat music");
     const music = new File(["track"], "song.webm", { type: "audio/webm" });
     fireEvent.change(picker, { target: { files: [music] } });
     await screen.findByText(/Music · up to/);
@@ -658,7 +679,7 @@ describe("chat attachments", () => {
       .mockResolvedValueOnce({ id: "third", kind: "IMAGE" });
     setup();
     const picker = await screen.findByLabelText(
-      "Choose chat photo, video or audio",
+      "Choose chat photo or video",
     );
     const photo = (name: string) =>
       new File(["image"], name, { type: "image/jpeg" });
@@ -715,7 +736,7 @@ describe("chat attachments", () => {
       });
     setup();
     const picker = await screen.findByLabelText(
-      "Choose chat photo, video or audio",
+      "Choose chat photo or video",
     );
     const names = ["one", "two", "three", "four", "five"];
     fireEvent.change(picker, {
@@ -768,7 +789,7 @@ describe("chat attachments", () => {
       .mockRejectedValueOnce(new Error("Try sending again"));
     setup();
     const picker = await screen.findByLabelText(
-      "Choose chat photo, video or audio",
+      "Choose chat photo or video",
     );
     fireEvent.change(picker, {
       target: {
@@ -813,7 +834,7 @@ describe("chat attachments", () => {
     );
     setup();
     const picker = await screen.findByLabelText(
-      "Choose chat photo, video or audio",
+      "Choose chat photo or video",
     );
     fireEvent.change(picker, {
       target: {

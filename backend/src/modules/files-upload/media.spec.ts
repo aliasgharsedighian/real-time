@@ -106,6 +106,44 @@ describe('private media uploads', () => {
     expect(await readdir(join(directory, 'tmp'))).toEqual([]);
     await rm(join(directory, data.storageKey));
   });
+  it('stores document bytes and serves them as a private download with the filename', async () => {
+    const bytes = Buffer.from('archive bytes');
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/chats/3/document')
+      .attach('file', bytes, 'گزارش.ZIP');
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      kind: 'DOCUMENT',
+      title: 'گزارش.ZIP',
+      size: bytes.length,
+      mimeType: 'application/octet-stream',
+    });
+    const { data } = prisma.uploadFile.create.mock.calls[0][0];
+    expect(await readFile(join(directory, data.storageKey))).toEqual(bytes);
+    const id = 'c4523043-965d-4bb6-9a42-a7743ee75ae7';
+    prisma.uploadFile.findUnique.mockResolvedValueOnce(data);
+    const download = await request(app.getHttpServer()).get(
+      `/api/v1/files/${id}/content`,
+    );
+    expect(download.status).toBe(200);
+    expect(download.header['content-type']).toBe('application/octet-stream');
+    expect(download.header['content-disposition']).toMatch(
+      /^attachment;.*filename\*/,
+    );
+    expect(download.body).toEqual(bytes);
+    expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+    await rm(join(directory, data.storageKey));
+  });
+
+  it('rejects documents with unsupported extensions and removes the temporary file', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/files/chats/3/document')
+      .attach('file', Buffer.from('data'), 'page.html');
+    expect(response.status).toBe(400);
+    expect(prisma.uploadFile.create).not.toHaveBeenCalled();
+    expect(await readdir(join(directory, 'tmp'))).toEqual([]);
+  });
+
   it('encodes real voice audio as M4A and removes the input', async () => {
     const wav = wave();
     const response = await request(app.getHttpServer())

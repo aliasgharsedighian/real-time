@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactEventHandler } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Download, Play, X } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, FileText, Play, X } from "lucide-react";
 import { useSessionStore } from "@/features/auth/session-store";
 import { api } from "@/shared/lib/api";
 import { Button } from "@/shared/ui/button";
@@ -54,10 +54,51 @@ export function useFileUrl(id?: string | null) {
   };
 }
 export function Media({ file }: { file: MediaFile }) {
+  if (file.kind === "DOCUMENT") return <DocumentAttachment file={file} />;
   return file.kind === "VIDEO" ? (
     <VideoAttachment file={file} />
   ) : (
     <InlineMedia file={file} />
+  );
+}
+
+function DocumentAttachment({ file }: { file: MediaFile }) {
+  const filename = file.title || "download";
+  const download = useMutation({
+    mutationFn: async () => {
+      const blob = await fetchFileBlob(file.id, new AbortController().signal);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+  });
+
+  return (
+    <div className="min-w-0 max-w-64">
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto w-full justify-start px-2 py-2 text-left"
+        aria-label={`Download ${filename}`}
+        disabled={download.isPending}
+        onClick={() => download.mutate()}
+      >
+        <FileText className="shrink-0" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate" dir="auto">{filename}</span>
+          <span className="block text-xs">
+            {download.isPending ? "Downloading…" : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
+          </span>
+        </span>
+        <Download className="shrink-0" />
+      </Button>
+      {download.isError && <p role="alert" className="px-2 text-xs">Unable to download file. Try again.</p>}
+    </div>
   );
 }
 
